@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global font family configuration */
+* {
+  font-family: 'Poppins-Regular', sans-serif;
+}
+
+/* Font weight classes */
+.font-regular {
+  font-family: 'Poppins-Regular', sans-serif;
+}
+
+.font-semibold {
+  font-family: 'Poppins-SemiBold', sans-serif;
+}
+
+.font-bold {
+  font-family: 'Poppins-Bold', sans-serif;
+}
+
+/* Custom text styles for consistency */
+.text-body {
+  font-family: 'Poppins-Regular', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.text-heading {
+  font-family: 'Poppins-SemiBold', sans-serif;
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.text-title {
+  font-family: 'Poppins-Bold', sans-serif;
+  font-size: 32px;
+  line-height: 40px;
+}
+
+.text-caption {
+  font-family: 'Poppins-Regular', sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+}
