@@ -1,36 +1,45 @@
 // ==========================================
-// 🌐 NETWORK CONFIGURATION
+// 🌐 NETWORK CONFIGURATION - FitNEase Team
 // ==========================================
-// QUICK SWITCH: Change USE_EMULATOR to switch between emulator and real device
+// Team Members: Gab, Wimari, Nhiko, Chrystian
 // ==========================================
 
-// 🔧 TOGGLE THIS VALUE:
-const USE_EMULATOR = false; // Set to false when using real phone
+// 🔧 STEP 1: SET ACTIVE MEMBER (Change this to switch between team members)
+const ACTIVE_MEMBER = 'Gab'; // Options: 'Gab', 'Wimari', 'Nhiko', 'Chrystian'
 
-// Network IPs
-const EMULATOR_IP = '10.0.2.2'; // Android Emulator (special alias for host)
-const HOME_LAN_IP = '192.168.1.5'; // Your home WiFi IP
-const SCHOOL_LAN_IP = '172.20.10.5'; // Your school WiFi IP
+// 🔧 STEP 2: UPDATE YOUR IP ADDRESS
+// To find your computer's IP address:
+// - Windows: Run "ipconfig" in Command Prompt, look for "IPv4 Address"
+// - Mac: Run "ifconfig | grep 'inet '" in Terminal
+// - It usually looks like: 192.168.x.x or 172.20.x.x
 
-// Auto-select IP based on USE_EMULATOR flag
-const BASE_IP = USE_EMULATOR ? EMULATOR_IP : HOME_LAN_IP;
+// Team Member IP Addresses (update your own IP here)
+const TEAM_IPS = {
+  Gab: '192.168.1.5',        // Gab: Update with your IP
+  Wimari: 'CHANGE_THIS_TO_YOUR_IP',     // Wimari: Update with your IP
+  Nhiko: 'CHANGE_THIS_TO_YOUR_IP',      // Nhiko: Update with your IP
+  Chrystian: 'CHANGE_THIS_TO_YOUR_IP',  // Chrystian: Update with your IP
+};
 
-// 💡 TIP: When using real phone:
-// 1. Set USE_EMULATOR = false
-// 2. Make sure your phone and laptop are on the same WiFi
-// 3. Update HOME_LAN_IP or SCHOOL_LAN_IP if your computer's IP changed
-// 4. To find your computer's IP: Run "ipconfig" in Command Prompt, look for "IPv4 Address"
+// Auto-select IP based on active member
+const YOUR_COMPUTER_IP = TEAM_IPS[ACTIVE_MEMBER];
+
+// 💡 HOW TO USE:
+// 1. Each team member updates their IP in TEAM_IPS object above
+// 2. Change ACTIVE_MEMBER to your name when testing
+// 3. Make sure your phone and laptop are on the SAME WiFi network
+// 4. If connection fails, verify your IP hasn't changed
 
 export const API_CONFIG = {
-  BASE_URL: `http://${BASE_IP}:8000`,
-  AUTH_SERVICE_URL: `http://${BASE_IP}:8000`,
-  CONTENT_SERVICE_URL: `http://${BASE_IP}:8002`,
-  TRACKING_SERVICE_URL: `http://${BASE_IP}:8007`,
-  PLANNING_SERVICE_URL: `http://${BASE_IP}:8005`,
-  SOCIAL_SERVICE_URL: `http://${BASE_IP}:8006`,
-  ML_SERVICE_URL: `http://${BASE_IP}:8009`,
-  ENGAGEMENT_SERVICE_URL: `http://${BASE_IP}:8003`,
-  COMMS_SERVICE_URL: `http://${BASE_IP}:8001`,
-  MEDIA_SERVICE_URL: `http://${BASE_IP}:8004`,
-  OPS_SERVICE_URL: `http://${BASE_IP}:8010`,
+  BASE_URL: `http://${YOUR_COMPUTER_IP}:8000`,
+  AUTH_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8000`,
+  CONTENT_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8002`,
+  TRACKING_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8007`,
+  PLANNING_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8005`,
+  SOCIAL_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8006`,
+  ML_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8009`,
+  ENGAGEMENT_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8003`,
+  COMMS_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8001`,
+  MEDIA_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8004`,
+  OPS_SERVICE_URL: `http://${YOUR_COMPUTER_IP}:8010`,
 };
