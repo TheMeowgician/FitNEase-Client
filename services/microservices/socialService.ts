@@ -471,7 +471,11 @@ export class SocialService {
 
   public async joinGroup(request: JoinGroupRequest): Promise<{ message: string }> {
     try {
-      const response = await apiClient.post<{ message: string }>('social', '/api/social/groups/join', request);
+      // Backend expects 'group_code', not 'groupId'
+      const response = await apiClient.post<{ message: string }>('social', '/api/social/groups/join-with-code', {
+        group_code: request.groupId,
+        message: request.message
+      });
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to join group');

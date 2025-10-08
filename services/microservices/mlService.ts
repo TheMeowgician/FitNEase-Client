@@ -302,6 +302,32 @@ export class MLService {
     }
   }
 
+  // Group workout recommendations (NEW)
+  public async getGroupWorkoutRecommendations(
+    userIds: number[],
+    options?: {
+      workout_format?: 'tabata' | 'generic';
+      target_exercises?: number;
+    }
+  ): Promise<any> {
+    try {
+      const response = await apiClient.post<any>(
+        this.serviceName,
+        `${this.baseUrl}/group-recommendations`,
+        {
+          user_ids: userIds,
+          workout_format: options?.workout_format || 'tabata',
+          target_exercises: options?.target_exercises || 8
+        },
+        { timeout: 60000 } // 60 seconds for group workout generation
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('ML group workout service unavailable:', error);
+      return null;
+    }
+  }
+
   // Model management
   public async getModelHealth(): Promise<any> {
     try {
@@ -525,11 +551,22 @@ export const useMLService = () => {
     return mlService.getWorkoutRecommendations(options);
   };
 
+  const getGroupWorkoutRecommendations = async (
+    userIds: number[],
+    options?: {
+      workout_format?: 'tabata' | 'generic';
+      target_exercises?: number;
+    }
+  ) => {
+    return mlService.getGroupWorkoutRecommendations(userIds, options);
+  };
+
   return {
     getRecommendations,
     getContentBasedRecommendations,
     getCollaborativeRecommendations,
     getWorkoutRecommendations,
+    getGroupWorkoutRecommendations,
     updateBehaviorData,
     predictDifficulty,
     predictCompletion,

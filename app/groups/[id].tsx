@@ -17,15 +17,23 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
+import { useMLService } from '../../services/microservices/mlService';
+import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
 
 export default function GroupDetailsScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
+  const { getGroupWorkoutRecommendations } = useMLService();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [userRole, setUserRole] = useState<'owner' | 'moderator' | 'member' | null>(null);
+
+  // Group workout states
+  const [isGeneratingWorkout, setIsGeneratingWorkout] = useState(false);
+  const [showGroupWorkoutModal, setShowGroupWorkoutModal] = useState(false);
+  const [groupWorkout, setGroupWorkout] = useState<any>(null);
 
   useEffect(() => {
     loadGroupDetails();
@@ -152,6 +160,62 @@ export default function GroupDetailsScreen() {
     Alert.alert('Coming Soon', 'Group management features will be available soon!');
   };
 
+  const handleGenerateGroupWorkout = async () => {
+    if (!group || !members || members.length === 0) {
+      Alert.alert('No Members', 'Cannot generate workout for an empty group. Please add members first.');
+      return;
+    }
+
+    try {
+      setIsGeneratingWorkout(true);
+      console.log('🏋️ Generating group workout for', members.length, 'members...');
+
+      // Get user IDs from members
+      const userIds = members.map(m => parseInt(m.userId));
+      console.log('User IDs:', userIds);
+
+      // Call ML service to generate group workout
+      const result = await getGroupWorkoutRecommendations(userIds, {
+        workout_format: 'tabata',
+        target_exercises: 8,
+      });
+
+      console.log('✅ Group workout generated:', result);
+
+      if (!result || !result.success) {
+        throw new Error(result?.error || 'Failed to generate group workout');
+      }
+
+      setGroupWorkout(result.workout);
+      setShowGroupWorkoutModal(true);
+    } catch (error: any) {
+      console.error('❌ Error generating group workout:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to generate group workout. Please try again.'
+      );
+    } finally {
+      setIsGeneratingWorkout(false);
+    }
+  };
+
+  const handleStartGroupWorkout = () => {
+    if (!groupWorkout || !user) return;
+
+    // Close modal
+    setShowGroupWorkoutModal(false);
+
+    // Navigate to workout session
+    router.push({
+      pathname: '/workout/session',
+      params: {
+        exercises: JSON.stringify(groupWorkout.exercises),
+        type: 'group_tabata',
+        groupId: id as string,
+      },
+    });
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -229,6 +293,26 @@ export default function GroupDetailsScreen() {
           {group.description && (
             <Text style={styles.groupDescriptionLarge}>{group.description}</Text>
           )}
+
+          {/* Start Group Workout Button */}
+          <TouchableOpacity
+            style={styles.startWorkoutButton}
+            onPress={handleGenerateGroupWorkout}
+            disabled={isGeneratingWorkout}
+            activeOpacity={0.8}
+          >
+            {isGeneratingWorkout ? (
+              <>
+                <ActivityIndicator color="white" />
+                <Text style={styles.startWorkoutButtonText}>Generating...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="flash" size={24} color="white" />
+                <Text style={styles.startWorkoutButtonText}>Start Group Workout</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
           {/* Action Buttons */}
           <View style={styles.actionButtonsRow}>
@@ -341,6 +425,15 @@ export default function GroupDetailsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Group Workout Modal */}
+      <GroupWorkoutModal
+        visible={showGroupWorkoutModal}
+        onClose={() => setShowGroupWorkoutModal(false)}
+        groupWorkout={groupWorkout}
+        onStartWorkout={handleStartGroupWorkout}
+        groupName={group.name}
+      />
     </SafeAreaView>
   );
 }
@@ -493,6 +586,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 20,
+  },
+  startWorkoutButton: {
+    backgroundColor: COLORS.PRIMARY[600],
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    gap: 10,
+    width: '100%',
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startWorkoutButtonText: {
+    fontSize: 17,
+    fontFamily: FONTS.SEMIBOLD,
+    color: 'white',
   },
   actionButtonsRow: {
     flexDirection: 'row',
