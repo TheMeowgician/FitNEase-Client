@@ -187,7 +187,25 @@ export default function GroupDetailsScreen() {
       }
 
       setGroupWorkout(result.workout);
-      setShowGroupWorkoutModal(true);
+
+      // Broadcast invitation to all group members
+      console.log('📡 Broadcasting workout invitation to group...');
+      const invitationResponse = await socialService.initiateGroupWorkout(
+        group.id,
+        result.workout
+      );
+
+      console.log('✅ Invitation sent:', invitationResponse);
+
+      // Show success message
+      Alert.alert(
+        'Invitation Sent!',
+        'All active group members have been notified. Waiting for responses...',
+        [{ text: 'OK' }]
+      );
+
+      // Automatically start for the initiator
+      handleStartGroupWorkout(result.workout, invitationResponse.session_id);
     } catch (error: any) {
       console.error('❌ Error generating group workout:', error);
       Alert.alert(
@@ -199,22 +217,34 @@ export default function GroupDetailsScreen() {
     }
   };
 
-  const handleStartGroupWorkout = () => {
-    if (!groupWorkout || !user) return;
+  const handleStartGroupWorkout = (workout?: any, sessionId?: string) => {
+    const workoutToUse = workout || groupWorkout;
+    if (!workoutToUse || !user) return;
 
-    // Close modal
+    // Close modals
     setShowGroupWorkoutModal(false);
 
-    // Navigate to workout session
+    // Create TabataWorkoutSession format expected by session.tsx
+    const tabataSession = {
+      exercises: workoutToUse.exercises,
+      total_duration_minutes: workoutToUse.tabata_structure?.total_duration_minutes || 32,
+      rounds: workoutToUse.tabata_structure?.rounds || 8,
+      work_duration_seconds: workoutToUse.tabata_structure?.work_duration_seconds || 20,
+      rest_duration_seconds: workoutToUse.tabata_structure?.rest_duration_seconds || 10,
+      session_id: sessionId || '',
+      group_id: id as string,
+    };
+
+    // Navigate to workout session with sessionData
     router.push({
       pathname: '/workout/session',
       params: {
-        exercises: JSON.stringify(groupWorkout.exercises),
+        sessionData: JSON.stringify(tabataSession),
         type: 'group_tabata',
-        groupId: id as string,
       },
     });
   };
+
 
   if (isLoading) {
     return (

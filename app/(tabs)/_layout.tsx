@@ -2,10 +2,12 @@ import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
+import { ReverbProvider } from '../../contexts/ReverbProvider';
 
 export default function TabLayout() {
   return (
-    <Tabs
+    <ReverbProvider>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.PRIMARY[600],
@@ -91,5 +93,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </ReverbProvider>
   );
 }

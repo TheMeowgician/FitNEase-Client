@@ -911,6 +911,28 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to get social stats');
     }
   }
+
+  // Group Workout Invitations
+  public async initiateGroupWorkout(
+    groupId: string,
+    workoutData: any
+  ): Promise<{
+    session_id: string;
+    group_id: string;
+    initiator_id: number;
+    workout_data: any;
+  }> {
+    try {
+      const response = await apiClient.post(
+        'social',
+        `/api/social/groups/${groupId}/initiate-workout`,
+        { workout_data: workoutData }
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to initiate group workout');
+    }
+  }
 }
 
 export const socialService = new SocialService();
