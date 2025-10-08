@@ -123,23 +123,14 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
     console.log('✅ User accepted invitation');
     setShowInvitationModal(false);
 
-    // Create TabataWorkoutSession format expected by session.tsx
-    const tabataSession = {
-      exercises: invitationData.workout_data.exercises,
-      total_duration_minutes: invitationData.workout_data.tabata_structure?.total_duration_minutes || 32,
-      rounds: invitationData.workout_data.tabata_structure?.rounds || 8,
-      work_duration_seconds: invitationData.workout_data.tabata_structure?.work_duration_seconds || 20,
-      rest_duration_seconds: invitationData.workout_data.tabata_structure?.rest_duration_seconds || 10,
-      session_id: invitationData.session_id,
-      group_id: invitationData.group_id.toString(),
-    };
-
-    // Navigate to workout session with sessionData
+    // Navigate to group workout lobby
     router.push({
-      pathname: '/workout/session',
+      pathname: '/workout/group-lobby',
       params: {
-        sessionData: JSON.stringify(tabataSession),
-        type: 'group_tabata',
+        sessionId: invitationData.session_id,
+        groupId: invitationData.group_id.toString(),
+        workoutData: JSON.stringify(invitationData.workout_data),
+        initiatorId: invitationData.initiator_id.toString(),
       },
     });
 

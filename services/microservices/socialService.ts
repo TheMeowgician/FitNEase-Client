@@ -933,6 +933,87 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to initiate group workout');
     }
   }
+
+  // Workout Lobby
+  public async updateLobbyStatus(
+    sessionId: string,
+    status: 'waiting' | 'ready'
+  ): Promise<void> {
+    try {
+      await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/status`,
+        { status }
+      );
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to update lobby status');
+    }
+  }
+
+  public async startWorkout(sessionId: string): Promise<{
+    session_id: string;
+    start_time: number;
+  }> {
+    try {
+      const response = await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/start`,
+        {}
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to start workout');
+    }
+  }
+
+  // Workout Session Control
+  public async pauseWorkout(sessionId: string): Promise<{
+    session_id: string;
+    paused_at: number;
+  }> {
+    try {
+      const response = await apiClient.post(
+        'social',
+        `/api/social/session/${sessionId}/pause`,
+        {}
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to pause workout');
+    }
+  }
+
+  public async resumeWorkout(sessionId: string): Promise<{
+    session_id: string;
+    resumed_at: number;
+  }> {
+    try {
+      const response = await apiClient.post(
+        'social',
+        `/api/social/session/${sessionId}/resume`,
+        {}
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to resume workout');
+    }
+  }
+
+  public async stopWorkout(sessionId: string): Promise<{
+    session_id: string;
+    stopped_at: number;
+  }> {
+    try {
+      const response = await apiClient.post(
+        'social',
+        `/api/social/session/${sessionId}/stop`,
+        {}
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to stop workout');
+    }
+  }
 }
 
 export const socialService = new SocialService();

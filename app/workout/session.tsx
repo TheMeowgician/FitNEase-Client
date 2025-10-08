@@ -11,6 +11,7 @@ import {
   AppState,
   AppStateStatus,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,8 @@ import { Audio } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
 import { trackingService } from '../../services/microservices/trackingService';
+import { socialService } from '../../services/microservices/socialService';
+import { reverbService } from '../../services/reverbService';
 import { TabataWorkoutSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS } from '../../constants/colors';
 
@@ -40,7 +43,7 @@ interface SessionState {
 export default function WorkoutSessionScreen() {
   const { user } = useAuth();
   const params = useLocalSearchParams();
-  const { workoutId, type, sessionData } = params;
+  const { workoutId, type, sessionData, initiatorId, groupId } = params;
 
   const [workout, setWorkout] = useState<TabataWorkout | null>(null);
   const [tabataSession, setTabataSession] = useState<TabataWorkoutSession | null>(null);
@@ -59,6 +62,7 @@ export default function WorkoutSessionScreen() {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | number | null>(null);
   const appState = useRef(AppState.currentState);
+  const isInitiator = user?.id.toString() === initiatorId;
 
   useEffect(() => {
     loadWorkout();
@@ -74,8 +78,28 @@ export default function WorkoutSessionScreen() {
       if (sound) {
         sound.unloadAsync();
       }
+
+      // Unsubscribe from session channel
+      if (type === 'group_tabata' && tabataSession) {
+        reverbService.unsubscribe(`private-session.${tabataSession.session_id}`);
+      }
     };
   }, []);
+
+  // Subscribe to session channel after tabataSession is loaded
+  useEffect(() => {
+    if (type === 'group_tabata' && tabataSession) {
+      console.log('🏃 Group workout detected - setting up session subscription and auto-starting...');
+
+      // Subscribe to session channel for pause/resume events
+      setupSessionSubscription();
+
+      // Auto-start after a short delay
+      setTimeout(() => {
+        startSession();
+      }, 100);
+    }
+  }, [tabataSession]);
 
   useEffect(() => {
     if (sessionState.status === 'running') {
@@ -138,6 +162,34 @@ export default function WorkoutSessionScreen() {
     }
   };
 
+  const setupSessionSubscription = () => {
+    if (!tabataSession) return;
+
+    const sessionId = tabataSession.session_id;
+    console.log('📡 Subscribing to session channel for pause/resume/stop events:', sessionId);
+
+    reverbService.subscribeToPrivateChannel(`session.${sessionId}`, {
+      onEvent: (eventName, data) => {
+        console.log('📨 Session event received:', eventName, data);
+
+        if (eventName === 'WorkoutPaused') {
+          console.log(`⏸️ Workout paused by ${data.paused_by_name}`);
+          setSessionState(prev => ({ ...prev, status: 'paused' }));
+        } else if (eventName === 'WorkoutResumed') {
+          console.log(`▶️ Workout resumed by ${data.resumed_by_name}`);
+          setSessionState(prev => ({ ...prev, status: 'running' }));
+        } else if (eventName === 'WorkoutStopped') {
+          console.log(`🛑 Workout stopped by ${data.stopped_by_name}`);
+          Alert.alert(
+            'Workout Ended',
+            `The workout has been stopped by ${data.stopped_by_name}.`,
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+        }
+      },
+    });
+  };
+
   const playSound = async (type: 'start' | 'rest' | 'complete') => {
     try {
       const { sound: newSound } = await Audio.Sound.createAsync(
@@ -186,8 +238,8 @@ export default function WorkoutSessionScreen() {
           return handlePhaseComplete(prev);
         }
         // Calculate calories burned per second
-        const totalCalories = tabataSession ? tabataSession.estimated_calories : (workout?.estimated_calories_burned || 0);
-        const totalMinutes = tabataSession ? tabataSession.total_duration_minutes : (workout?.total_duration_minutes || 1);
+        const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300; // Default 300 if not set
+        const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32; // Default 32 mins
         const caloriesPerSecond = totalCalories / totalMinutes / 60;
 
         return {
@@ -273,12 +325,90 @@ export default function WorkoutSessionScreen() {
     setSessionState(prev => ({ ...prev, status: 'running' }));
   };
 
-  const pauseSession = () => {
-    setSessionState(prev => ({ ...prev, status: 'paused' }));
+  const pauseSession = async () => {
+    // For group workouts, only initiator can pause
+    if (type === 'group_tabata') {
+      if (!isInitiator) {
+        Alert.alert('Notice', 'Only the workout initiator can pause the session.');
+        return;
+      }
+
+      // Pause locally IMMEDIATELY for instant feedback
+      setSessionState(prev => ({ ...prev, status: 'paused' }));
+
+      // Then broadcast pause to all members
+      if (tabataSession) {
+        try {
+          await socialService.pauseWorkout(tabataSession.session_id);
+          console.log('⏸️ Pause broadcasted to all members');
+        } catch (error) {
+          console.error('❌ Failed to broadcast pause:', error);
+          Alert.alert('Error', 'Failed to pause workout for all members');
+        }
+      }
+    } else {
+      // Solo workout - pause immediately
+      setSessionState(prev => ({ ...prev, status: 'paused' }));
+    }
   };
 
-  const resumeSession = () => {
-    setSessionState(prev => ({ ...prev, status: 'running' }));
+  const resumeSession = async () => {
+    // For group workouts, only initiator can resume
+    if (type === 'group_tabata') {
+      if (!isInitiator) {
+        Alert.alert('Notice', 'Only the workout initiator can resume the session.');
+        return;
+      }
+
+      // Resume locally IMMEDIATELY for instant feedback
+      setSessionState(prev => ({ ...prev, status: 'running' }));
+
+      // Then broadcast resume to all members
+      if (tabataSession) {
+        try {
+          await socialService.resumeWorkout(tabataSession.session_id);
+          console.log('▶️ Resume broadcasted to all members');
+        } catch (error) {
+          console.error('❌ Failed to broadcast resume:', error);
+          Alert.alert('Error', 'Failed to resume workout for all members');
+        }
+      }
+    } else {
+      // Solo workout - resume immediately
+      setSessionState(prev => ({ ...prev, status: 'running' }));
+    }
+  };
+
+  const stopGroupSession = async () => {
+    if (!isInitiator) {
+      Alert.alert('Notice', 'Only the workout initiator can stop the session for everyone.');
+      return;
+    }
+
+    Alert.alert(
+      'Stop Workout for All',
+      'Are you sure you want to stop the workout for all members? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Stop for All',
+          style: 'destructive',
+          onPress: async () => {
+            // Broadcast stop to all members
+            if (tabataSession) {
+              try {
+                await socialService.stopWorkout(tabataSession.session_id);
+                console.log('🛑 Stop broadcasted to all members');
+              } catch (error) {
+                console.error('❌ Failed to broadcast stop:', error);
+              }
+            }
+            // Exit for initiator
+            await exitSession();
+          }
+        }
+      ]
+    );
   };
 
   const exitSession = async () => {
@@ -504,7 +634,7 @@ export default function WorkoutSessionScreen() {
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <Ionicons name="flame" size={24} color="white" />
-            <Text style={styles.statValue}>{Math.floor(sessionState.caloriesBurned)}</Text>
+            <Text style={styles.statValue}>{Math.floor(sessionState.caloriesBurned) || 0}</Text>
             <Text style={styles.statLabel}>Calories</Text>
           </View>
           <View style={styles.statItem}>
@@ -514,39 +644,62 @@ export default function WorkoutSessionScreen() {
             </Text>
             <Text style={styles.statLabel}>Duration</Text>
           </View>
-          <View style={styles.statItem}>
-            <Ionicons name="heart" size={24} color="white" />
-            <Text style={styles.statValue}>--</Text>
-            <Text style={styles.statLabel}>Heart Rate</Text>
-          </View>
         </View>
 
         {/* Controls */}
         <View style={styles.controlsContainer}>
-          {sessionState.status === 'ready' && (
+          {sessionState.status === 'ready' && type !== 'group_tabata' && (
             <TouchableOpacity style={styles.primaryButton} onPress={startSession}>
               <Ionicons name="play" size={32} color={getPhaseColor()} />
               <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>START WORKOUT</Text>
             </TouchableOpacity>
           )}
 
-          {sessionState.status === 'running' && (
+          {sessionState.status === 'ready' && type === 'group_tabata' && (
+            <View style={styles.preparingContainer}>
+              <ActivityIndicator size="large" color={getPhaseColor()} />
+              <Text style={[styles.preparingText, { color: getPhaseColor() }]}>
+                Get Ready! Starting in {sessionState.timeRemaining}s...
+              </Text>
+            </View>
+          )}
+
+          {/* Only show pause button for initiator in group workouts, or always for solo workouts */}
+          {sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator) && (
             <TouchableOpacity style={styles.primaryButton} onPress={pauseSession}>
               <Ionicons name="pause" size={32} color={getPhaseColor()} />
               <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>PAUSE</Text>
             </TouchableOpacity>
           )}
 
-          {sessionState.status === 'paused' && (
+          {/* Show waiting message for non-initiators during running state */}
+          {sessionState.status === 'running' && type === 'group_tabata' && !isInitiator && (
+            <View style={styles.waitingContainer}>
+              <Ionicons name="people" size={24} color="white" />
+              <Text style={styles.waitingText}>Synced with group</Text>
+            </View>
+          )}
+
+          {/* Only show resume/stop buttons for initiator in group workouts, or always for solo workouts */}
+          {sessionState.status === 'paused' && (type !== 'group_tabata' || isInitiator) && (
             <View style={styles.pausedControls}>
               <TouchableOpacity style={styles.secondaryButton} onPress={resumeSession}>
                 <Ionicons name="play" size={24} color="white" />
                 <Text style={styles.secondaryButtonText}>RESUME</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={exitSession}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={type === 'group_tabata' ? stopGroupSession : exitSession}>
                 <Ionicons name="stop" size={24} color="white" />
-                <Text style={styles.secondaryButtonText}>END</Text>
+                <Text style={styles.secondaryButtonText}>{type === 'group_tabata' ? 'STOP FOR ALL' : 'END'}</Text>
               </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Show paused message for non-initiators */}
+          {sessionState.status === 'paused' && type === 'group_tabata' && !isInitiator && (
+            <View style={styles.waitingContainer}>
+              <Ionicons name="pause-circle" size={32} color="white" />
+              <Text style={styles.waitingText}>Paused by host</Text>
+              <Text style={styles.waitingSubtext}>Waiting to resume...</Text>
             </View>
           )}
 
@@ -798,6 +951,48 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     letterSpacing: 0.5,
     marginLeft: 8,
+  },
+  preparingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    minWidth: 200,
+  },
+  preparingText: {
+    fontSize: 16,
+    fontFamily: FONTS.BOLD,
+    letterSpacing: 0.5,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  waitingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    minWidth: 200,
+  },
+  waitingText: {
+    fontSize: 16,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
+    letterSpacing: 0.5,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  waitingSubtext: {
+    fontSize: 13,
+    fontFamily: FONTS.REGULAR,
+    color: 'white',
+    opacity: 0.8,
+    letterSpacing: 0.3,
+    marginTop: 4,
+    textAlign: 'center',
   },
   pausedControls: {
     flexDirection: 'row',

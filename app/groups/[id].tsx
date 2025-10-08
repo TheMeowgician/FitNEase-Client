@@ -224,23 +224,14 @@ export default function GroupDetailsScreen() {
     // Close modals
     setShowGroupWorkoutModal(false);
 
-    // Create TabataWorkoutSession format expected by session.tsx
-    const tabataSession = {
-      exercises: workoutToUse.exercises,
-      total_duration_minutes: workoutToUse.tabata_structure?.total_duration_minutes || 32,
-      rounds: workoutToUse.tabata_structure?.rounds || 8,
-      work_duration_seconds: workoutToUse.tabata_structure?.work_duration_seconds || 20,
-      rest_duration_seconds: workoutToUse.tabata_structure?.rest_duration_seconds || 10,
-      session_id: sessionId || '',
-      group_id: id as string,
-    };
-
-    // Navigate to workout session with sessionData
+    // Navigate to group workout lobby
     router.push({
-      pathname: '/workout/session',
+      pathname: '/workout/group-lobby',
       params: {
-        sessionData: JSON.stringify(tabataSession),
-        type: 'group_tabata',
+        sessionId: sessionId || '',
+        groupId: id as string,
+        workoutData: JSON.stringify(workoutToUse),
+        initiatorId: user.id.toString(),
       },
     });
   };
