@@ -162,55 +162,45 @@ export default function GroupDetailsScreen() {
 
   const handleGenerateGroupWorkout = async () => {
     if (!group || !members || members.length === 0) {
-      Alert.alert('No Members', 'Cannot generate workout for an empty group. Please add members first.');
+      Alert.alert('No Members', 'Cannot create lobby for an empty group. Please add members first.');
       return;
     }
 
     try {
       setIsGeneratingWorkout(true);
-      console.log('🏋️ Generating group workout for', members.length, 'members...');
+      console.log('🚪 Creating workout lobby for', members.length, 'members...');
 
-      // Get user IDs from members
-      const userIds = members.map(m => parseInt(m.userId));
-      console.log('User IDs:', userIds);
+      // Create a workout session immediately with minimal workout data
+      // This allows WebSocket to work from the start
+      // Exercises will be generated later when user clicks "Generate Exercises"
+      console.log('📡 Creating workout session on backend...');
+      const sessionResponse = await socialService.initiateGroupWorkout(
+        id as string,
+        {
+          workout_format: 'tabata',
+          exercises: [], // Empty exercises initially - will be populated when user generates them
+        }
+      );
 
-      // Call ML service to generate group workout
-      const result = await getGroupWorkoutRecommendations(userIds, {
-        workout_format: 'tabata',
-        target_exercises: 8,
+      console.log('✅ Workout session created:', sessionResponse);
+
+      // Navigate to lobby with the session ID
+      // The lobby will show online members and have a "Generate Exercises" button
+      router.push({
+        pathname: '/workout/group-lobby',
+        params: {
+          sessionId: sessionResponse.session_id,
+          groupId: id as string,
+          workoutData: '', // Empty - exercises will be generated in lobby
+          initiatorId: user?.id.toString() || '',
+          isCreatingLobby: 'true', // Flag to indicate we're just creating lobby
+        },
       });
-
-      console.log('✅ Group workout generated:', result);
-
-      if (!result || !result.success) {
-        throw new Error(result?.error || 'Failed to generate group workout');
-      }
-
-      setGroupWorkout(result.workout);
-
-      // Broadcast invitation to all group members
-      console.log('📡 Broadcasting workout invitation to group...');
-      const invitationResponse = await socialService.initiateGroupWorkout(
-        group.id,
-        result.workout
-      );
-
-      console.log('✅ Invitation sent:', invitationResponse);
-
-      // Show success message
-      Alert.alert(
-        'Invitation Sent!',
-        'All active group members have been notified. Waiting for responses...',
-        [{ text: 'OK' }]
-      );
-
-      // Automatically start for the initiator
-      handleStartGroupWorkout(result.workout, invitationResponse.session_id);
     } catch (error: any) {
-      console.error('❌ Error generating group workout:', error);
+      console.error('❌ Error creating lobby:', error);
       Alert.alert(
         'Error',
-        error.message || 'Failed to generate group workout. Please try again.'
+        error.message || 'Failed to create lobby. Please try again.'
       );
     } finally {
       setIsGeneratingWorkout(false);
@@ -315,7 +305,7 @@ export default function GroupDetailsScreen() {
             <Text style={styles.groupDescriptionLarge}>{group.description}</Text>
           )}
 
-          {/* Start Group Workout Button */}
+          {/* Create Lobby Button */}
           <TouchableOpacity
             style={styles.startWorkoutButton}
             onPress={handleGenerateGroupWorkout}
@@ -325,12 +315,12 @@ export default function GroupDetailsScreen() {
             {isGeneratingWorkout ? (
               <>
                 <ActivityIndicator color="white" />
-                <Text style={styles.startWorkoutButtonText}>Generating...</Text>
+                <Text style={styles.startWorkoutButtonText}>Creating Lobby...</Text>
               </>
             ) : (
               <>
-                <Ionicons name="flash" size={24} color="white" />
-                <Text style={styles.startWorkoutButtonText}>Start Group Workout</Text>
+                <Ionicons name="people" size={24} color="white" />
+                <Text style={styles.startWorkoutButtonText}>Create Lobby</Text>
               </>
             )}
           </TouchableOpacity>

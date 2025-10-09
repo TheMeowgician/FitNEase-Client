@@ -923,14 +923,49 @@ export class SocialService {
     workout_data: any;
   }> {
     try {
+      console.log('📤 [SOCIAL] Initiating group workout:', {
+        groupId,
+        workoutData,
+        payload: { workout_data: workoutData }
+      });
+
       const response = await apiClient.post(
         'social',
         `/api/social/groups/${groupId}/initiate-workout`,
         { workout_data: workoutData }
       );
+
+      console.log('✅ [SOCIAL] Group workout initiated successfully:', response.data);
       return response.data.data;
-    } catch (error) {
-      throw new Error((error as any).message || 'Failed to initiate group workout');
+    } catch (error: any) {
+      console.error('❌ [SOCIAL] Failed to initiate group workout - FULL ERROR DETAILS:', {
+        errorObject: error,
+        message: error.message,
+        isAxiosError: error.isAxiosError,
+        hasResponse: !!error.response,
+        hasRequest: !!error.request,
+        response: error.response?.data,
+        status: error.response?.status,
+        errors: error.response?.data?.errors,
+        code: error.code,
+        config: error.config ? {
+          url: error.config.url,
+          baseURL: error.config.baseURL,
+          method: error.config.method,
+          data: error.config.data
+        } : undefined
+      });
+
+      // Include validation errors in the error message if available
+      const validationErrors = error.response?.data?.errors;
+      if (validationErrors) {
+        const errorMessages = Object.entries(validationErrors)
+          .map(([field, messages]: [string, any]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+          .join('; ');
+        throw new Error(`Validation failed: ${errorMessages}`);
+      }
+
+      throw error; // Re-throw the original error to preserve the full error object
     }
   }
 
@@ -963,6 +998,120 @@ export class SocialService {
       return response.data.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to start workout');
+    }
+  }
+
+  public async inviteMemberToLobby(
+    sessionId: string,
+    targetUserId: number,
+    groupId: string,
+    workoutData: any
+  ): Promise<void> {
+    try {
+      console.log('📤 [SOCIAL] Sending lobby invitation:', {
+        sessionId,
+        targetUserId,
+        groupId,
+        workoutData
+      });
+
+      await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/invite`,
+        {
+          target_user_id: targetUserId,
+          group_id: parseInt(groupId),
+          workout_data: workoutData
+        }
+      );
+
+      console.log('✅ [SOCIAL] Lobby invitation sent successfully');
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to send lobby invitation:', error);
+      throw new Error((error as any).message || 'Failed to send lobby invitation');
+    }
+  }
+
+  public async broadcastExercises(
+    sessionId: string,
+    workoutData: any
+  ): Promise<void> {
+    try {
+      console.log('📤 [SOCIAL] Broadcasting exercises to lobby:', {
+        sessionId,
+        exercisesCount: workoutData.exercises?.length || 0
+      });
+
+      await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/broadcast-exercises`,
+        {
+          workout_data: workoutData
+        }
+      );
+
+      console.log('✅ [SOCIAL] Exercises broadcast successfully');
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to broadcast exercises:', error);
+      throw new Error((error as any).message || 'Failed to broadcast exercises');
+    }
+  }
+
+  public async sendLobbyMessage(
+    sessionId: string,
+    message: string
+  ): Promise<{
+    message_id: string;
+    timestamp: number;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Sending lobby chat message:', {
+        sessionId,
+        messageLength: message.length
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/message`,
+        {
+          message
+        }
+      );
+
+      console.log('✅ [SOCIAL] Chat message sent successfully');
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to send chat message:', error);
+      throw new Error((error as any).message || 'Failed to send chat message');
+    }
+  }
+
+  public async passInitiatorRole(
+    sessionId: string,
+    newInitiatorId: number
+  ): Promise<{
+    new_initiator_id: number;
+    new_initiator_name: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Passing initiator role:', {
+        sessionId,
+        newInitiatorId
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/pass-initiator`,
+        {
+          new_initiator_id: newInitiatorId
+        }
+      );
+
+      console.log('✅ [SOCIAL] Initiator role passed successfully');
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to pass initiator role:', error);
+      throw new Error((error as any).message || 'Failed to pass initiator role');
     }
   }
 

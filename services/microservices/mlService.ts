@@ -311,6 +311,8 @@ export class MLService {
     }
   ): Promise<any> {
     try {
+      console.log(`🔥 [ML SERVICE] Generating group workout for ${userIds.length} users:`, userIds);
+
       const response = await apiClient.post<any>(
         this.serviceName,
         `${this.baseUrl}/group-recommendations`,
@@ -321,10 +323,13 @@ export class MLService {
         },
         { timeout: 60000 } // 60 seconds for group workout generation
       );
+
+      console.log('✅ [ML SERVICE] Group workout generated successfully:', response.data);
       return response.data;
-    } catch (error) {
-      console.warn('ML group workout service unavailable:', error);
-      return null;
+    } catch (error: any) {
+      console.error('❌ [ML SERVICE] Group workout generation failed:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      throw error; // Re-throw to let the caller handle it
     }
   }
 

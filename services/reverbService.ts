@@ -23,23 +23,30 @@ class ReverbService {
       return;
     }
 
-    // Extract IP from API_CONFIG
-    const socialUrl = API_CONFIG.SOCIAL_SERVICE_URL; // http://192.168.1.5:8006
-    const wsHost = socialUrl.replace('http://', '').replace('https://', '').split(':')[0];
+    // Get WebSocket configuration from API_CONFIG
+    const socialUrl = API_CONFIG.SOCIAL_SERVICE_URL;
+    const wsHost = API_CONFIG.REVERB_WS_HOST;
+    const wsPort = API_CONFIG.REVERB_WS_PORT;
+    const forceTLS = wsPort === 443; // Use TLS for ngrok (port 443)
 
     console.log('🔌 Connecting to Reverb:', {
       userId,
       tokenPrefix: token.substring(0, 20) + '...',
       wsHost,
-      wsPort: 8091,
+      wsPort,
+      forceTLS,
       authEndpoint: `${socialUrl}/api/broadcasting/auth`
     });
 
     // Initialize Pusher client pointing to Laravel Reverb
+    // For testing mode (ngrok), WebSocket goes through gateway /reverb/ path
+    const wsPath = wsPort === 443 ? '/reverb' : '';
+
     this.pusher = new Pusher('auqcet6tsq2wdjpmjp7v', {
       wsHost,
-      wsPort: 8091,
-      forceTLS: false,
+      wsPort,
+      wsPath,
+      forceTLS,
       enabledTransports: ['ws', 'wss'],
       cluster: 'mt1', // Required by Pusher but ignored by Reverb
       authEndpoint: `${socialUrl}/api/broadcasting/auth`,

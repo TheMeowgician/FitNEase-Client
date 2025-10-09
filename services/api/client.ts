@@ -73,6 +73,13 @@ export class APIClient {
     // Request interceptor
     client.interceptors.request.use(
       async (config) => {
+        console.log(`🔐 [${serviceName}] Request interceptor called:`, {
+          url: config.url,
+          method: config.method,
+          hasData: !!config.data,
+          data: config.data
+        });
+
         const token = await this.getAccessToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
@@ -84,9 +91,18 @@ export class APIClient {
         } else {
           console.warn(`⚠️ [${serviceName}] No token available for request:`, config.url);
         }
+
+        console.log(`✅ [${serviceName}] Request interceptor complete, returning config`);
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => {
+        console.error(`❌ [${serviceName}] Request interceptor ERROR:`, {
+          error,
+          message: error.message,
+          stack: error.stack
+        });
+        return Promise.reject(error);
+      }
     );
 
     // Response interceptor
@@ -302,11 +318,31 @@ export class APIClient {
       method: config.method,
       fullURL: `${this.configs[service].baseURL}${config.url}`,
       timeout: config.timeout || 30000,
-      headers: config.headers
+      headers: config.headers,
+      data: config.data
     });
 
     try {
+      console.log(`🚀 [${service}] About to call axios client...`);
+      try {
+        console.log(`🔍 [${service}] Config being passed to axios:`, {
+          url: config.url,
+          method: config.method,
+          data: config.data,
+          dataType: typeof config.data,
+          dataStringified: config.data ? JSON.stringify(config.data) : 'null'
+        });
+      } catch (jsonError: any) {
+        console.error(`❌ [${service}] Failed to stringify data:`, {
+          error: jsonError.message,
+          dataKeys: config.data ? Object.keys(config.data) : 'null'
+        });
+      }
+
+      console.log(`✈️ [${service}] Calling client(config) now...`);
       const response: AxiosResponse<any> = await client(config);
+      console.log(`📨 [${service}] Axios client returned response`);
+
       console.log(`📡 Raw axios response for ${service}:`, {
         status: response.status,
         statusText: response.statusText,
@@ -323,6 +359,17 @@ export class APIClient {
         status: response.status
       } as ApiResponse<T>;
     } catch (error) {
+      console.error(`❌ [${service}] CAUGHT ERROR in request method:`, {
+        error,
+        errorType: error?.constructor?.name,
+        errorMessage: (error as any)?.message,
+        errorStack: (error as any)?.stack,
+        isAxiosError: (error as any)?.isAxiosError,
+        hasResponse: !!(error as any)?.response,
+        hasRequest: !!(error as any)?.request,
+        hasConfig: !!(error as any)?.config
+      });
+
       const axiosError = error as any;
       const errorMessage = axiosError?.message || '';
       const isServiceUnavailable = errorMessage.includes('Network error') ||

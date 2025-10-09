@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,9 @@ import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import reverbService from '../../services/reverbService';
-import { socialService } from '../../services/microservices/socialService';
+import { socialService, GroupMember } from '../../services/microservices/socialService';
+import { mlService } from '../../services/microservices/mlService';
+import LobbyChat, { ChatMessage } from '../../components/lobby/LobbyChat';
 
 interface Exercise {
   exercise_id: number;
@@ -50,19 +53,31 @@ interface Member {
 export default function GroupWorkoutLobby() {
   const { user } = useAuth();
   const params = useLocalSearchParams();
-  const { sessionId, groupId, workoutData: workoutDataString, initiatorId } = params;
+  const { sessionId, groupId, workoutData: workoutDataString, initiatorId, isCreatingLobby } = params;
 
   const [workoutData, setWorkoutData] = useState<WorkoutData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [isInitiator, setIsInitiator] = useState(false);
+  const [isGeneratingExercises, setIsGeneratingExercises] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [loadingGroupMembers, setLoadingGroupMembers] = useState(false);
+  const [myStatus, setMyStatus] = useState<'waiting' | 'ready'>('waiting');
   const workoutDataRef = useRef<WorkoutData | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatVisible, setIsChatVisible] = useState(false);
+  const isChatVisibleRef = useRef(false);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [currentInitiatorId, setCurrentInitiatorId] = useState<string>(initiatorId as string);
 
+  // Initial mount effect - runs once
   useEffect(() => {
     console.log('🏋️ Lobby mounted with params:', {
       sessionId,
       groupId,
       initiatorId,
-      currentUserId: user?.id
+      currentUserId: user?.id,
+      isCreatingLobby
     });
 
     if (workoutDataString) {
@@ -77,17 +92,49 @@ export default function GroupWorkoutLobby() {
     setIsInitiator(isInit);
     console.log('👤 Is initiator:', isInit);
 
-    // Subscribe to lobby updates
+    // Add self to members list immediately with 'waiting' status
+    if (user) {
+      console.log('👤 Adding self to members list (waiting)');
+      setMembers([{
+        user_id: Number(user.id),
+        name: user.username || 'You',
+        status: 'waiting'
+      }]);
+
+      // If we're NOT the initiator, also add the initiator to the list
+      if (!isInit && initiatorId) {
+        console.log('👑 Adding initiator to members list (will get name from event)');
+        // We'll get the name when they broadcast or we can fetch it
+        // For now, add a placeholder - it will be updated when we receive their status
+      }
+    }
+
+    // Subscribe to lobby updates first, then broadcast status
     setupLobbySubscription();
 
-    // Mark self as ready
-    broadcastMemberStatus('ready');
+    // Small delay to ensure subscription is established before broadcasting
+    // This ensures we receive status updates from others who re-broadcast
+    setTimeout(() => {
+      // Mark self as waiting (NOT ready by default)
+      broadcastMemberStatus('waiting');
+    }, 500);
 
     return () => {
       console.log('🔌 Unsubscribing from lobby channel');
       reverbService.unsubscribe(`private-lobby.${sessionId}`);
     };
   }, []);
+
+  // Separate effect to handle initiator changes
+  useEffect(() => {
+    const isInit = Number(user?.id) === Number(currentInitiatorId);
+    console.log('👑 Initiator check update:', {
+      userId: user?.id,
+      currentInitiatorId,
+      isInit
+    });
+    setIsInitiator(isInit);
+  }, [currentInitiatorId, user?.id]);
 
   const setupLobbySubscription = () => {
     console.log('🔌 Subscribing to lobby channel:', `lobby.${sessionId}`);
@@ -100,10 +147,51 @@ export default function GroupWorkoutLobby() {
         if (eventName === 'MemberStatusUpdate') {
           console.log('👥 Member status update:', data);
           updateMemberStatus(data.user_id, data.name, data.status);
+        } else if (eventName === 'ExercisesGenerated') {
+          console.log('🏋️ Exercises generated event received!', data);
+          // Update workout data for all members
+          const receivedWorkout: WorkoutData = data.workout_data;
+          setWorkoutData(receivedWorkout);
+          workoutDataRef.current = receivedWorkout;
+          console.log('✅ Workout data updated from broadcast:', receivedWorkout);
+          Alert.alert('Exercises Ready!', 'The workout exercises have been generated.');
+        } else if (eventName === 'LobbyMessageSent') {
+          console.log('💬 Chat message received:', data);
+          // Add message to chat
+          const newMessage: ChatMessage = {
+            id: data.message_id,
+            userId: data.user_id,
+            userName: data.user_name,
+            message: data.message,
+            timestamp: data.timestamp * 1000, // Convert to milliseconds
+            isOwnMessage: data.user_id === Number(user?.id),
+          };
+          setChatMessages((prev) => [...prev, newMessage]);
+
+          // Increment unread count only if chat is not visible and message is not from self
+          if (!isChatVisibleRef.current && data.user_id !== Number(user?.id)) {
+            setUnreadMessagesCount((prev) => prev + 1);
+          }
         } else if (eventName === 'WorkoutStarted') {
           console.log('🚀 Workout started event received! Starting workout...');
           // All members navigate to workout session
           startWorkout();
+        } else if (eventName === 'PassInitiatorRole') {
+          console.log('👑 Initiator role transfer received:', data);
+          // Update the current initiator ID - backend sends camelCase
+          setCurrentInitiatorId(data.newInitiatorId.toString());
+
+          // Check if current user is now the initiator
+          const isNowInitiator = Number(user?.id) === Number(data.newInitiatorId);
+          setIsInitiator(isNowInitiator);
+
+          // Show notification
+          Alert.alert(
+            'Role Transfer',
+            isNowInitiator
+              ? `You are now the lobby creator! You can generate exercises and start the workout.`
+              : `${data.newInitiatorName} is now the lobby creator.`
+          );
         } else {
           console.log('❓ Unknown event:', eventName);
         }
@@ -119,9 +207,28 @@ export default function GroupWorkoutLobby() {
           m.user_id === userId ? { ...m, status } : m
         );
       } else {
+        // New member joined! Re-broadcast our own status so they can see us
+        console.log('🆕 New member joined, re-broadcasting own status');
+        setTimeout(() => broadcastMemberStatus(myStatus), 100);
+
         return [...prev, { user_id: userId, name, status }];
       }
     });
+  };
+
+  const handleToggleReady = async () => {
+    const newStatus = myStatus === 'waiting' ? 'ready' : 'waiting';
+    setMyStatus(newStatus);
+
+    // Update own status in members list
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === Number(user?.id) ? { ...m, status: newStatus } : m
+      )
+    );
+
+    // Broadcast status to other members
+    await broadcastMemberStatus(newStatus);
   };
 
   const broadcastMemberStatus = async (status: 'waiting' | 'ready') => {
@@ -133,11 +240,102 @@ export default function GroupWorkoutLobby() {
     }
   };
 
+  const handleGenerateExercises = async () => {
+    if (!isInitiator) {
+      Alert.alert('Permission Denied', 'Only the lobby creator can generate exercises.');
+      return;
+    }
+
+    // Check if there are members in the lobby
+    if (members.length === 0) {
+      Alert.alert(
+        'No Members in Lobby',
+        'Wait for members to join the lobby before generating exercises. The ML service needs member profiles to create a balanced workout.'
+      );
+      return;
+    }
+
+    // Check if all members are ready
+    const allReady = members.every((m) => m.status === 'ready');
+    if (!allReady) {
+      const notReadyMembers = members.filter((m) => m.status === 'waiting');
+      Alert.alert(
+        'Not All Members Ready',
+        `Waiting for ${notReadyMembers.length} member(s) to be ready:\n${notReadyMembers.map(m => `• ${m.name}`).join('\n')}`
+      );
+      return;
+    }
+
+    try {
+      setIsGeneratingExercises(true);
+      console.log('🔥 Generating exercises for lobby members:', members.length);
+
+      // Use CURRENT LOBBY MEMBERS (not all group members)
+      // This ensures ML generates balanced workout based on who's actually joining
+      const userIds = members.map((m) => m.user_id);
+
+      console.log('👥 Lobby member IDs for ML service:', userIds);
+
+      // Call ML service to generate group workout recommendations
+      // ML service will analyze each member's profile and create balanced exercises
+      const mlResponse = await mlService.getGroupWorkoutRecommendations(userIds, {
+        workout_format: 'tabata',
+        target_exercises: 8,
+      });
+
+      console.log('✅ ML Response:', mlResponse);
+
+      if (!mlResponse || !mlResponse.workout || !mlResponse.workout.exercises) {
+        throw new Error('No exercises generated');
+      }
+
+      // Create workout data with ML-generated exercises
+      const generatedWorkout: WorkoutData = {
+        exercises: mlResponse.workout.exercises,
+        tabata_structure: mlResponse.workout.tabata_structure,
+        group_analysis: mlResponse.workout.group_analysis,
+      };
+
+      // Update local state
+      setWorkoutData(generatedWorkout);
+      workoutDataRef.current = generatedWorkout;
+
+      console.log('✅ Exercises generated and stored locally');
+      console.log('📊 Group Analysis:', mlResponse.workout.group_analysis);
+
+      // Broadcast exercises to all lobby members
+      console.log('📡 Broadcasting exercises to all lobby members...');
+      await socialService.broadcastExercises(sessionId as string, generatedWorkout);
+      console.log('✅ Exercises broadcast complete');
+
+      Alert.alert('Success', 'Exercises generated and shared with all members!');
+    } catch (error: any) {
+      console.error('❌ Failed to generate exercises:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to generate exercises. Please try again.'
+      );
+    } finally {
+      setIsGeneratingExercises(false);
+    }
+  };
+
   const handleStartWorkout = () => {
     console.log('🎯 handleStartWorkout called, isInitiator:', isInitiator);
 
     if (!isInitiator) {
       Alert.alert('Permission Denied', 'Only the workout initiator can start the session.');
+      return;
+    }
+
+    // Check if all members are ready
+    const allReady = members.every((m) => m.status === 'ready');
+    if (!allReady) {
+      const notReadyMembers = members.filter((m) => m.status === 'waiting');
+      Alert.alert(
+        'Not All Members Ready',
+        `Waiting for ${notReadyMembers.length} member(s) to be ready:\n${notReadyMembers.map(m => `• ${m.name}`).join('\n')}`
+      );
       return;
     }
 
@@ -220,6 +418,115 @@ export default function GroupWorkoutLobby() {
     );
   };
 
+  const handleInviteMembers = async () => {
+    try {
+      setLoadingGroupMembers(true);
+      setShowInviteModal(true);
+
+      // Fetch all group members
+      const response = await socialService.getGroupMembers(groupId as string, 1, 50);
+      setGroupMembers(response.members || []);
+    } catch (error) {
+      console.error('Failed to load group members:', error);
+      Alert.alert('Error', 'Failed to load group members');
+      setShowInviteModal(false);
+    } finally {
+      setLoadingGroupMembers(false);
+    }
+  };
+
+  const handleInviteMember = async (member: GroupMember) => {
+    try {
+      console.log('📤 Sending lobby invitation to:', {
+        userId: member.userId,
+        username: member.username,
+        sessionId,
+        groupId
+      });
+
+      // Call the backend API to send the invitation via WebSocket
+      await socialService.inviteMemberToLobby(
+        sessionId as string,
+        parseInt(member.userId),
+        groupId as string,
+        workoutData || { workout_format: 'tabata', exercises: [] }
+      );
+
+      Alert.alert(
+        'Invitation Sent',
+        `Invited ${member.username} to join the workout lobby!\n\nNote: Make sure ${member.username} is online and in the app to receive the invitation.`
+      );
+
+      console.log('✅ Invitation sent successfully');
+    } catch (error) {
+      console.error('❌ Failed to send invitation:', error);
+      Alert.alert('Error', 'Failed to send invitation. Please try again.');
+    }
+  };
+
+  const handleSendMessage = async (message: string) => {
+    try {
+      console.log('💬 Sending chat message:', message);
+      await socialService.sendLobbyMessage(sessionId as string, message);
+      console.log('✅ Chat message sent successfully');
+    } catch (error) {
+      console.error('❌ Failed to send chat message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
+  };
+
+  const handleOpenChat = () => {
+    setIsChatVisible(true);
+    isChatVisibleRef.current = true;
+    // Clear unread count when opening chat
+    setUnreadMessagesCount(0);
+  };
+
+  const handleCloseChat = () => {
+    setIsChatVisible(false);
+    isChatVisibleRef.current = false;
+  };
+
+  const handlePassInitiatorRole = (member: Member) => {
+    if (!isInitiator) {
+      Alert.alert('Permission Denied', 'Only the lobby creator can transfer the role.');
+      return;
+    }
+
+    if (member.user_id === Number(user?.id)) {
+      Alert.alert('Invalid Action', 'You cannot transfer the role to yourself.');
+      return;
+    }
+
+    Alert.alert(
+      'Transfer Creator Role',
+      `Are you sure you want to transfer the lobby creator role to ${member.name}? You will no longer be able to generate exercises or start the workout.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Transfer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('👑 Transferring initiator role to:', {
+                memberId: member.user_id,
+                memberName: member.name,
+                sessionId
+              });
+
+              await socialService.passInitiatorRole(sessionId as string, member.user_id);
+
+              console.log('✅ Initiator role transferred successfully');
+            } catch (error) {
+              console.error('❌ Failed to transfer initiator role:', error);
+              Alert.alert('Error', 'Failed to transfer role. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getDifficultyLabel = (level: number) => {
     switch (level) {
       case 1: return 'Beginner';
@@ -238,7 +545,11 @@ export default function GroupWorkoutLobby() {
     }
   };
 
-  if (!workoutData) {
+  // If we're in lobby creation mode (no exercises yet), we'll show a different UI
+  const isLobbyMode = isCreatingLobby === 'true' || !workoutData;
+
+  // Only show loading if we're not in lobby creation mode and have no data
+  if (!workoutData && isCreatingLobby !== 'true') {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
@@ -252,7 +563,9 @@ export default function GroupWorkoutLobby() {
     );
   }
 
-  const { exercises, tabata_structure, group_analysis } = workoutData;
+  const exercises = workoutData?.exercises || [];
+  const tabata_structure = workoutData?.tabata_structure;
+  const group_analysis = workoutData?.group_analysis;
 
   return (
     <>
@@ -267,36 +580,168 @@ export default function GroupWorkoutLobby() {
           <Text style={styles.headerTitle}>Workout Lobby</Text>
           <Text style={styles.headerSubtitle}>Waiting for all members...</Text>
         </View>
+        <TouchableOpacity onPress={handleOpenChat} style={styles.chatButton}>
+          <Ionicons name="chatbubbles" size={24} color={COLORS.PRIMARY[600]} />
+          {unreadMessagesCount > 0 && (
+            <View style={styles.chatBadge}>
+              <Text style={styles.chatBadgeText}>{unreadMessagesCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Ready Status Toggle */}
+        <View style={styles.readyToggleSection}>
+          <View style={styles.readyToggleCard}>
+            <View style={styles.readyToggleLeft}>
+              <Ionicons
+                name={myStatus === 'ready' ? 'checkmark-circle' : 'time-outline'}
+                size={32}
+                color={myStatus === 'ready' ? COLORS.SUCCESS[600] : COLORS.WARNING[600]}
+              />
+              <View style={styles.readyToggleText}>
+                <Text style={styles.readyToggleTitle}>
+                  {myStatus === 'ready' ? "You're Ready!" : 'Not Ready Yet'}
+                </Text>
+                <Text style={styles.readyToggleSubtitle}>
+                  {myStatus === 'ready'
+                    ? 'Waiting for others to be ready'
+                    : 'Tap the button when ready'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.readyToggleButton,
+                myStatus === 'ready' ? styles.readyToggleButtonReady : styles.readyToggleButtonWaiting,
+              ]}
+              onPress={handleToggleReady}
+            >
+              <Text
+                style={[
+                  styles.readyToggleButtonText,
+                  myStatus === 'ready' && styles.readyToggleButtonTextReady,
+                ]}
+              >
+                {myStatus === 'ready' ? 'Not Ready' : 'Ready'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Members Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="people" size={20} color={COLORS.PRIMARY[600]} />
             <Text style={styles.sectionTitle}>Members ({members.length})</Text>
+            {isInitiator && (
+              <TouchableOpacity style={styles.inviteButton} onPress={handleInviteMembers}>
+                <Ionicons name="person-add" size={18} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.inviteButtonText}>Invite</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.membersList}>
-            {members.map((member) => (
-              <View key={member.user_id} style={styles.memberCard}>
-                <View style={styles.memberAvatar}>
-                  <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
+            {members.length > 0 ? (
+              members.map((member) => (
+                <View key={member.user_id} style={styles.memberCard}>
+                  <View style={styles.memberAvatar}>
+                    <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
+                  </View>
+                  <View style={styles.memberNameContainer}>
+                    <Text style={styles.memberName}>{member.name}</Text>
+                    {member.user_id === Number(currentInitiatorId) && (
+                      <View style={styles.initiatorBadge}>
+                        <Ionicons name="star" size={14} color={COLORS.WARNING[600]} />
+                        <Text style={styles.initiatorText}>Creator</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.memberActionsContainer}>
+                    {/* Show Pass Role button if current user is initiator and this member is not the initiator */}
+                    {isInitiator && member.user_id !== Number(currentInitiatorId) && (
+                      <TouchableOpacity
+                        style={styles.passRoleButton}
+                        onPress={() => handlePassInitiatorRole(member)}
+                      >
+                        <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
+                      </TouchableOpacity>
+                    )}
+                    <View style={[styles.statusBadge, member.status === 'ready' && styles.statusReady]}>
+                      <Ionicons
+                        name={member.status === 'ready' ? 'checkmark-circle' : 'time'}
+                        size={16}
+                        color={member.status === 'ready' ? COLORS.SUCCESS[600] : COLORS.WARNING[600]}
+                      />
+                      <Text style={[styles.statusText, member.status === 'ready' && styles.statusReadyText]}>
+                        {member.status === 'ready' ? 'Ready' : 'Waiting'}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <Text style={styles.memberName}>{member.name}</Text>
-                <View style={[styles.statusBadge, member.status === 'ready' && styles.statusReady]}>
-                  <Ionicons
-                    name={member.status === 'ready' ? 'checkmark-circle' : 'time'}
-                    size={16}
-                    color={member.status === 'ready' ? COLORS.SUCCESS[600] : COLORS.WARNING[600]}
-                  />
-                  <Text style={[styles.statusText, member.status === 'ready' && styles.statusReadyText]}>
-                    {member.status === 'ready' ? 'Ready' : 'Waiting'}
-                  </Text>
-                </View>
+              ))
+            ) : (
+              <View style={styles.emptyMembersCard}>
+                <Ionicons name="people-outline" size={32} color={COLORS.SECONDARY[400]} />
+                <Text style={styles.emptyMembersText}>No members yet. Invite friends to join!</Text>
               </View>
-            ))}
+            )}
           </View>
         </View>
+
+        {/* Generate Exercises Section - Show if no exercises OR if user is initiator (allow regenerate) */}
+        {isInitiator && !workoutData && (
+          <View style={styles.section}>
+            <View style={styles.emptyStateCard}>
+              <Ionicons name="barbell-outline" size={48} color={COLORS.SECONDARY[400]} />
+              <Text style={styles.emptyStateTitle}>No Exercises Yet</Text>
+              <Text style={styles.emptyStateText}>
+                Generate personalized exercises for your group members
+              </Text>
+              <TouchableOpacity
+                style={styles.generateButton}
+                onPress={handleGenerateExercises}
+                disabled={isGeneratingExercises}
+              >
+                {isGeneratingExercises ? (
+                  <>
+                    <ActivityIndicator color="white" size="small" />
+                    <Text style={styles.generateButtonText}>Generating...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="flash" size={20} color={COLORS.NEUTRAL.WHITE} />
+                    <Text style={styles.generateButtonText}>Generate Exercises</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Regenerate Exercises Button - Show if exercises exist AND user is initiator */}
+        {isInitiator && workoutData && exercises.length > 0 && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.regenerateButton}
+              onPress={handleGenerateExercises}
+              disabled={isGeneratingExercises}
+            >
+              {isGeneratingExercises ? (
+                <>
+                  <ActivityIndicator color="white" size="small" />
+                  <Text style={styles.regenerateButtonText}>Regenerating...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="refresh" size={20} color={COLORS.NEUTRAL.WHITE} />
+                  <Text style={styles.regenerateButtonText}>Regenerate Exercises</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Tabata Structure */}
         {tabata_structure && (
@@ -350,54 +795,140 @@ export default function GroupWorkoutLobby() {
           </View>
         )}
 
-        {/* Exercises Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="fitness" size={20} color={COLORS.PRIMARY[600]} />
-            <Text style={styles.sectionTitle}>Exercises ({exercises.length})</Text>
-          </View>
-          {exercises.map((exercise, index) => (
-            <View key={exercise.exercise_id} style={styles.exerciseCard}>
-              <View style={styles.exerciseHeader}>
-                <View style={styles.exerciseNumber}>
-                  <Text style={styles.exerciseNumberText}>#{index + 1}</Text>
-                </View>
-                <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
-              </View>
-              <View style={styles.exerciseDetails}>
-                <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(exercise.difficulty_level) + '20' }]}>
-                  <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty_level) }]}>
-                    {getDifficultyLabel(exercise.difficulty_level)}
-                  </Text>
-                </View>
-                <View style={styles.exerciseStat}>
-                  <Ionicons name="body-outline" size={14} color={COLORS.SECONDARY[600]} />
-                  <Text style={styles.exerciseStatText}>{exercise.muscle_group}</Text>
-                </View>
-                <View style={styles.exerciseStat}>
-                  <Ionicons name="flame-outline" size={14} color={COLORS.WARNING[500]} />
-                  <Text style={styles.exerciseStatText}>{exercise.estimated_calories_burned} cal</Text>
-                </View>
-              </View>
+        {/* Exercises Section - Only show if exercises exist */}
+        {exercises.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="fitness" size={20} color={COLORS.PRIMARY[600]} />
+              <Text style={styles.sectionTitle}>Exercises ({exercises.length})</Text>
             </View>
-          ))}
-        </View>
+            {exercises.map((exercise, index) => (
+              <View key={exercise.exercise_id} style={styles.exerciseCard}>
+                <View style={styles.exerciseHeader}>
+                  <View style={styles.exerciseNumber}>
+                    <Text style={styles.exerciseNumberText}>#{index + 1}</Text>
+                  </View>
+                  <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
+                </View>
+                <View style={styles.exerciseDetails}>
+                  <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(exercise.difficulty_level) + '20' }]}>
+                    <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty_level) }]}>
+                      {getDifficultyLabel(exercise.difficulty_level)}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseStat}>
+                    <Ionicons name="body-outline" size={14} color={COLORS.SECONDARY[600]} />
+                    <Text style={styles.exerciseStatText}>{exercise.muscle_group}</Text>
+                  </View>
+                  <View style={styles.exerciseStat}>
+                    <Ionicons name="flame-outline" size={14} color={COLORS.WARNING[500]} />
+                    <Text style={styles.exerciseStatText}>{exercise.estimated_calories_burned} cal</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Action Button */}
       <View style={styles.footer}>
-        {isInitiator ? (
-          <TouchableOpacity style={styles.startButton} onPress={handleStartWorkout}>
-            <Ionicons name="play-circle" size={24} color={COLORS.NEUTRAL.WHITE} />
-            <Text style={styles.startButtonText}>Start Workout for Everyone</Text>
-          </TouchableOpacity>
+        {workoutData && exercises.length > 0 ? (
+          // Show start button only when exercises are generated
+          isInitiator ? (
+            <TouchableOpacity style={styles.startButton} onPress={handleStartWorkout}>
+              <Ionicons name="play-circle" size={24} color={COLORS.NEUTRAL.WHITE} />
+              <Text style={styles.startButtonText}>Start Workout for Everyone</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.waitingContainer}>
+              <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
+              <Text style={styles.waitingText}>Waiting for workout to start...</Text>
+            </View>
+          )
         ) : (
+          // When no exercises yet, show appropriate message
           <View style={styles.waitingContainer}>
-            <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
-            <Text style={styles.waitingText}>Waiting for workout to start...</Text>
+            <Ionicons name="time-outline" size={20} color={COLORS.SECONDARY[600]} />
+            <Text style={styles.waitingText}>
+              {isInitiator ? 'Generate exercises to continue' : 'Waiting for exercises...'}
+            </Text>
           </View>
         )}
       </View>
+
+      {/* Invite Members Modal */}
+      <Modal
+        visible={showInviteModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInviteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Invite Members</Text>
+              <TouchableOpacity onPress={() => setShowInviteModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingGroupMembers ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
+                <Text style={styles.loadingText}>Loading members...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                {groupMembers
+                  .filter((gm) => {
+                    // Filter out members already in lobby
+                    const isInLobby = members.find((m) => m.user_id === parseInt(gm.userId));
+                    // Filter out current user (don't invite yourself)
+                    const isCurrentUser = parseInt(gm.userId) === Number(user?.id);
+                    return !isInLobby && !isCurrentUser;
+                  })
+                  .map((member) => (
+                    <View key={member.id} style={styles.inviteMemberCard}>
+                      <View style={styles.memberAvatar}>
+                        <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
+                      </View>
+                      <View style={styles.inviteMemberInfo}>
+                        <Text style={styles.memberName}>{member.username}</Text>
+                        <Text style={styles.inviteMemberRole}>{member.role}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.inviteIconButton}
+                        onPress={() => handleInviteMember(member)}
+                      >
+                        <Ionicons name="send" size={20} color={COLORS.PRIMARY[600]} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                {groupMembers.filter((gm) => {
+                  const isInLobby = members.find((m) => m.user_id === parseInt(gm.userId));
+                  const isCurrentUser = parseInt(gm.userId) === Number(user?.id);
+                  return !isInLobby && !isCurrentUser;
+                }).length === 0 && (
+                  <View style={styles.emptyInviteState}>
+                    <Ionicons name="checkmark-done-circle" size={48} color={COLORS.SUCCESS[400]} />
+                    <Text style={styles.emptyInviteText}>All group members are already in the lobby!</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lobby Chat */}
+      <LobbyChat
+        messages={chatMessages}
+        currentUserId={Number(user?.id)}
+        onSendMessage={handleSendMessage}
+        visible={isChatVisible}
+        onClose={handleCloseChat}
+      />
     </SafeAreaView>
     </>
   );
@@ -481,11 +1012,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  memberName: {
+  memberNameContainer: {
     flex: 1,
+    gap: 4,
+  },
+  memberName: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
+  },
+  initiatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.WARNING[50],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  initiatorText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.WARNING[700],
+  },
+  memberActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  passRoleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.PRIMARY[100],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusBadge: {
     flexDirection: 'row',
@@ -637,5 +1199,236 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
     marginLeft: 12,
+  },
+  emptyStateCard: {
+    backgroundColor: COLORS.SECONDARY[50],
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  generateButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.PRIMARY[600],
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  generateButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+    marginLeft: 8,
+  },
+  regenerateButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.PRIMARY[600],
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  regenerateButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+    marginLeft: 8,
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY[100],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 'auto',
+    gap: 4,
+  },
+  inviteButtonText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  emptyMembersCard: {
+    backgroundColor: COLORS.SECONDARY[50],
+    padding: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  emptyMembersText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[200],
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  inviteMemberCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SECONDARY[50],
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  inviteMemberInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  inviteMemberRole: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  inviteIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.PRIMARY[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyInviteState: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyInviteText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  readyToggleSection: {
+    marginBottom: 16,
+  },
+  readyToggleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.SECONDARY[50],
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.SECONDARY[200],
+  },
+  readyToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  readyToggleText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  readyToggleTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  readyToggleSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginTop: 2,
+  },
+  readyToggleButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  readyToggleButtonWaiting: {
+    backgroundColor: COLORS.SUCCESS[600],
+  },
+  readyToggleButtonReady: {
+    backgroundColor: COLORS.SECONDARY[300],
+  },
+  readyToggleButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  readyToggleButtonTextReady: {
+    color: COLORS.SECONDARY[700],
+  },
+  chatButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: COLORS.ERROR[500],
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  chatBadgeText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });

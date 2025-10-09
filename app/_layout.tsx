@@ -9,6 +9,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { UserProvider } from '../contexts/UserContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
+import { WebSocketProvider } from '../contexts/WebSocketContext';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -40,10 +41,12 @@ export default function RootLayout() {
       <ThemeProvider>
         <NetworkProvider>
           <AuthProvider>
-            <UserProvider>
-              <StatusBar style="auto" />
-              <Slot />
-            </UserProvider>
+            <WebSocketProvider>
+              <UserProvider>
+                <StatusBar style="auto" />
+                <Slot />
+              </UserProvider>
+            </WebSocketProvider>
           </AuthProvider>
         </NetworkProvider>
       </ThemeProvider>

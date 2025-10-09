@@ -19,7 +19,7 @@ interface InvitationData {
   initiator_id: number;
   initiator_name: string;
   workout_data: {
-    workout_format: string;
+    workout_format?: string;
     exercises: Array<{
       exercise_id: number;
       exercise_name: string;
@@ -145,7 +145,7 @@ export default function GroupWorkoutInvitationModal({
             {/* Workout Format */}
             <View style={styles.formatBadge}>
               <Text style={styles.formatText}>
-                {workout_data.workout_format.toUpperCase()} WORKOUT
+                {(workout_data.workout_format || 'tabata').toUpperCase()} WORKOUT
               </Text>
             </View>
 
