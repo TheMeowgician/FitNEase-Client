@@ -16,9 +16,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { COLORS, FONTS } from '../../constants/colors';
 import { UserAchievement, UserStats } from '../../services/microservices/engagementService';
+import { useSmartBack } from '../../hooks/useSmartBack';
 
 export default function AchievementsScreen() {
   const { user } = useAuth();
+  const { goBack } = useSmartBack();
   const { getUserAchievements, getUserStats } = useEngagementService();
 
   const [achievements, setAchievements] = useState<UserAchievement[]>([]);
@@ -80,7 +82,7 @@ export default function AchievementsScreen() {
         <StatusBar barStyle="dark-content" backgroundColor="white" />
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBack()}
             style={styles.backButton}
             activeOpacity={0.7}
           >
@@ -105,7 +107,7 @@ export default function AchievementsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="white" />
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           style={styles.backButton}
           activeOpacity={0.7}
         >

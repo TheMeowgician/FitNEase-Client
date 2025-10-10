@@ -58,7 +58,7 @@ export class APIClient {
 
       const client = axios.create({
         baseURL: config.baseURL,
-        timeout: 30000,
+        timeout: 60000, // Increased to 60 seconds for slow networks
         headers: {
           'Content-Type': 'application/json',
         },

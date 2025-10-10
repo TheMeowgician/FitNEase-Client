@@ -57,10 +57,14 @@ export const navigateToChat = (chatId?: string) => {
 };
 
 export const navigateBack = () => {
+  // Always try to go back first
+  // The navigation stack should handle this correctly
   if (router.canGoBack()) {
     router.back();
   } else {
-    router.replace('/(tabs)');
+    // Only fallback to tabs if there's truly no history
+    // This should rarely happen in normal app usage
+    router.replace('/(tabs)/profile');
   }
 };
 

@@ -112,6 +112,14 @@ export default function GroupWorkoutInvitationModal({
     }
   };
 
+  const formatMuscleGroup = (muscleGroup: string) => {
+    // Convert snake_case to Title Case (e.g., "upper_body" -> "Upper Body")
+    return muscleGroup
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   return (
     <Modal
       visible={visible}
@@ -153,22 +161,30 @@ export default function GroupWorkoutInvitationModal({
             {tabata_structure && (
               <View style={styles.tabataInfo}>
                 <Text style={styles.sectionTitle}>Tabata Structure</Text>
-                <View style={styles.tabataGrid}>
-                  <View style={styles.tabataStat}>
-                    <Text style={styles.tabataValue}>{tabata_structure.rounds}</Text>
-                    <Text style={styles.tabataLabel}>Rounds</Text>
+                <View style={styles.tabataContainer}>
+                  <View style={styles.tabataRow}>
+                    <View style={styles.tabataStat}>
+                      <Ionicons name="repeat" size={20} color={COLORS.PRIMARY[600]} />
+                      <Text style={styles.tabataValue}>{tabata_structure.rounds}</Text>
+                      <Text style={styles.tabataLabel}>Rounds</Text>
+                    </View>
+                    <View style={styles.tabataStat}>
+                      <Ionicons name="timer" size={20} color={COLORS.SUCCESS[600]} />
+                      <Text style={styles.tabataValue}>{tabata_structure.work_duration_seconds}s</Text>
+                      <Text style={styles.tabataLabel}>Work</Text>
+                    </View>
                   </View>
-                  <View style={styles.tabataStat}>
-                    <Text style={styles.tabataValue}>{tabata_structure.work_duration_seconds}s</Text>
-                    <Text style={styles.tabataLabel}>Work</Text>
-                  </View>
-                  <View style={styles.tabataStat}>
-                    <Text style={styles.tabataValue}>{tabata_structure.rest_duration_seconds}s</Text>
-                    <Text style={styles.tabataLabel}>Rest</Text>
-                  </View>
-                  <View style={styles.tabataStat}>
-                    <Text style={styles.tabataValue}>{tabata_structure.total_duration_minutes}min</Text>
-                    <Text style={styles.tabataLabel}>Total</Text>
+                  <View style={styles.tabataRow}>
+                    <View style={styles.tabataStat}>
+                      <Ionicons name="pause" size={20} color={COLORS.WARNING[600]} />
+                      <Text style={styles.tabataValue}>{tabata_structure.rest_duration_seconds}s</Text>
+                      <Text style={styles.tabataLabel}>Rest</Text>
+                    </View>
+                    <View style={styles.tabataStat}>
+                      <Ionicons name="time" size={20} color={COLORS.SECONDARY[600]} />
+                      <Text style={styles.tabataValue}>{tabata_structure.total_duration_minutes}</Text>
+                      <Text style={styles.tabataLabel}>Total Minutes</Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -214,7 +230,7 @@ export default function GroupWorkoutInvitationModal({
                     </View>
                     <View style={styles.exerciseStat}>
                       <Ionicons name="body-outline" size={14} color="#6b7280" />
-                      <Text style={styles.exerciseStatText}>{exercise.muscle_group}</Text>
+                      <Text style={styles.exerciseStatText}>{formatMuscleGroup(exercise.muscle_group)}</Text>
                     </View>
                     <View style={styles.exerciseStat}>
                       <Ionicons name="flame-outline" size={14} color="#f59e0b" />
@@ -326,28 +342,34 @@ const styles = StyleSheet.create({
   tabataInfo: {
     marginBottom: 20,
   },
-  tabataGrid: {
+  tabataContainer: {
+    gap: 10,
+  },
+  tabataRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 10,
   },
   tabataStat: {
     flex: 1,
     backgroundColor: COLORS.SECONDARY[50],
-    padding: 12,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginHorizontal: 4,
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
   },
   tabataValue: {
-    fontSize: FONT_SIZES.LG,
+    fontSize: 22,
     fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
+    color: COLORS.SECONDARY[900],
   },
   tabataLabel: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
-    marginTop: 4,
+    textAlign: 'center',
   },
   groupAnalysis: {
     backgroundColor: COLORS.SECONDARY[50],

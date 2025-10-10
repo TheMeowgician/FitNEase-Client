@@ -545,6 +545,14 @@ export default function GroupWorkoutLobby() {
     }
   };
 
+  const formatMuscleGroup = (muscleGroup: string) => {
+    // Convert snake_case to Title Case (e.g., "upper_body" -> "Upper Body")
+    return muscleGroup
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   // If we're in lobby creation mode (no exercises yet), we'll show a different UI
   const isLobbyMode = isCreatingLobby === 'true' || !workoutData;
 
@@ -690,56 +698,55 @@ export default function GroupWorkoutLobby() {
           </View>
         </View>
 
-        {/* Generate Exercises Section - Show if no exercises OR if user is initiator (allow regenerate) */}
-        {isInitiator && !workoutData && (
+        {/* Generate/Regenerate Exercises Section - Show ALWAYS when user is initiator */}
+        {isInitiator && (
           <View style={styles.section}>
-            <View style={styles.emptyStateCard}>
-              <Ionicons name="barbell-outline" size={48} color={COLORS.SECONDARY[400]} />
-              <Text style={styles.emptyStateTitle}>No Exercises Yet</Text>
-              <Text style={styles.emptyStateText}>
-                Generate personalized exercises for your group members
-              </Text>
+            {!workoutData || exercises.length === 0 ? (
+              // Show generate card when no exercises
+              <View style={styles.emptyStateCard}>
+                <Ionicons name="barbell-outline" size={48} color={COLORS.SECONDARY[400]} />
+                <Text style={styles.emptyStateTitle}>No Exercises Yet</Text>
+                <Text style={styles.emptyStateText}>
+                  Generate personalized exercises for your group members
+                </Text>
+                <TouchableOpacity
+                  style={styles.generateButton}
+                  onPress={handleGenerateExercises}
+                  disabled={isGeneratingExercises}
+                >
+                  {isGeneratingExercises ? (
+                    <>
+                      <ActivityIndicator color="white" size="small" />
+                      <Text style={styles.generateButtonText}>Generating...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="flash" size={20} color={COLORS.NEUTRAL.WHITE} />
+                      <Text style={styles.generateButtonText}>Generate Exercises</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              // Show regenerate button when exercises exist
               <TouchableOpacity
-                style={styles.generateButton}
+                style={styles.regenerateButton}
                 onPress={handleGenerateExercises}
                 disabled={isGeneratingExercises}
               >
                 {isGeneratingExercises ? (
                   <>
                     <ActivityIndicator color="white" size="small" />
-                    <Text style={styles.generateButtonText}>Generating...</Text>
+                    <Text style={styles.regenerateButtonText}>Regenerating...</Text>
                   </>
                 ) : (
                   <>
-                    <Ionicons name="flash" size={20} color={COLORS.NEUTRAL.WHITE} />
-                    <Text style={styles.generateButtonText}>Generate Exercises</Text>
+                    <Ionicons name="refresh" size={20} color={COLORS.NEUTRAL.WHITE} />
+                    <Text style={styles.regenerateButtonText}>Regenerate Exercises</Text>
                   </>
                 )}
               </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Regenerate Exercises Button - Show if exercises exist AND user is initiator */}
-        {isInitiator && workoutData && exercises.length > 0 && (
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.regenerateButton}
-              onPress={handleGenerateExercises}
-              disabled={isGeneratingExercises}
-            >
-              {isGeneratingExercises ? (
-                <>
-                  <ActivityIndicator color="white" size="small" />
-                  <Text style={styles.regenerateButtonText}>Regenerating...</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="refresh" size={20} color={COLORS.NEUTRAL.WHITE} />
-                  <Text style={styles.regenerateButtonText}>Regenerate Exercises</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -750,22 +757,30 @@ export default function GroupWorkoutLobby() {
               <Ionicons name="timer" size={20} color={COLORS.PRIMARY[600]} />
               <Text style={styles.sectionTitle}>Tabata Structure</Text>
             </View>
-            <View style={styles.tabataGrid}>
-              <View style={styles.tabataCard}>
-                <Text style={styles.tabataValue}>{tabata_structure.rounds}</Text>
-                <Text style={styles.tabataLabel}>Rounds</Text>
+            <View style={styles.tabataContainer}>
+              <View style={styles.tabataRow}>
+                <View style={styles.tabataCard}>
+                  <Ionicons name="repeat" size={24} color={COLORS.PRIMARY[600]} />
+                  <Text style={styles.tabataValue}>{tabata_structure.rounds}</Text>
+                  <Text style={styles.tabataLabel}>Rounds</Text>
+                </View>
+                <View style={styles.tabataCard}>
+                  <Ionicons name="timer" size={24} color={COLORS.SUCCESS[600]} />
+                  <Text style={styles.tabataValue}>{tabata_structure.work_duration_seconds}s</Text>
+                  <Text style={styles.tabataLabel}>Work</Text>
+                </View>
               </View>
-              <View style={styles.tabataCard}>
-                <Text style={styles.tabataValue}>{tabata_structure.work_duration_seconds}s</Text>
-                <Text style={styles.tabataLabel}>Work</Text>
-              </View>
-              <View style={styles.tabataCard}>
-                <Text style={styles.tabataValue}>{tabata_structure.rest_duration_seconds}s</Text>
-                <Text style={styles.tabataLabel}>Rest</Text>
-              </View>
-              <View style={styles.tabataCard}>
-                <Text style={styles.tabataValue}>{tabata_structure.total_duration_minutes}min</Text>
-                <Text style={styles.tabataLabel}>Total</Text>
+              <View style={styles.tabataRow}>
+                <View style={styles.tabataCard}>
+                  <Ionicons name="pause" size={24} color={COLORS.WARNING[600]} />
+                  <Text style={styles.tabataValue}>{tabata_structure.rest_duration_seconds}s</Text>
+                  <Text style={styles.tabataLabel}>Rest</Text>
+                </View>
+                <View style={styles.tabataCard}>
+                  <Ionicons name="time" size={24} color={COLORS.SECONDARY[600]} />
+                  <Text style={styles.tabataValue}>{tabata_structure.total_duration_minutes}</Text>
+                  <Text style={styles.tabataLabel}>Total Minutes</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -818,7 +833,7 @@ export default function GroupWorkoutLobby() {
                   </View>
                   <View style={styles.exerciseStat}>
                     <Ionicons name="body-outline" size={14} color={COLORS.SECONDARY[600]} />
-                    <Text style={styles.exerciseStatText}>{exercise.muscle_group}</Text>
+                    <Text style={styles.exerciseStatText}>{formatMuscleGroup(exercise.muscle_group)}</Text>
                   </View>
                   <View style={styles.exerciseStat}>
                     <Ionicons name="flame-outline" size={14} color={COLORS.WARNING[500]} />
@@ -1069,27 +1084,34 @@ const styles = StyleSheet.create({
   statusReadyText: {
     color: COLORS.SUCCESS[600],
   },
-  tabataGrid: {
+  tabataContainer: {
+    gap: 12,
+  },
+  tabataRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   tabataCard: {
     flex: 1,
-    backgroundColor: COLORS.PRIMARY[50],
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: COLORS.SECONDARY[50],
+    padding: 20,
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
   },
   tabataValue: {
-    fontSize: FONT_SIZES.XXL,
+    fontSize: 28,
     fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
+    color: COLORS.SECONDARY[900],
   },
   tabataLabel: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
-    marginTop: 4,
+    textAlign: 'center',
   },
   analysisCard: {
     backgroundColor: COLORS.SECONDARY[50],

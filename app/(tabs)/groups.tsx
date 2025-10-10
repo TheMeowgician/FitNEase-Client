@@ -63,8 +63,14 @@ export default function GroupsScreen() {
         console.log('First group:', myGroupsData.groups[0]);
       }
 
+      // Filter out groups that user is already a member of from public groups
+      const myGroupIds = new Set(myGroupsData.groups.map(g => g.id));
+      const filteredPublicGroups = publicGroupsData.groups.filter(g => !myGroupIds.has(g.id));
+
+      console.log('✅ Filtered Public Groups (excluding my groups):', filteredPublicGroups.length, 'groups');
+
       setMyGroups(myGroupsData.groups || []);
-      setPublicGroups(publicGroupsData.groups || []);
+      setPublicGroups(filteredPublicGroups || []);
     } catch (error) {
       console.error('❌ Error loading groups:', error);
       Alert.alert('Error', 'Failed to load groups. Please try again.');
@@ -91,8 +97,8 @@ export default function GroupsScreen() {
 
     setIsJoining(true);
     try {
-      // Call join with code endpoint
-      await socialService.joinGroup({ groupId: groupCode }); // Using groupId as code
+      // Call join with code endpoint (expects 8-character code)
+      await socialService.joinGroupWithCode(groupCode.trim().toUpperCase());
       Alert.alert('Success', 'You have joined the group!', [
         { text: 'OK', onPress: () => {
           setShowJoinModal(false);

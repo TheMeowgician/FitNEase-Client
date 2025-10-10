@@ -8,7 +8,7 @@
 // - 'development': Local WiFi network (for Expo Go development)
 // - 'testing': ngrok tunnels (for APK testing with groupmates)
 type Environment = 'development' | 'testing';
-const ENVIRONMENT = 'development' as Environment;
+const ENVIRONMENT = 'testing' as Environment;
 
 // 🔧 STEP 2: SET ACTIVE MEMBER (for development mode)
 const ACTIVE_MEMBER = 'Gab'; // Options: 'Gab', 'Wimari', 'Nhiko', 'Chrystian'

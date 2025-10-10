@@ -55,8 +55,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "4db05b45-f18b-4402-8fb6-f221991dc53c"
+        "projectId": "e82fecda-c86d-4d66-a9af-7aba6056f28f"
       }
-    }
+    },
+    "owner": "gabsm2000"
   }
 }

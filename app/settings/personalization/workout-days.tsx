@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 interface DayOfWeek {
   id: string;
@@ -16,6 +17,7 @@ interface DayOfWeek {
 
 export default function WorkoutDaysSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -52,7 +54,7 @@ export default function WorkoutDaysSettingsScreen() {
     try {
       await authService.updateUserProfile({ preferred_workout_days: selectedDays });
       await refreshUser();
-      Alert.alert('Success', 'Your workout days have been updated!', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('Success', 'Your workout days have been updated!', [{ text: 'OK', onPress: () => goBack() }]);
     } catch (error) {
       console.error('Error saving workout days:', error);
       Alert.alert('Error', 'Failed to save your preferences. Please try again.');
@@ -74,7 +76,7 @@ export default function WorkoutDaysSettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Workout Days</Text>

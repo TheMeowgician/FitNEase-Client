@@ -19,10 +19,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
+import { useSmartBack } from '../../hooks/useSmartBack';
 
 export default function GroupDetailsScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
+  const { goBack } = useSmartBack();
   const { getGroupWorkoutRecommendations } = useMLService();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -244,7 +246,7 @@ export default function GroupDetailsScreen() {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={COLORS.SECONDARY[400]} />
           <Text style={styles.errorTitle}>Group Not Found</Text>
-          <TouchableOpacity style={styles.errorButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.errorButton} onPress={() => goBack()}>
             <Text style={styles.errorButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -256,7 +258,7 @@ export default function GroupDetailsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Group Details</Text>

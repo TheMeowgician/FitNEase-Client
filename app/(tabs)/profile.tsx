@@ -283,25 +283,29 @@ export default function ProfileScreen() {
       >
         {/* User Profile Card */}
         <View style={styles.profileSection}>
-          <View style={styles.profileCard}>
-            <View style={styles.profileContent}>
-              <View style={styles.avatar}>
-                <Ionicons name="person" size={28} color="white" />
-              </View>
-              <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>{userDisplay.name}</Text>
-                <Text style={styles.profileRole}>
-                  {userDisplay.role} • BMI: 24.2
-                </Text>
-                <Text style={styles.profileDetails}>
-                  {userDisplay.details}
-                </Text>
-              </View>
-              <TouchableOpacity activeOpacity={0.7} disabled={showLoading}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            disabled={showLoading}
+            onPress={() => router.push('/profile/user-profile')}
+          >
+            <View style={styles.profileCard}>
+              <View style={styles.profileContent}>
+                <View style={styles.avatar}>
+                  <Ionicons name="person" size={28} color="white" />
+                </View>
+                <View style={styles.profileInfo}>
+                  <Text style={styles.profileName}>{userDisplay.name}</Text>
+                  <Text style={styles.profileRole}>
+                    {userDisplay.role} • BMI: 24.2
+                  </Text>
+                  <Text style={styles.profileDetails}>
+                    {userDisplay.details}
+                  </Text>
+                </View>
                 <Ionicons name="chevron-forward" size={20} color="#6B7280" />
-              </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Menu Sections */}

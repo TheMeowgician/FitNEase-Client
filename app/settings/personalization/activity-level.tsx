@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 interface ActivityLevelOption {
   id: 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active';
@@ -20,6 +21,7 @@ interface ActivityLevelOption {
 
 export default function ActivityLevelSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [selectedLevel, setSelectedLevel] = useState<'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | ''>('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -116,7 +118,7 @@ export default function ActivityLevelSettingsScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => goBack(),
           },
         ]
       );
@@ -129,7 +131,7 @@ export default function ActivityLevelSettingsScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    goBack();
   };
 
   const renderActivityCard = (option: ActivityLevelOption) => {

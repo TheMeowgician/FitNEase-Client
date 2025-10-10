@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 interface DurationOption {
   value: number;
@@ -18,6 +19,7 @@ interface DurationOption {
 
 export default function DurationSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [selectedDuration, setSelectedDuration] = useState<number>(30);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -54,7 +56,7 @@ export default function DurationSettingsScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => goBack(),
           },
         ]
       );
@@ -67,7 +69,7 @@ export default function DurationSettingsScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    goBack();
   };
 
   const renderDurationCard = (duration: DurationOption) => {

@@ -8,6 +8,7 @@ import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
 import { calculateAge } from '../../../utils/dateUtils';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 interface PhysicalStats {
   weight: number;
@@ -17,6 +18,7 @@ interface PhysicalStats {
 
 export default function BodyMetricsSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [isSaving, setIsSaving] = useState(false);
 
   const userAge = user?.dateOfBirth ? calculateAge(user.dateOfBirth) : 25;
@@ -71,7 +73,7 @@ export default function BodyMetricsSettingsScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => goBack(),
           },
         ]
       );
@@ -84,7 +86,7 @@ export default function BodyMetricsSettingsScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    goBack();
   };
 
   const renderCustomSlider = (

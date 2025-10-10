@@ -7,9 +7,11 @@ import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 export default function FitnessExperienceSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [fitnessExperience, setFitnessExperience] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -27,7 +29,7 @@ export default function FitnessExperienceSettingsScreen() {
       });
       await refreshUser();
       Alert.alert('Success', 'Your fitness experience has been updated!', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => goBack() },
       ]);
     } catch (error) {
       console.error('Error saving fitness experience:', error);
@@ -42,7 +44,7 @@ export default function FitnessExperienceSettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Fitness Experience</Text>

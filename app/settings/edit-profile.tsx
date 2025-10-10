@@ -10,9 +10,11 @@ import { COLORS, FONTS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { formatDateToISO, parseISODate } from '../../utils/dateUtils';
+import { useSmartBack } from '../../hooks/useSmartBack';
 
 export default function EditProfileScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -62,7 +64,7 @@ export default function EditProfileScreen() {
 
       await authService.updateUserProfile(updateData);
       await refreshUser();
-      Alert.alert('Success', 'Your profile has been updated!', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('Success', 'Your profile has been updated!', [{ text: 'OK', onPress: () => goBack() }]);
     } catch (error) {
       console.error('Error saving profile:', error);
       Alert.alert('Error', 'Failed to save your profile. Please try again.');
@@ -90,7 +92,7 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={s.container}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+        <TouchableOpacity onPress={() => goBack()} style={s.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Edit Profile</Text>

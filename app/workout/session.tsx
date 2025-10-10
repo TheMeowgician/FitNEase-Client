@@ -531,13 +531,18 @@ export default function WorkoutSessionScreen() {
 
       {/* Top Bar with Close Button */}
       <View style={styles.topBar}>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={sessionState.status === 'ready' ? router.back : handleBackPress}
-        >
-          <Ionicons name="close" size={28} color="white" />
-        </TouchableOpacity>
+        <View style={styles.topBarContent}>
+          <View style={styles.workoutBadge}>
+            <Ionicons name="fitness" size={14} color="white" />
+            <Text style={styles.workoutBadgeText}>TABATA</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={sessionState.status === 'ready' ? router.back : handleBackPress}
+          >
+            <Ionicons name="close" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -545,8 +550,14 @@ export default function WorkoutSessionScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Progress Indicator */}
-        <View style={styles.progressContainer}>
+        {/* Progress Indicator Card */}
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressTitle}>Progress</Text>
+            <Text style={styles.progressPercentage}>
+              {Math.round(((sessionState.currentExercise * 8 + sessionState.currentSet) / (getTotalExercises() * 8)) * 100)}%
+            </Text>
+          </View>
           <View style={styles.progressBar}>
             <View
               style={[
@@ -562,53 +573,58 @@ export default function WorkoutSessionScreen() {
           </Text>
         </View>
 
+        {/* Phase Badge */}
+        <View style={styles.phaseBadge}>
+          <Text style={styles.phaseText}>{getPhaseText()}</Text>
+        </View>
+
         {/* Circular Timer - Apple Style */}
         <View style={styles.timerSection}>
-          <Text style={styles.phaseText}>{getPhaseText()}</Text>
-
-
           <View style={styles.circularTimerContainer}>
+            {/* Outer Glow Effect */}
+            <View style={styles.timerGlowOuter} />
+            <View style={styles.timerGlowMiddle} />
+
             {/* Background Circle */}
             <View style={styles.circularTimerBackground} />
 
-            {/* Progress Circle - Fills clockwise as time passes */}
-            <View style={styles.circularProgressWrapper}>
-              <View style={[
-                styles.circularTimerProgressLeft,
-                {
-                  transform: [{
-                    rotate: `${Math.min(((1 - sessionState.timeRemaining / (
-                      sessionState.phase === 'work' ? 20 :
-                      sessionState.phase === 'rest' ? 10 :
-                      sessionState.phase === 'roundRest' ? 60 :
-                      sessionState.phase === 'prepare' ? 10 :
-                      10
-                    )) * 360), 180)}deg`
-                  }]
-                }
-              ]} />
-              <View style={[
-                styles.circularTimerProgressRight,
-                {
-                  opacity: ((1 - sessionState.timeRemaining / (
-                    sessionState.phase === 'work' ? 20 :
-                    sessionState.phase === 'rest' ? 10 :
-                    sessionState.phase === 'roundRest' ? 60 :
-                    sessionState.phase === 'prepare' ? 10 :
-                    10
-                  )) * 360) > 180 ? 1 : 0,
-                  transform: [{
-                    rotate: `${Math.max(((1 - sessionState.timeRemaining / (
-                      sessionState.phase === 'work' ? 20 :
-                      sessionState.phase === 'rest' ? 10 :
-                      sessionState.phase === 'roundRest' ? 60 :
-                      sessionState.phase === 'prepare' ? 10 :
-                      10
-                    )) * 360) - 180, 0)}deg`
-                  }]
-                }
-              ]} />
+            {/* Progress Dots Ring - Smooth filling animation */}
+            <View style={styles.progressDotsContainer}>
+              {Array.from({ length: 60 }).map((_, index) => {
+                const totalDuration =
+                  sessionState.phase === 'work' ? 20 :
+                  sessionState.phase === 'rest' ? 10 :
+                  sessionState.phase === 'roundRest' ? 60 :
+                  sessionState.phase === 'prepare' ? 10 :
+                  10;
+
+                const progress = (1 - sessionState.timeRemaining / totalDuration) * 60;
+                const isActive = index < progress;
+                const angle = (index * 6) - 90; // 360/60 = 6 degrees per dot, start from top
+                const radius = 108; // Distance from center
+                const x = 120 + radius * Math.cos(angle * Math.PI / 180);
+                const y = 120 + radius * Math.sin(angle * Math.PI / 180);
+
+                return (
+                  <View
+                    key={index}
+                    style={[
+                      styles.progressDot,
+                      {
+                        left: x - 3,
+                        top: y - 3,
+                        backgroundColor: isActive ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.15)',
+                        transform: [{ scale: isActive ? 1.2 : 1 }],
+                        shadowOpacity: isActive ? 0.8 : 0,
+                      }
+                    ]}
+                  />
+                );
+              })}
             </View>
+
+            {/* Inner Circle - Creates the ring effect */}
+            <View style={styles.timerInnerCircle} />
 
             {/* Timer Text */}
             <View style={styles.timerTextContainer}>
@@ -617,32 +633,46 @@ export default function WorkoutSessionScreen() {
             </View>
           </View>
 
-          {/* Current Exercise Name */}
-          <View style={styles.exerciseInfo}>
-            <Text style={styles.exerciseName}>
-              {getCurrentExercise()?.exercise_name || 'Get Ready'}
-            </Text>
-            {sessionState.phase !== 'prepare' && getCurrentExercise() && (
-              <Text style={styles.exerciseDetail}>
-                Target: {(getCurrentExercise() as any)?.target_muscle_group || 'Full Body'}
-              </Text>
-            )}
-          </View>
         </View>
 
-        {/* Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Ionicons name="flame" size={24} color="white" />
-            <Text style={styles.statValue}>{Math.floor(sessionState.caloriesBurned) || 0}</Text>
-            <Text style={styles.statLabel}>Calories</Text>
+        {/* Current Exercise Card */}
+        <View style={styles.exerciseCard}>
+          <View style={styles.exerciseCardHeader}>
+            <Ionicons name="barbell" size={18} color="white" />
+            <Text style={styles.exerciseCardTitle}>Current Exercise</Text>
           </View>
-          <View style={styles.statItem}>
-            <Ionicons name="time" size={24} color="white" />
+          <Text style={styles.exerciseName}>
+            {getCurrentExercise()?.exercise_name || 'Get Ready'}
+          </Text>
+          {sessionState.phase !== 'prepare' && getCurrentExercise() && (
+            <View style={styles.exerciseMetaContainer}>
+              <View style={styles.exerciseMeta}>
+                <Ionicons name="body" size={14} color="rgba(255, 255, 255, 0.9)" />
+                <Text style={styles.exerciseMetaText}>
+                  {(getCurrentExercise() as any)?.target_muscle_group || 'Full Body'}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="flame" size={20} color="white" />
+            </View>
+            <Text style={styles.statValue}>{Math.floor(sessionState.caloriesBurned) || 0}</Text>
+            <Text style={styles.statLabel}>Calories Burned</Text>
+          </View>
+          <View style={styles.statCard}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="time" size={20} color="white" />
+            </View>
             <Text style={styles.statValue}>
               {formatTime((sessionStartTime ? Math.floor((Date.now() - sessionStartTime.getTime()) / 1000) : 0))}
             </Text>
-            <Text style={styles.statLabel}>Duration</Text>
+            <Text style={styles.statLabel}>Time Elapsed</Text>
           </View>
         </View>
 
@@ -713,8 +743,11 @@ export default function WorkoutSessionScreen() {
 
         {/* Next Exercise Preview */}
         {sessionState.status === 'running' && sessionState.currentExercise < getTotalExercises() - 1 && (
-          <View style={styles.nextExerciseContainer}>
-            <Text style={styles.nextExerciseLabel}>NEXT EXERCISE</Text>
+          <View style={styles.nextExerciseCard}>
+            <View style={styles.nextExerciseHeader}>
+              <Ionicons name="arrow-forward-circle" size={16} color="rgba(255, 255, 255, 0.9)" />
+              <Text style={styles.nextExerciseLabel}>UP NEXT</Text>
+            </View>
             <Text style={styles.nextExerciseName}>
               {tabataSession
                 ? tabataSession.exercises[sessionState.currentExercise + 1]?.exercise_name
@@ -742,212 +775,302 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    minHeight: 56,
+    minHeight: 60,
+  },
+  topBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  workoutBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  workoutBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
+    letterSpacing: 1,
   },
   closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
   scrollContent: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
-  progressContainer: {
+  progressCard: {
     width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 12,
+  },
+  progressTitle: {
+    fontSize: 13,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
+    opacity: 0.9,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  progressPercentage: {
+    fontSize: 18,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
   },
   progressBar: {
     width: '100%',
-    height: 6,
+    height: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 3,
+    borderRadius: 4,
     marginBottom: 12,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     backgroundColor: 'white',
-    borderRadius: 3,
+    borderRadius: 4,
   },
   progressText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FONTS.SEMIBOLD,
     color: 'white',
-    opacity: 0.9,
+    opacity: 0.85,
     letterSpacing: 0.3,
+  },
+  phaseBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 25,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   timerSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
     marginBottom: 24,
   },
   phaseText: {
-    fontSize: 15,
+    fontSize: 13,
     fontFamily: FONTS.BOLD,
     color: 'white',
-    letterSpacing: 3,
-    opacity: 0.9,
-    marginBottom: 36,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   circularTimerContainer: {
-    width: 280,
-    height: 280,
+    width: 240,
+    height: 240,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 40,
+    marginBottom: 24,
+    position: 'relative',
+  },
+  timerGlowOuter: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  timerGlowMiddle: {
+    position: 'absolute',
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   circularTimerBackground: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 12,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
-  circularProgressWrapper: {
+  progressDotsContainer: {
     position: 'absolute',
-    width: 280,
-    height: 280,
+    width: 240,
+    height: 240,
   },
-  circularTimerProgressLeft: {
+  progressDot: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 12,
-    borderColor: 'transparent',
-    borderTopColor: 'white',
-    borderRightColor: 'white',
-    borderBottomColor: 'transparent',
-    borderLeftColor: 'transparent',
-    transform: [{ rotate: '-90deg' }],
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    shadowColor: '#fff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 4,
   },
-  circularTimerProgressRight: {
+  timerInnerCircle: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 12,
-    borderColor: 'transparent',
-    borderTopColor: 'white',
-    borderRightColor: 'white',
-    borderBottomColor: 'transparent',
-    borderLeftColor: 'transparent',
-    transform: [{ rotate: '90deg' }],
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   timerTextContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 8,
   },
   timerText: {
-    fontSize: 72,
+    fontSize: 64,
     fontFamily: FONTS.BOLD,
     color: 'white',
     textAlign: 'center',
-    lineHeight: 72,
+    lineHeight: 76,
+    includeFontPadding: false,
   },
   timerLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: FONTS.REGULAR,
     color: 'white',
-    opacity: 0.8,
+    opacity: 0.85,
     marginTop: 4,
-    letterSpacing: 1,
-  },
-  exerciseInfo: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  exerciseName: {
-    fontSize: 26,
-    fontFamily: FONTS.BOLD,
-    color: 'white',
-    textAlign: 'center',
-    marginBottom: 8,
     letterSpacing: 0.5,
   },
-  exerciseDetail: {
-    fontSize: 15,
-    fontFamily: FONTS.REGULAR,
+  exerciseCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  exerciseCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  exerciseCardTitle: {
+    fontSize: 11,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
+    opacity: 0.85,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  exerciseName: {
+    fontSize: 22,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  exerciseMetaContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  exerciseMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 5,
+  },
+  exerciseMetaText: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+    color: 'white',
+    letterSpacing: 0.2,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 20,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
     color: 'white',
     opacity: 0.85,
     textAlign: 'center',
     letterSpacing: 0.3,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
-    marginBottom: 16,
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  statValue: {
-    fontSize: 22,
-    fontFamily: FONTS.BOLD,
-    color: 'white',
-    letterSpacing: 0.5,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontFamily: FONTS.REGULAR,
-    color: 'white',
-    opacity: 0.75,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
   controlsContainer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 8,
+    marginTop: 8,
+    marginBottom: 16,
   },
   primaryButton: {
     backgroundColor: 'white',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 48,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
     borderRadius: 28,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-    minWidth: 160,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+    minWidth: 180,
   },
   primaryButtonText: {
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: FONTS.BOLD,
     letterSpacing: 0.5,
     marginLeft: 8,
@@ -955,90 +1078,104 @@ const styles = StyleSheet.create({
   preparingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 20,
+    paddingHorizontal: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 20,
-    minWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: 220,
   },
   preparingText: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: FONTS.BOLD,
-    letterSpacing: 0.5,
+    color: 'white',
+    letterSpacing: 0.3,
     marginTop: 12,
     textAlign: 'center',
   },
   waitingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 20,
+    paddingHorizontal: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 20,
-    minWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: 220,
   },
   waitingText: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: FONTS.BOLD,
     color: 'white',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     marginTop: 8,
     textAlign: 'center',
   },
   waitingSubtext: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FONTS.REGULAR,
     color: 'white',
-    opacity: 0.8,
-    letterSpacing: 0.3,
-    marginTop: 4,
+    opacity: 0.85,
+    letterSpacing: 0.2,
+    marginTop: 6,
     textAlign: 'center',
   },
   pausedControls: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
     width: '100%',
     justifyContent: 'center',
+    paddingHorizontal: 20,
   },
   secondaryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    minWidth: 140,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    maxWidth: 160,
   },
   secondaryButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: FONTS.BOLD,
     color: 'white',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     marginLeft: 6,
   },
-  nextExerciseContainer: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+  nextExerciseCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 16,
-    marginBottom: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginTop: 8,
+  },
+  nextExerciseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
   },
   nextExerciseLabel: {
     fontSize: 10,
     fontFamily: FONTS.BOLD,
     color: 'white',
-    opacity: 0.7,
-    letterSpacing: 1.5,
+    opacity: 0.85,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 6,
   },
   nextExerciseName: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: FONTS.SEMIBOLD,
     color: 'white',
-    textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 });

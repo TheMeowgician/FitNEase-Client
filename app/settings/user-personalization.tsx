@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
+import { useSmartBack } from '../../hooks/useSmartBack';
 
 export default function UserPersonalizationScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [isLoading, setIsLoading] = useState(false);
 
   const personalizationItems = [
@@ -69,11 +72,12 @@ export default function UserPersonalizationScreen() {
   ];
 
   const handleBack = () => {
-    router.back();
+    goBack();
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.NEUTRAL.WHITE} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>

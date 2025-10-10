@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 const GOALS = [
   { id: 'weight_loss', title: 'Weight Loss', icon: 'trending-down-outline', color: '#EF4444' },
@@ -19,6 +20,7 @@ const GOALS = [
 
 export default function FitnessGoalsSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -39,7 +41,7 @@ export default function FitnessGoalsSettingsScreen() {
     try {
       await authService.updateUserProfile({ fitness_goals: selectedGoals });
       await refreshUser();
-      Alert.alert('Success', 'Your fitness goals have been updated!', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('Success', 'Your fitness goals have been updated!', [{ text: 'OK', onPress: () => goBack() }]);
     } catch (error) {
       console.error('Error saving fitness goals:', error);
       Alert.alert('Error', 'Failed to save your preferences. Please try again.');
@@ -51,7 +53,7 @@ export default function FitnessGoalsSettingsScreen() {
   return (
     <SafeAreaView style={s.container}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+        <TouchableOpacity onPress={() => goBack()} style={s.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Fitness Goals</Text>

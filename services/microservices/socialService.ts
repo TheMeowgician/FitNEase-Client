@@ -471,14 +471,26 @@ export class SocialService {
 
   public async joinGroup(request: JoinGroupRequest): Promise<{ message: string }> {
     try {
-      // Backend expects 'group_code', not 'groupId'
-      const response = await apiClient.post<{ message: string }>('social', '/api/social/groups/join-with-code', {
-        group_code: request.groupId,
+      // Join public group by ID
+      const response = await apiClient.post<{ message: string }>('social', `/api/social/groups/${request.groupId}/join`, {
         message: request.message
       });
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to join group');
+    }
+  }
+
+  public async joinGroupWithCode(groupCode: string, message?: string): Promise<{ message: string }> {
+    try {
+      // Join group using 8-character code
+      const response = await apiClient.post<{ message: string }>('social', '/api/social/groups/join-with-code', {
+        group_code: groupCode,
+        message: message
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to join group with code');
     }
   }
 

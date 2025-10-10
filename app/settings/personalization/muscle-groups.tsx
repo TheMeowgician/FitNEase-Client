@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authService } from '../../../services/microservices/authService';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 interface PreferenceOption {
   id: string;
@@ -18,6 +19,7 @@ interface PreferenceOption {
 
 export default function MuscleGroupsSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const { goBack } = useSmartBack();
   const [targetMuscleGroups, setTargetMuscleGroups] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -70,7 +72,7 @@ export default function MuscleGroupsSettingsScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => goBack(),
           },
         ]
       );
@@ -83,7 +85,7 @@ export default function MuscleGroupsSettingsScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    goBack();
   };
 
   const renderPreferenceCard = (option: PreferenceOption, isSelected: boolean, onPress: () => void) => {
