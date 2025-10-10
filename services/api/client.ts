@@ -551,7 +551,7 @@ export const DEFAULT_SERVICE_CONFIGS: APIClientConfig = {
     service: 'media'
   },
   operations: {
-    baseURL: API_CONFIG.OPS_SERVICE_URL,
+    baseURL: API_CONFIG.OPERATIONS_SERVICE_URL,
     service: 'operations'
   }
 };
