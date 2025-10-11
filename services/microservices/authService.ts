@@ -28,6 +28,12 @@ export interface User {
   workoutExperience?: number;
   phoneNumber?: string;
   workoutDays?: string[]; // ['monday', 'tuesday', etc.]
+  // User Progression fields
+  totalWorkoutsCompleted?: number;
+  totalWorkoutMinutes?: number;
+  activeDays?: number;
+  currentStreakDays?: number;
+  longestStreakDays?: number;
 }
 
 export interface UserPreferences {

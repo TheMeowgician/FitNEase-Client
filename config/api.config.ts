@@ -77,7 +77,7 @@ const getTestingConfig = () => {
 };
 
 // Export the appropriate config based on environment
-export const API_CONFIG = ENVIRONMENT === 'development'
+export const API_CONFIG = ENVIRONMENT === 'testing'
   ? getDevelopmentConfig()
   : getTestingConfig();
 

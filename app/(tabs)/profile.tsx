@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
+import FitnessLevelBadge from '../../components/FitnessLevelBadge';
 
 export default function ProfileScreen() {
   const { user, logout, isLoading } = useAuth();
@@ -294,7 +295,10 @@ export default function ProfileScreen() {
                   <Ionicons name="person" size={28} color="white" />
                 </View>
                 <View style={styles.profileInfo}>
-                  <Text style={styles.profileName}>{userDisplay.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <Text style={styles.profileName}>{userDisplay.name}</Text>
+                    <FitnessLevelBadge level={fitnessLevel} size="small" />
+                  </View>
                   <Text style={styles.profileRole}>
                     {userDisplay.role} • BMI: 24.2
                   </Text>
