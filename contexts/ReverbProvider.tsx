@@ -75,7 +75,7 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
         console.log('📋 User is a member of groups:', groupIds);
         setUserGroups(groupIds);
 
-        // Subscribe to all groups for workout invitations
+        // Subscribe to all groups for workout invitations AND presence
         groupIds.forEach((groupId: number) => {
           console.log(`✅ Subscribing to group ${groupId} for invitations`);
           reverbService.subscribeToGroupWorkoutInvitations(groupId, (data) => {
@@ -98,6 +98,28 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
             setInvitationData(data);
             setShowInvitationModal(true);
           });
+
+          // Subscribe to presence channel to broadcast online status
+          console.log(`🟢 Subscribing to presence channel for group ${groupId}`);
+          reverbService.subscribeToGroupPresence(groupId, {
+            onMemberOnline: (member: any) => {
+              console.log(`👤 Member came online in group ${groupId}:`, {
+                id: member.id,
+                info: member.info
+              });
+            },
+            onMemberOffline: (member: any) => {
+              console.log(`👋 Member went offline in group ${groupId}:`, {
+                id: member.id
+              });
+            },
+            onInitialMembers: (members: any[]) => {
+              console.log(`👥 Initial online members in group ${groupId}:`, {
+                count: members.length,
+                memberIds: members.map(m => m.id)
+              });
+            },
+          });
         });
 
       } catch (error) {
@@ -113,6 +135,7 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
       console.log('🔌 Cleaning up Reverb connection');
       userGroups.forEach((groupId) => {
         reverbService.unsubscribe(`private-group.${groupId}`);
+        reverbService.unsubscribe(`presence-group.${groupId}`);
       });
     };
   }, [user]);

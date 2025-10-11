@@ -20,6 +20,7 @@ import { socialService, Group, GroupMember } from '../../services/microservices/
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import reverbService from '../../services/reverbService';
 
 export default function GroupDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -31,6 +32,7 @@ export default function GroupDetailsScreen() {
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [userRole, setUserRole] = useState<'owner' | 'moderator' | 'member' | null>(null);
+  const [onlineMemberIds, setOnlineMemberIds] = useState<Set<string>>(new Set());
 
   // Group workout states
   const [isGeneratingWorkout, setIsGeneratingWorkout] = useState(false);
@@ -39,6 +41,105 @@ export default function GroupDetailsScreen() {
 
   useEffect(() => {
     loadGroupDetails();
+  }, [id]);
+
+  // Listen to presence channel events for real-time online status
+  // Note: The global subscription is already done in ReverbProvider
+  // We just need to listen for the events and update local state
+  useEffect(() => {
+    if (!id) return;
+
+    console.log(`🟢 Setting up presence listeners for group ${id}`);
+
+    // Get the existing presence channel (already subscribed globally)
+    const channelName = `presence-group.${id}`;
+    const pusher = (reverbService as any).pusher;
+    const channel = pusher?.channel(channelName);
+
+    if (!channel) {
+      console.warn(`⚠️ Presence channel not found for group ${id}`);
+      return;
+    }
+
+    console.log(`✅ Found presence channel for group ${id}`, {
+      channelName,
+      subscriptionState: channel.subscriptionState,
+      hasMembers: !!channel.members
+    });
+
+    // Check if channel is already subscribed and has members
+    if (channel.members) {
+      const currentMembers = channel.members.members || {};
+      const memberIds = Object.keys(currentMembers);
+      console.log('👥 Channel already has members:', {
+        count: channel.members.count,
+        memberIds
+      });
+      setOnlineMemberIds(new Set(memberIds));
+    }
+
+    // Bind to presence events
+    const handleMemberAdded = (member: any) => {
+      console.log('👤 Member came online - FULL OBJECT:', JSON.stringify(member, null, 2));
+      console.log('👤 Member structure:', {
+        id: member.id,
+        user_id: member.user_id,
+        info: member.info,
+        keys: Object.keys(member)
+      });
+
+      // Pusher presence channels use member.id as the user identifier
+      const userId = member.id?.toString();
+      if (userId) {
+        console.log('✅ Adding online member with userId:', userId);
+        setOnlineMemberIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(userId);
+          console.log('📊 Online members after add:', Array.from(newSet));
+          return newSet;
+        });
+      }
+    };
+
+    const handleMemberRemoved = (member: any) => {
+      console.log('👋 Member went offline - FULL OBJECT:', JSON.stringify(member, null, 2));
+      const userId = member.id?.toString();
+      if (userId) {
+        console.log('❌ Removing offline member with userId:', userId);
+        setOnlineMemberIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(userId);
+          console.log('📊 Online members after remove:', Array.from(newSet));
+          return newSet;
+        });
+      }
+    };
+
+    const handleSubscriptionSucceeded = (members: any) => {
+      console.log('👥 Subscription succeeded event - FULL OBJECT:', JSON.stringify(members, null, 2));
+      console.log('👥 Members structure:', {
+        members: members.members,
+        count: members.count,
+        keys: Object.keys(members)
+      });
+
+      // Extract user IDs from presence members
+      const memberIds = Object.keys(members.members || {});
+      console.log('✅ Initial online user IDs:', memberIds);
+      setOnlineMemberIds(new Set(memberIds));
+    };
+
+    channel.bind('pusher:member_added', handleMemberAdded);
+    channel.bind('pusher:member_removed', handleMemberRemoved);
+    channel.bind('pusher:subscription_succeeded', handleSubscriptionSucceeded);
+
+    // Cleanup: unbind events when component unmounts (but don't unsubscribe)
+    return () => {
+      console.log(`🔴 Removing presence listeners for group ${id}`);
+      channel.unbind('pusher:member_added', handleMemberAdded);
+      channel.unbind('pusher:member_removed', handleMemberRemoved);
+      channel.unbind('pusher:subscription_succeeded', handleSubscriptionSucceeded);
+    };
   }, [id]);
 
   const loadGroupDetails = async () => {
@@ -55,10 +156,19 @@ export default function GroupDetailsScreen() {
         id: groupData.id,
         name: groupData.name,
         groupCode: groupData.groupCode,
-        hasGroupCode: !!groupData.groupCode
+        hasGroupCode: !!groupData.groupCode,
+        memberCount: groupData.memberCount,
+        actualMemberCount: membersData.total,
+        totalMembers: membersData.members.length
       });
 
-      setGroup(groupData);
+      // Update group with actual member count from members API
+      const updatedGroup = {
+        ...groupData,
+        memberCount: membersData.total || groupData.memberCount
+      };
+
+      setGroup(updatedGroup);
       setMembers(membersData.members || []);
 
       // Determine user's role
@@ -379,24 +489,42 @@ export default function GroupDetailsScreen() {
           </View>
 
           <View style={styles.membersList}>
-            {members.map((member) => (
-              <View key={member.id} style={styles.memberCard}>
-                <View style={styles.memberAvatar}>
-                  <Ionicons name="person" size={24} color="white" />
+            {members.map((member) => {
+              const isOnline = onlineMemberIds.has(member.userId);
+              console.log(`🔍 Checking member ${member.username}:`, {
+                userId: member.userId,
+                isOnline,
+                onlineMemberIds: Array.from(onlineMemberIds)
+              });
+              return (
+                <View key={member.id} style={styles.memberCard}>
+                  <View style={styles.memberAvatarContainer}>
+                    <View style={styles.memberAvatar}>
+                      <Ionicons name="person" size={24} color="white" />
+                    </View>
+                    {isOnline && (
+                      <View style={styles.onlineIndicator} />
+                    )}
+                  </View>
+                  <View style={styles.memberInfo}>
+                    <View style={styles.memberNameRow}>
+                      <Text style={styles.memberName}>{member.username}</Text>
+                      {isOnline && (
+                        <Text style={styles.onlineText}>Online</Text>
+                      )}
+                    </View>
+                    <Text style={styles.memberJoinDate}>
+                      Joined {new Date(member.joinedAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <View style={[styles.roleBadge, getRoleBadgeStyle(member.role)]}>
+                    <Text style={[styles.roleBadgeText, getRoleBadgeTextStyle(member.role)]}>
+                      {member.role}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>{member.username}</Text>
-                  <Text style={styles.memberJoinDate}>
-                    Joined {new Date(member.joinedAt).toLocaleDateString()}
-                  </Text>
-                </View>
-                <View style={[styles.roleBadge, getRoleBadgeStyle(member.role)]}>
-                  <Text style={[styles.roleBadgeText, getRoleBadgeTextStyle(member.role)]}>
-                    {member.role}
-                  </Text>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
 
@@ -728,6 +856,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  memberAvatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   memberAvatar: {
     width: 48,
     height: 48,
@@ -735,16 +867,36 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.PRIMARY[600],
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: 'white',
   },
   memberInfo: {
     flex: 1,
+  },
+  memberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
   },
   memberName: {
     fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
-    marginBottom: 2,
+  },
+  onlineText: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#10B981',
   },
   memberJoinDate: {
     fontSize: 12,

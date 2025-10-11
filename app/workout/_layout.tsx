@@ -20,12 +20,6 @@ export default function WorkoutLayout() {
       }}
     >
       <Stack.Screen
-        name="[id]"
-        options={{
-          title: 'Workout Details',
-        }}
-      />
-      <Stack.Screen
         name="session"
         options={{
           headerShown: false, // Hide header for immersive workout experience
@@ -33,30 +27,11 @@ export default function WorkoutLayout() {
         }}
       />
       <Stack.Screen
-        name="session/[sessionId]"
+        name="group-lobby"
         options={{
-          title: 'Workout Session',
-          headerShown: false, // Hide header for immersive workout experience
-          gestureEnabled: false, // Prevent interrupting workout
-        }}
-      />
-      <Stack.Screen
-        name="session/group/[groupId]"
-        options={{
-          title: 'Group Workout',
+          title: 'Group Workout Lobby',
+          headerShown: false,
           gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="planning/recommended"
-        options={{
-          title: 'Recommended Workouts',
-        }}
-      />
-      <Stack.Screen
-        name="planning/create"
-        options={{
-          title: 'Create Workout',
         }}
       />
     </Stack>

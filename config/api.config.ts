@@ -72,7 +72,7 @@ const getTestingConfig = () => {
     OPERATIONS_SERVICE_URL: `${NGROK_URLS.GATEWAY}/ops`,
     ML_SERVICE_URL: `${NGROK_URLS.GATEWAY}/ml`,
     REVERB_WS_HOST: gatewayHost,  // Same URL, gateway routes WebSocket too!
-    REVERB_WS_PORT: 443, // ngrok uses HTTPS port
+    REVERB_WS_PORT: 443, // ngrok uses HTTPS port wa
   };
 };
 

@@ -413,13 +413,15 @@ export default function WorkoutSessionScreen() {
 
   const exitSession = async () => {
     try {
-      if (sessionStartTime) {
+      if (sessionStartTime && user) {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
         // Save partial session data
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
+          userId: user.id,
+          sessionType: type === 'group_tabata' ? 'group' : 'individual',
           startTime: sessionStartTime,
           endTime: new Date(),
           duration: Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60), // minutes
@@ -436,12 +438,14 @@ export default function WorkoutSessionScreen() {
 
   const completeSession = async () => {
     try {
-      if (sessionStartTime) {
+      if (sessionStartTime && user) {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
+          userId: user.id,
+          sessionType: type === 'group_tabata' ? 'group' : 'individual',
           startTime: sessionStartTime,
           endTime: new Date(),
           duration: Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60),
@@ -731,6 +735,25 @@ export default function WorkoutSessionScreen() {
               <Text style={styles.waitingText}>Paused by host</Text>
               <Text style={styles.waitingSubtext}>Waiting to resume...</Text>
             </View>
+          )}
+
+          {/* Auto Finish Button - DEV ONLY for testing */}
+          {__DEV__ && sessionState.status === 'running' && (
+            <TouchableOpacity
+              style={[styles.secondaryButton, {
+                backgroundColor: 'rgba(251, 146, 60, 0.25)',
+                borderColor: 'rgba(251, 146, 60, 0.4)',
+                marginTop: 12,
+                maxWidth: '100%',
+              }]}
+              onPress={() => {
+                setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+                setTimeout(() => completeSession(), 100);
+              }}
+            >
+              <Ionicons name="flash" size={24} color="#F59E0B" />
+              <Text style={[styles.secondaryButtonText, { color: '#F59E0B' }]}>AUTO FINISH (TEST)</Text>
+            </TouchableOpacity>
           )}
 
           {sessionState.status === 'completed' && (

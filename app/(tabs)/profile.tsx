@@ -101,10 +101,7 @@ export default function ProfileScreen() {
           title: 'Exercise Library',
           subtitle: 'Browse Tabata exercises',
           onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Exercise library will be available soon!'
-            );
+            router.push('/exercises/library');
           },
         },
         {

@@ -382,6 +382,8 @@ export class TrackingService {
   // Workout Sessions
   public async createWorkoutSession(sessionData: {
     workoutId: string;
+    userId: number;
+    sessionType?: 'individual' | 'group';
     startTime: Date;
     endTime?: Date;
     duration: number;
@@ -390,17 +392,20 @@ export class TrackingService {
     notes?: string;
   }): Promise<WorkoutSession> {
     try {
-      const response = await apiClient.post<WorkoutSession>('tracking', '/tracking/sessions', {
-        workoutId: sessionData.workoutId,
-        startTime: sessionData.startTime.toISOString(),
-        endTime: sessionData.endTime?.toISOString(),
-        duration: sessionData.duration,
-        actualCaloriesBurned: sessionData.caloriesBurned,
-        status: sessionData.completed ? 'completed' : 'cancelled',
-        notes: sessionData.notes,
-        completionPercentage: sessionData.completed ? 100 : 50,
+      // Backend expects specific field names
+      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/tracking/workout-session', {
+        user_id: sessionData.userId,
+        workout_id: 1, // Temporary: We don't have real workout IDs yet for Tabata sessions
+        session_type: sessionData.sessionType || 'individual',
+        start_time: sessionData.startTime.toISOString(),
+        end_time: sessionData.endTime?.toISOString(),
+        actual_duration_minutes: sessionData.duration,
+        is_completed: sessionData.completed,
+        completion_percentage: sessionData.completed ? 100 : 50,
+        calories_burned: sessionData.caloriesBurned,
+        user_notes: sessionData.notes,
       });
-      return response.data;
+      return response.data.data;
     } catch (error) {
       console.warn('Tracking service unavailable - session saved locally:', error);
       // Return mock data when service is unavailable
@@ -491,6 +496,7 @@ export class TrackingService {
     dateRange?: { start: string; end: string };
     page?: number;
     limit?: number;
+    userId?: string;
   }): Promise<{
     sessions: WorkoutSession[];
     total: number;
@@ -498,16 +504,117 @@ export class TrackingService {
     limit: number;
   }> {
     try {
-      const params = new URLSearchParams(filters as any).toString();
+      // Backend expects /api/tracking/workout-sessions/{userId}
+      if (!filters?.userId) {
+        console.warn('getSessions requires userId parameter');
+        return {
+          sessions: [],
+          total: 0,
+          page: 1,
+          limit: filters?.limit || 20
+        };
+      }
+
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (filters.limit) {
+        queryParams.append('per_page', filters.limit.toString());
+      }
+
+      const queryString = queryParams.toString();
+      const url = `/api/tracking/workout-sessions/${filters.userId}${queryString ? `?${queryString}` : ''}`;
+
       const response = await apiClient.get<{
-        sessions: WorkoutSession[];
-        total: number;
-        page: number;
-        limit: number;
-      }>('tracking', `/tracking/sessions?${params}`);
-      return response.data;
+        success: boolean;
+        data: {
+          current_page: number;
+          data: any[];
+          total: number;
+          per_page: number;
+        };
+      }>('tracking', url);
+
+      console.log('🔄 [getSessions] Backend response:', response.data);
+
+      // Backend returns paginated data
+      const paginatedData = response.data.data;
+      const sessions = paginatedData.data || [];
+
+      // Transform snake_case to camelCase for frontend
+      const transformedSessions: WorkoutSession[] = sessions.map((session: any) => ({
+        id: session.session_id?.toString() || session.id?.toString(),
+        workoutId: session.workout_id?.toString(),
+        workoutName: 'Tabata Workout', // We don't have workout names yet
+        userId: session.user_id?.toString(),
+        startTime: session.start_time,
+        endTime: session.end_time,
+        duration: session.actual_duration_minutes,
+        status: (session.is_completed ? 'completed' : 'in-progress') as 'in-progress' | 'completed' | 'paused' | 'cancelled',
+        exercises: [],
+        notes: session.user_notes,
+        actualCaloriesBurned: session.calories_burned ? parseFloat(session.calories_burned) : 0,
+        completionPercentage: session.completion_percentage ? parseFloat(session.completion_percentage) : 0,
+        createdAt: session.created_at,
+        updatedAt: session.updated_at,
+      }));
+
+      return {
+        sessions: transformedSessions,
+        total: paginatedData.total || 0,
+        page: paginatedData.current_page || 1,
+        limit: paginatedData.per_page || 20
+      };
     } catch (error) {
-      throw new Error((error as any).message || 'Failed to get sessions');
+      console.warn('Recent workouts unavailable:', error);
+      return {
+        sessions: [],
+        total: 0,
+        page: 1,
+        limit: filters?.limit || 20
+      };
+    }
+  }
+
+  /**
+   * Get workout history for profile page
+   * Returns all completed workouts with simplified data structure
+   */
+  public async getWorkoutHistory(userId?: string | number): Promise<Array<{
+    id: string;
+    duration: number;
+    caloriesBurned: number;
+    date: string;
+    workoutName: string;
+  }>> {
+    try {
+      if (!userId) {
+        console.warn('[getWorkoutHistory] userId is required');
+        return [];
+      }
+
+      // Convert userId to string for API call
+      const userIdString = typeof userId === 'number' ? userId.toString() : userId;
+
+      // Get all completed sessions
+      const result = await this.getSessions({
+        userId: userIdString,
+        status: 'completed',
+        limit: 1000 // Get all sessions for stats calculation
+      });
+
+      console.log(`📊 [getWorkoutHistory] Retrieved ${result.sessions.length} completed workouts for user ${userIdString}`);
+
+      // Transform to simplified format for profile stats
+      return result.sessions.map(session => ({
+        id: session.id,
+        duration: session.duration || 0,
+        caloriesBurned: session.actualCaloriesBurned || 0,
+        date: session.createdAt,
+        workoutName: session.workoutName || 'Workout'
+      }));
+    } catch (error) {
+      console.error('[getWorkoutHistory] Error:', error);
+      return [];
     }
   }
 
@@ -824,40 +931,22 @@ export class TrackingService {
       averageRating: number;
     };
   }> {
-    try {
-      const response = await apiClient.get<{
-        recentWorkouts: WorkoutSession[];
-        weeklyProgress: { date: string; workouts: number; duration: number }[];
-        activeGoals: Goal[];
-        recentAchievements: Achievement[];
-        currentStreak: WorkoutStreak;
-        upcomingMilestones: { goal: string; milestone: string; daysLeft: number }[];
-        weeklyStats: {
-          workouts: number;
-          duration: number;
-          calories: number;
-          averageRating: number;
-        };
-      }>('tracking', '/tracking/dashboard');
-      return response.data;
-    } catch (error) {
-      console.warn('Tracking service unavailable for dashboard summary:', error);
-      // Return fallback data when service is unavailable
-      return {
-        recentWorkouts: [],
-        weeklyProgress: [],
-        activeGoals: [],
-        recentAchievements: [],
-        currentStreak: { count: 0, startDate: new Date().toISOString(), isActive: false },
-        upcomingMilestones: [],
-        weeklyStats: {
-          workouts: 0,
-          duration: 0,
-          calories: 0,
-          averageRating: 0,
-        },
-      };
-    }
+    // TODO: Backend endpoint /api/tracking/dashboard not implemented yet
+    // Return empty data immediately without making API call to avoid errors
+    return {
+      recentWorkouts: [],
+      weeklyProgress: [],
+      activeGoals: [],
+      recentAchievements: [],
+      currentStreak: { count: 0, startDate: new Date().toISOString(), isActive: false } as any,
+      upcomingMilestones: [],
+      weeklyStats: {
+        workouts: 0,
+        duration: 0,
+        calories: 0,
+        averageRating: 0,
+      },
+    };
   }
 
   // Export Data

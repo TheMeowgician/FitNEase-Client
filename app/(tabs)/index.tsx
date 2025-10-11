@@ -1,18 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, StatusBar, Platform, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { WorkoutDayStatus } from '../../components/dashboard/WorkoutDayStatus';
+import ProgressionCard from '../../components/ProgressionCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMLService } from '../../hooks/api/useMLService';
-import { useTrackingService } from '../../hooks/api/useTrackingService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { authService } from '../../services/microservices/authService';
+import { trackingService } from '../../services/microservices/trackingService';
 import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
@@ -20,13 +21,13 @@ import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 export default function HomeScreen() {
   const { user, logout } = useAuth();
   const { getRecommendations } = useMLService();
-  const { getSessionStats } = useTrackingService();
   const { getUserStats, getUserAchievements } = useEngagementService();
 
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,10 +40,56 @@ export default function HomeScreen() {
     loadDashboardData();
   }, []);
 
-  // NOTE: useFocusEffect removed to prevent reloading on every tab switch
-  // Data will only reload on:
-  // 1. Initial mount (useEffect above)
-  // 2. Pull-to-refresh (onRefresh handler below)
+  // Refresh recent workouts when screen comes into focus (e.g., after completing a workout)
+  // This is lightweight and only updates the recent activity section
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        console.log('🔄 [DASHBOARD] Screen focused - refreshing recent workouts');
+        loadRecentWorkouts();
+      }
+    }, [user])
+  );
+
+  const loadRecentWorkouts = async () => {
+    if (!user) return;
+
+    try {
+      // Get all completed workouts to calculate this week's stats
+      const allWorkouts = await trackingService.getWorkoutHistory(user.id);
+
+      // Calculate this week's stats
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const thisWeekWorkouts = allWorkouts.filter((w: any) => {
+        const workoutDate = new Date(w.date);
+        return workoutDate >= startOfWeek;
+      });
+
+      const weeklyStats = {
+        this_week_sessions: thisWeekWorkouts.length,
+        total_calories_burned: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
+        total_exercise_time: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
+      };
+
+      console.log('🔄 [DASHBOARD] This week stats:', weeklyStats);
+      setStats(weeklyStats);
+
+      // Get recent 5 workouts for activity section
+      const workoutSessions = await trackingService.getSessions({
+        status: 'completed',
+        limit: 5,
+        userId: String(user.id)
+      });
+      console.log('🔄 [DASHBOARD] Refreshed recent workouts:', workoutSessions.sessions.length);
+      setRecentWorkouts(workoutSessions?.sessions || []);
+    } catch (error) {
+      console.warn('Recent workouts refresh failed:', error);
+    }
+  };
 
   const loadDashboardData = async () => {
     if (!user) {
@@ -84,10 +131,10 @@ export default function HomeScreen() {
         }
       }
 
-      const [statsResponse, achievementsResponse, engagementResponse, fitnessAssessment] = await Promise.all([
-        getSessionStats(user.id).catch(err => {
-          console.warn('Stats service unavailable:', err);
-          return null;
+      const [workoutHistory, achievementsResponse, engagementResponse, fitnessAssessment, workoutSessions] = await Promise.all([
+        trackingService.getWorkoutHistory(user.id).catch((err: Error) => {
+          console.warn('Workout history unavailable:', err);
+          return [];
         }),
         getUserAchievements(user.id).catch(err => {
           console.warn('Achievements service unavailable:', err);
@@ -101,13 +148,36 @@ export default function HomeScreen() {
           console.warn('Fitness assessment unavailable:', err);
           return null;
         }),
+        trackingService.getSessions({ status: 'completed', limit: 5, userId: String(user.id) }).catch(err => {
+          console.warn('Recent workouts unavailable:', err);
+          return { sessions: [], total: 0, page: 1, limit: 5 };
+        }),
       ]);
 
+      // Calculate this week's stats from workout history
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const thisWeekWorkouts = workoutHistory.filter((w: any) => {
+        const workoutDate = new Date(w.date);
+        return workoutDate >= startOfWeek;
+      });
+
+      const weeklyStats = {
+        this_week_sessions: thisWeekWorkouts.length,
+        total_calories_burned: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
+        total_exercise_time: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
+      };
+
       console.log(`📊 [DASHBOARD] Loaded ${recsResponse?.length || 0} recommendations for dashboard`);
+      console.log('📊 [DASHBOARD] This week stats:', weeklyStats);
       setRecommendations(recsResponse || []);
-      setStats(statsResponse);
+      setStats(weeklyStats);
       setAchievements(achievementsResponse || []);
       setEngagementStats(engagementResponse);
+      setRecentWorkouts(workoutSessions?.sessions || []);
 
       // Set fitness level from assessment data (more accurate than user profile)
       if (fitnessAssessment && fitnessAssessment.length > 0) {
@@ -223,11 +293,11 @@ export default function HomeScreen() {
   };
 
   const handleViewProgress = () => {
-    Alert.alert('Coming Soon', 'Progress tracking will be available soon!');
+    router.push('/(tabs)/progress');
   };
 
   const handleBrowseExercises = () => {
-    Alert.alert('Coming Soon', 'Exercise library will be available soon!');
+    router.push('/exercises/library');
   };
 
   const handleLogout = () => {
@@ -282,6 +352,22 @@ export default function HomeScreen() {
   };
 
   const userDisplay = getUserDisplayData();
+
+  // Format time ago helper
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'minute' : 'minutes'} ago`;
+    if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString();
+  };
 
   // Check if today is a workout day
   const isWorkoutDay = () => {
@@ -373,23 +459,59 @@ export default function HomeScreen() {
           <WorkoutDayStatus workoutDays={user.workoutDays} />
         )}
 
-        {/* Stats Summary */}
+        {/* Stats Summary - Redesigned */}
         <View style={styles.statsSection}>
-          <Text style={styles.sectionHeader}>This Week's Progress</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats?.this_week_sessions || 0}</Text>
-              <Text style={styles.statLabel}>Workouts</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{Math.round(stats?.total_calories_burned || 0)}</Text>
-              <Text style={styles.statLabel}>Calories</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{Math.round(stats?.total_exercise_time || 0)}m</Text>
-              <Text style={styles.statLabel}>Minutes</Text>
+          <View style={styles.statsSectionHeader}>
+            <Text style={styles.sectionHeader}>This Week's Progress</Text>
+            <View style={styles.weekBadge}>
+              <Ionicons name="calendar-outline" size={12} color={COLORS.PRIMARY[600]} />
+              <Text style={styles.weekBadgeText}>Week {(() => {
+                const now = new Date();
+                const start = new Date(now.getFullYear(), 0, 1);
+                const diff = now.getTime() - start.getTime();
+                const oneWeek = 1000 * 60 * 60 * 24 * 7;
+                return Math.ceil(diff / oneWeek);
+              })()}</Text>
             </View>
           </View>
+          <View style={styles.statsCard}>
+            <View style={styles.statRow}>
+              <View style={[styles.statIconCircle, { backgroundColor: '#10B981' + '15' }]}>
+                <Ionicons name="barbell" size={20} color="#10B981" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statLabel}>Workouts</Text>
+                <Text style={styles.statValue}>{stats?.this_week_sessions || 0} sessions</Text>
+              </View>
+            </View>
+            <View style={styles.statDividerHorizontal} />
+            <View style={styles.statRow}>
+              <View style={[styles.statIconCircle, { backgroundColor: '#F59E0B' + '15' }]}>
+                <Ionicons name="flame" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statLabel}>Calories Burned</Text>
+                <Text style={styles.statValue}>{Math.round(stats?.total_calories_burned || 0).toLocaleString()} cal</Text>
+              </View>
+            </View>
+            <View style={styles.statDividerHorizontal} />
+            <View style={styles.statRow}>
+              <View style={[styles.statIconCircle, { backgroundColor: '#3B82F6' + '15' }]}>
+                <Ionicons name="time" size={20} color="#3B82F6" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statLabel}>Exercise Time</Text>
+                <Text style={styles.statValue}>
+                  {Math.floor((stats?.total_exercise_time || 0) / 60)}h {(stats?.total_exercise_time || 0) % 60}m
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Progression Card */}
+        <View style={styles.progressionSection}>
+          <ProgressionCard />
         </View>
 
         {/* Today's Recommended Workout Set - Only show on workout days */}
@@ -584,28 +706,28 @@ export default function HomeScreen() {
         <View style={styles.activitySection}>
           <Text style={styles.sectionHeader}>Recent Activity</Text>
           <View style={styles.activityCard}>
-            {stats && (stats.this_week_sessions > 0) ? (
+            {recentWorkouts && recentWorkouts.length > 0 ? (
               <>
-                <View style={styles.activityItem}>
-                  <View style={styles.activityIcon}>
-                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                {recentWorkouts.slice(0, 3).map((workout: any, index: number) => (
+                  <View
+                    key={workout.sessionId || workout.id || index}
+                    style={[
+                      styles.activityItem,
+                      index === recentWorkouts.length - 1 && { borderBottomWidth: 0 }
+                    ]}
+                  >
+                    <View style={styles.activityIcon}>
+                      <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityTitle}>Completed Tabata Workout</Text>
+                      <Text style={styles.activityTime}>{formatTimeAgo(workout.createdAt)}</Text>
+                    </View>
+                    <Text style={styles.activityCalories}>
+                      {workout.actualDuration || workout.duration || 0}min
+                    </Text>
                   </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>Completed Tabata Circuit</Text>
-                    <Text style={styles.activityTime}>2 hours ago</Text>
-                  </View>
-                  <Text style={styles.activityCalories}>142 cal</Text>
-                </View>
-                <View style={styles.activityItem}>
-                  <View style={styles.activityIcon}>
-                    <Ionicons name="trophy" size={20} color="#F59E0B" />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>Weekly Goal Achieved</Text>
-                    <Text style={styles.activityTime}>Yesterday</Text>
-                  </View>
-                  <Text style={styles.activityBadge}>🎉</Text>
-                </View>
+                ))}
               </>
             ) : (
               <View style={styles.emptyActivity}>
@@ -719,6 +841,57 @@ const styles = StyleSheet.create({
   statsSection: {
     marginHorizontal: 24,
     marginBottom: 24,
+  },
+  statsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  weekBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY[600] + '10',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  weekBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  statsCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  statIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  statContent: {
+    flex: 1,
+  },
+  statDividerHorizontal: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 4,
   },
   achievementsSection: {
     marginHorizontal: 24,
@@ -846,10 +1019,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: FONTS.REGULAR,
     color: '#6B7280',
-    textAlign: 'center',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    fontFamily: FONTS.BOLD,
+    color: '#111827',
   },
   workoutSection: {
     marginHorizontal: 24,
@@ -1004,6 +1182,10 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  progressionSection: {
+    marginHorizontal: 24,
+    marginBottom: 24,
   },
   activitySection: {
     marginHorizontal: 24,

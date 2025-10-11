@@ -47,7 +47,7 @@ export class EngagementService {
     try {
       const response = await apiClient.get<{ success: boolean; data: UserAchievement[] }>(
         this.serviceName,
-        `/engagement/achievements/${userId}`
+        `/api/engagement/achievements/${userId}`
       );
       return response.data.data;
     } catch (error) {
@@ -73,7 +73,7 @@ export class EngagementService {
     try {
       const response = await apiClient.get<{ success: boolean; data: UserStats }>(
         this.serviceName,
-        `/engagement/user-stats/${userId}`
+        `/api/engagement/user-stats/${userId}`
       );
       return response.data.data;
     } catch (error) {

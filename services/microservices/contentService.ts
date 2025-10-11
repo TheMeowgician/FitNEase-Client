@@ -143,9 +143,24 @@ export interface WorkoutStats {
 }
 
 export class ContentService {
-  private serviceName = 'content';
+  private serviceName = 'content' as const;
 
   // Exercise Management
+  public async getAllExercises(): Promise<Exercise[]> {
+    try {
+      const response = await apiClient.get<{
+        success: boolean;
+        data: Exercise[];
+      }>(this.serviceName, '/api/content/all-exercises');
+
+      console.log('📚 [CONTENT SERVICE] Fetched all exercises:', response.data.data.length);
+      return response.data.data;
+    } catch (error) {
+      console.warn('Content service unavailable - all exercises feature disabled:', error);
+      return [];
+    }
+  }
+
   public async getExercises(filters?: {
     difficulty?: string;
     muscleGroups?: string[];

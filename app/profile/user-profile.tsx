@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
@@ -31,11 +31,25 @@ export default function UserProfileScreen() {
     currentStreak: 0,
     longestStreak: 0,
   });
+  const [bodyMetrics, setBodyMetrics] = useState({
+    height: 0,
+    weight: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadUserData();
   }, [user]);
+
+  // Refresh profile stats when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        console.log('🔄 [PROFILE] Screen focused - refreshing workout stats');
+        loadUserData();
+      }
+    }, [user])
+  );
 
   const loadUserData = async () => {
     if (!user) return;
@@ -43,16 +57,25 @@ export default function UserProfileScreen() {
     try {
       setIsLoading(true);
 
-      // Load fitness level
+      // Load fitness level and body metrics from fitness assessment
       const fitnessAssessment = await authService.getFitnessAssessment();
       if (fitnessAssessment && fitnessAssessment.length > 0) {
-        setFitnessLevel(fitnessAssessment[0].assessment_data.fitness_level || 'beginner');
+        const assessmentData = fitnessAssessment[0].assessment_data;
+        setFitnessLevel(assessmentData.fitness_level || 'beginner');
+
+        // Extract height and weight from assessment data
+        if (assessmentData.height && assessmentData.weight) {
+          setBodyMetrics({
+            height: assessmentData.height,
+            weight: assessmentData.weight,
+          });
+        }
       } else {
         setFitnessLevel(user.fitnessLevel || 'beginner');
       }
 
       // Load workout stats
-      const workoutHistory = await trackingService.getWorkoutHistory();
+      const workoutHistory = await trackingService.getWorkoutHistory(user.id);
       if (workoutHistory && workoutHistory.length > 0) {
         const totalWorkouts = workoutHistory.length;
         const totalMinutes = workoutHistory.reduce((sum, w) => sum + (w.duration || 0), 0);
@@ -92,9 +115,9 @@ export default function UserProfileScreen() {
   };
 
   const calculateBMI = () => {
-    if (user?.height && user?.weight) {
-      const heightInMeters = user.height / 100;
-      const bmi = user.weight / (heightInMeters * heightInMeters);
+    if (bodyMetrics.height && bodyMetrics.weight) {
+      const heightInMeters = bodyMetrics.height / 100;
+      const bmi = bodyMetrics.weight / (heightInMeters * heightInMeters);
       return bmi.toFixed(1);
     }
     return 'N/A';
@@ -107,6 +130,22 @@ export default function UserProfileScreen() {
     if (bmiNum < 25) return 'Normal';
     if (bmiNum < 30) return 'Overweight';
     return 'Obese';
+  };
+
+  const calculateAge = () => {
+    if (!user?.dateOfBirth) return '-';
+
+    const birthDate = new Date(user.dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    // Adjust age if birthday hasn't occurred this year yet
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    return age.toString();
   };
 
   const achievements = [
@@ -213,12 +252,12 @@ export default function UserProfileScreen() {
             <View style={styles.metricRow}>
               <View style={styles.metricItem}>
                 <Text style={styles.metricLabel}>Height</Text>
-                <Text style={styles.metricValue}>{user?.height || '-'} cm</Text>
+                <Text style={styles.metricValue}>{bodyMetrics.height || '-'} cm</Text>
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metricItem}>
                 <Text style={styles.metricLabel}>Weight</Text>
-                <Text style={styles.metricValue}>{user?.weight || '-'} kg</Text>
+                <Text style={styles.metricValue}>{bodyMetrics.weight || '-'} kg</Text>
               </View>
             </View>
 
@@ -227,7 +266,7 @@ export default function UserProfileScreen() {
             <View style={styles.metricRow}>
               <View style={styles.metricItem}>
                 <Text style={styles.metricLabel}>Age</Text>
-                <Text style={styles.metricValue}>{user?.age || '-'} years</Text>
+                <Text style={styles.metricValue}>{calculateAge()} years</Text>
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metricItem}>

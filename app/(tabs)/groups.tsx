@@ -63,13 +63,45 @@ export default function GroupsScreen() {
         console.log('First group:', myGroupsData.groups[0]);
       }
 
+      // Fetch actual member counts for all groups
+      const myGroupsWithCounts = await Promise.all(
+        myGroupsData.groups.map(async (group) => {
+          try {
+            const membersData = await socialService.getGroupMembers(group.id, 1, 1);
+            return {
+              ...group,
+              memberCount: membersData.total || group.memberCount
+            };
+          } catch (error) {
+            console.warn(`Failed to fetch member count for group ${group.id}:`, error);
+            return group;
+          }
+        })
+      );
+
+      const publicGroupsWithCounts = await Promise.all(
+        publicGroupsData.groups.map(async (group) => {
+          try {
+            const membersData = await socialService.getGroupMembers(group.id, 1, 1);
+            return {
+              ...group,
+              memberCount: membersData.total || group.memberCount
+            };
+          } catch (error) {
+            console.warn(`Failed to fetch member count for group ${group.id}:`, error);
+            return group;
+          }
+        })
+      );
+
       // Filter out groups that user is already a member of from public groups
-      const myGroupIds = new Set(myGroupsData.groups.map(g => g.id));
-      const filteredPublicGroups = publicGroupsData.groups.filter(g => !myGroupIds.has(g.id));
+      const myGroupIds = new Set(myGroupsWithCounts.map(g => g.id));
+      const filteredPublicGroups = publicGroupsWithCounts.filter(g => !myGroupIds.has(g.id));
 
       console.log('✅ Filtered Public Groups (excluding my groups):', filteredPublicGroups.length, 'groups');
+      console.log('✅ Groups with updated member counts:', myGroupsWithCounts.map(g => ({ name: g.name, memberCount: g.memberCount })));
 
-      setMyGroups(myGroupsData.groups || []);
+      setMyGroups(myGroupsWithCounts || []);
       setPublicGroups(filteredPublicGroups || []);
     } catch (error) {
       console.error('❌ Error loading groups:', error);

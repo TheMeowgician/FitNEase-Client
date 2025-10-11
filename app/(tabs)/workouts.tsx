@@ -244,12 +244,24 @@ export default function WorkoutsScreen() {
     // Close modal
     setShowWorkoutSetModal(false);
 
-    // Navigate to workout session
+    // Generate a proper Tabata session like the dashboard does
+    const session = {
+      session_id: `tabata_${user.id}_${Date.now()}`,
+      session_name: `${currentWorkoutSet.algorithm || 'AI'} Tabata Workout`,
+      difficulty_level: currentWorkoutSet.difficulty || user.fitnessLevel || 'beginner',
+      total_exercises: currentWorkoutSet.exercises.length,
+      total_duration_minutes: currentWorkoutSet.total_duration,
+      estimated_calories: currentWorkoutSet.total_calories,
+      exercises: currentWorkoutSet.exercises,
+      created_at: new Date().toISOString(),
+    };
+
+    // Navigate to workout session with proper sessionData parameter
     router.push({
       pathname: '/workout/session',
       params: {
-        exercises: JSON.stringify(currentWorkoutSet.exercises),
-        type: 'tabata_set'
+        sessionData: JSON.stringify(session),
+        type: 'tabata'
       }
     });
   };

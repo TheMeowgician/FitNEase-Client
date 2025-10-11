@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,44 +7,126 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import ProgressionCard from '../../components/ProgressionCard';
 import { progressionService } from '../../services/microservices/progressionService';
+import { trackingService } from '../../services/microservices/trackingService';
+import { useEngagementService } from '../../hooks/api/useEngagementService';
 
 const { width } = Dimensions.get('window');
 
 export default function ProgressScreen() {
   const { user } = useAuth();
+  const { getUserStats } = useEngagementService();
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalWorkouts: 0,
     totalMinutes: 0,
+    totalCalories: 0,
     activeDays: 0,
     currentStreak: 0,
+    completedSessions: 0,
+    thisWeekWorkouts: 0,
+    thisMonthWorkouts: 0,
   });
 
   useEffect(() => {
     loadProgressData();
   }, [user]);
 
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        console.log('🔄 [PROGRESS] Screen focused - refreshing stats');
+        loadProgressData();
+      }
+    }, [user])
+  );
+
   const loadProgressData = async () => {
     if (!user?.id) return;
 
     try {
-      // Get user stats from backend
+      setIsLoading(true);
+      console.log('📊 [PROGRESS] Loading progress data for user:', user.id);
+
+      // Fetch data from services
+      const [workoutHistory, engagementStats] = await Promise.all([
+        trackingService.getWorkoutHistory(user.id).catch((err: Error) => {
+          console.warn('⚠️ [PROGRESS] Tracking service unavailable:', err);
+          return [];
+        }),
+        getUserStats(user.id).catch((err: Error) => {
+          console.warn('⚠️ [PROGRESS] Engagement service unavailable:', err);
+          return null;
+        }),
+      ]);
+
+      console.log('📊 [PROGRESS] Workout history:', workoutHistory.length, 'sessions');
+      console.log('📊 [PROGRESS] Engagement stats:', engagementStats);
+
+      // Calculate stats from workout history
+      const totalWorkouts = workoutHistory.length;
+      const totalMinutes = workoutHistory.reduce((sum, w) => sum + (w.duration || 0), 0);
+      const totalCalories = workoutHistory.reduce((sum, w) => sum + (w.caloriesBurned || 0), 0);
+
+      // Calculate this week's workouts
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const thisWeekWorkouts = workoutHistory.filter(w => {
+        const workoutDate = new Date(w.date);
+        return workoutDate >= startOfWeek;
+      }).length;
+
+      // Calculate this month's workouts
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const thisMonthWorkouts = workoutHistory.filter(w => {
+        const workoutDate = new Date(w.date);
+        return workoutDate >= startOfMonth;
+      }).length;
+
+      // Calculate active days (unique dates with workouts)
+      const uniqueDates = new Set(
+        workoutHistory.map(w => new Date(w.date).toDateString())
+      );
+      const activeDays = uniqueDates.size;
+
+      // Update stats with real data
       setStats({
-        totalWorkouts: user.totalWorkoutsCompleted || 0,
-        totalMinutes: user.totalWorkoutMinutes || 0,
-        activeDays: user.activeDays || 0,
-        currentStreak: user.currentStreakDays || 0,
+        totalWorkouts,
+        totalMinutes,
+        totalCalories,
+        activeDays,
+        currentStreak: engagementStats?.current_streak_days || 0,
+        completedSessions: totalWorkouts,
+        thisWeekWorkouts,
+        thisMonthWorkouts,
+      });
+
+      console.log('✅ [PROGRESS] Stats updated successfully:', {
+        totalWorkouts,
+        totalMinutes,
+        totalCalories,
+        activeDays,
+        thisWeekWorkouts,
+        thisMonthWorkouts,
       });
     } catch (error) {
-      console.error('Failed to load progress data:', error);
+      console.error('❌ [PROGRESS] Failed to load progress data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -61,7 +143,7 @@ export default function ProgressScreen() {
         return {
           emoji: '🌱',
           color: COLORS.SUCCESS[500],
-          gradient: [COLORS.SUCCESS[400], COLORS.SUCCESS[600]],
+          gradient: [COLORS.SUCCESS[400], COLORS.SUCCESS[600]] as const,
           title: 'Beginner',
           description: 'Building foundations',
         };
@@ -69,7 +151,7 @@ export default function ProgressScreen() {
         return {
           emoji: '🔥',
           color: COLORS.PRIMARY[500],
-          gradient: [COLORS.PRIMARY[400], COLORS.PRIMARY[600]],
+          gradient: [COLORS.PRIMARY[400], COLORS.PRIMARY[600]] as const,
           title: 'Intermediate',
           description: 'Getting stronger',
         };
@@ -77,7 +159,7 @@ export default function ProgressScreen() {
         return {
           emoji: '⭐',
           color: COLORS.WARNING[500],
-          gradient: [COLORS.WARNING[400], COLORS.WARNING[600]],
+          gradient: [COLORS.WARNING[400], COLORS.WARNING[600]] as const,
           title: 'Advanced',
           description: 'Peak performance',
         };
@@ -85,7 +167,7 @@ export default function ProgressScreen() {
         return {
           emoji: '💪',
           color: COLORS.SECONDARY[500],
-          gradient: [COLORS.SECONDARY[400], COLORS.SECONDARY[600]],
+          gradient: [COLORS.SECONDARY[400], COLORS.SECONDARY[600]] as const,
           title: 'Unknown',
           description: 'Keep going',
         };
@@ -93,6 +175,29 @@ export default function ProgressScreen() {
   };
 
   const levelInfo = getFitnessLevelInfo();
+
+  // Show loading state on first load
+  if (isLoading && stats.totalWorkouts === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.headerTitle}>Your Progress</Text>
+              <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
+            </View>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelEmoji}>{levelInfo.emoji}</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
+          <Text style={styles.loadingText}>Loading your progress...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -509,5 +614,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginTop: 16,
   },
 });

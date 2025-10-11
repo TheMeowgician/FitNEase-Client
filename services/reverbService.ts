@@ -235,8 +235,13 @@ class ReverbService {
     // Get initial list of online members
     if (channel && callbacks.onInitialMembers) {
       channel.bind('pusher:subscription_succeeded', (members: any) => {
-        const membersList = Object.values(members.members || {});
-        console.log(`👥 Initial members in group ${groupId}:`, membersList);
+        // Presence channel members object has user IDs as keys
+        // Example: { "2023": true, "2024": true }
+        const memberIds = Object.keys(members.members || {});
+        console.log(`👥 Initial members in group ${groupId}:`, memberIds);
+
+        // Convert to array of member objects with id property
+        const membersList = memberIds.map(id => ({ id }));
         callbacks.onInitialMembers?.(membersList);
       });
     }
