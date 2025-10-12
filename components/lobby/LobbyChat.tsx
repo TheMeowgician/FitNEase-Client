@@ -21,6 +21,7 @@ export interface ChatMessage {
   message: string;
   timestamp: number;
   isOwnMessage: boolean;
+  isSystemMessage?: boolean;
 }
 
 interface LobbyChatProps {
@@ -78,6 +79,18 @@ export default function LobbyChat({
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
+    // Render system messages differently
+    if (item.isSystemMessage) {
+      return (
+        <View style={styles.systemMessageContainer}>
+          <View style={styles.systemMessageBubble}>
+            <Ionicons name="information-circle-outline" size={14} color={COLORS.SECONDARY[500]} />
+            <Text style={styles.systemMessageText}>{item.message}</Text>
+          </View>
+        </View>
+      );
+    }
+
     const isOwnMessage = item.userId === currentUserId;
 
     return (
@@ -416,5 +429,25 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: COLORS.SECONDARY[200],
+  },
+  systemMessageContainer: {
+    alignSelf: 'center',
+    marginBottom: 12,
+    maxWidth: '80%',
+  },
+  systemMessageBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SECONDARY[100],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  systemMessageText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    textAlign: 'center',
   },
 });

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLobby } from '../../contexts/LobbyContext';
 import reverbService from '../../services/reverbService';
 import { socialService, GroupMember } from '../../services/microservices/socialService';
 import { mlService } from '../../services/microservices/mlService';
@@ -52,6 +53,7 @@ interface Member {
 
 export default function GroupWorkoutLobby() {
   const { user } = useAuth();
+  const { joinLobby, minimizeLobby, leaveLobby } = useLobby();
   const params = useLocalSearchParams();
   const { sessionId, groupId, workoutData: workoutDataString, initiatorId, isCreatingLobby } = params;
 
@@ -69,6 +71,7 @@ export default function GroupWorkoutLobby() {
   const isChatVisibleRef = useRef(false);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [currentInitiatorId, setCurrentInitiatorId] = useState<string>(initiatorId as string);
+  const [onlineMemberIds, setOnlineMemberIds] = useState<Set<string>>(new Set());
 
   // Initial mount effect - runs once
   useEffect(() => {
@@ -78,6 +81,15 @@ export default function GroupWorkoutLobby() {
       initiatorId,
       currentUserId: user?.id,
       isCreatingLobby
+    });
+
+    // Register this lobby with the global context
+    joinLobby({
+      sessionId: sessionId as string,
+      groupId: groupId as string,
+      workoutData: workoutDataString as string,
+      initiatorId: initiatorId as string,
+      isCreatingLobby: isCreatingLobby as string,
     });
 
     if (workoutDataString) {
@@ -136,6 +148,79 @@ export default function GroupWorkoutLobby() {
     setIsInitiator(isInit);
   }, [currentInitiatorId, user?.id]);
 
+  // Subscribe to group presence channel for online status
+  useEffect(() => {
+    if (!groupId) return;
+
+    console.log(`🟢 Setting up presence listeners for group ${groupId}`);
+
+    // Get the existing presence channel (already subscribed globally)
+    const channelName = `presence-group.${groupId}`;
+    const pusher = (reverbService as any).pusher;
+    const channel = pusher?.channel(channelName);
+
+    if (!channel) {
+      console.warn(`⚠️ Presence channel not found for group ${groupId}`);
+      return;
+    }
+
+    console.log(`✅ Found presence channel for group ${groupId}`);
+
+    // Check if channel is already subscribed and has members
+    if (channel.members) {
+      const currentMembers = channel.members.members || {};
+      const memberIds = Object.keys(currentMembers);
+      console.log('👥 Channel already has members:', {
+        count: channel.members.count,
+        memberIds
+      });
+      setOnlineMemberIds(new Set(memberIds));
+    }
+
+    // Bind to presence events
+    const handleMemberAdded = (member: any) => {
+      const userId = member.id?.toString();
+      if (userId) {
+        console.log('✅ Adding online member:', userId);
+        setOnlineMemberIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(userId);
+          return newSet;
+        });
+      }
+    };
+
+    const handleMemberRemoved = (member: any) => {
+      const userId = member.id?.toString();
+      if (userId) {
+        console.log('❌ Removing offline member:', userId);
+        setOnlineMemberIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(userId);
+          return newSet;
+        });
+      }
+    };
+
+    const handleSubscriptionSucceeded = (members: any) => {
+      const memberIds = Object.keys(members.members || {});
+      console.log('✅ Initial online user IDs:', memberIds);
+      setOnlineMemberIds(new Set(memberIds));
+    };
+
+    channel.bind('pusher:member_added', handleMemberAdded);
+    channel.bind('pusher:member_removed', handleMemberRemoved);
+    channel.bind('pusher:subscription_succeeded', handleSubscriptionSucceeded);
+
+    // Cleanup: unbind events when component unmounts
+    return () => {
+      console.log(`🔴 Removing presence listeners for group ${groupId}`);
+      channel.unbind('pusher:member_added', handleMemberAdded);
+      channel.unbind('pusher:member_removed', handleMemberRemoved);
+      channel.unbind('pusher:subscription_succeeded', handleSubscriptionSucceeded);
+    };
+  }, [groupId]);
+
   const setupLobbySubscription = () => {
     console.log('🔌 Subscribing to lobby channel:', `lobby.${sessionId}`);
 
@@ -192,6 +277,41 @@ export default function GroupWorkoutLobby() {
               ? `You are now the lobby creator! You can generate exercises and start the workout.`
               : `${data.newInitiatorName} is now the lobby creator.`
           );
+        } else if (eventName === 'MemberKicked') {
+          console.log('🚫 Member kicked event received:', data);
+
+          // Check if current user was kicked
+          if (Number(data.kickedUserId) === Number(user?.id)) {
+            Alert.alert(
+              'Removed from Lobby',
+              'You have been removed from the workout lobby by the creator.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    leaveLobby();
+                    router.back();
+                  },
+                },
+              ]
+            );
+          } else {
+            // Add system message for member leaving (kicked)
+            const leaveMessage: ChatMessage = {
+              id: `system-leave-${data.kickedUserId}-${Date.now()}`,
+              userId: 0, // System message
+              userName: 'System',
+              message: `${data.kickedUserName} left the lobby`,
+              timestamp: Date.now(),
+              isOwnMessage: false,
+              isSystemMessage: true,
+            };
+            setChatMessages((prev) => [...prev, leaveMessage]);
+
+            // Remove the kicked member from the list
+            setMembers((prev) => prev.filter((m) => m.user_id !== Number(data.kickedUserId)));
+            Alert.alert('Member Removed', `${data.kickedUserName} has been removed from the lobby.`);
+          }
         } else {
           console.log('❓ Unknown event:', eventName);
         }
@@ -210,6 +330,20 @@ export default function GroupWorkoutLobby() {
         // New member joined! Re-broadcast our own status so they can see us
         console.log('🆕 New member joined, re-broadcasting own status');
         setTimeout(() => broadcastMemberStatus(myStatus), 100);
+
+        // Add system message for member join (only if not self)
+        if (userId !== Number(user?.id)) {
+          const joinMessage: ChatMessage = {
+            id: `system-join-${userId}-${Date.now()}`,
+            userId: 0,
+            userName: 'System',
+            message: `${name} joined the lobby`,
+            timestamp: Date.now(),
+            isOwnMessage: false,
+            isSystemMessage: true,
+          };
+          setChatMessages((prevMessages) => [...prevMessages, joinMessage]);
+        }
 
         return [...prev, { user_id: userId, name, status }];
       }
@@ -400,10 +534,16 @@ export default function GroupWorkoutLobby() {
     });
   };
 
+  const handleMinimize = () => {
+    console.log('📉 Minimizing lobby');
+    minimizeLobby();
+    router.back();
+  };
+
   const handleLeave = () => {
     Alert.alert(
       'Leave Lobby',
-      'Are you sure you want to leave the workout lobby?',
+      'Are you sure you want to leave the workout lobby? You will be removed from the session.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -411,6 +551,7 @@ export default function GroupWorkoutLobby() {
           style: 'destructive',
           onPress: () => {
             broadcastMemberStatus('waiting');
+            leaveLobby();
             router.back();
           },
         },
@@ -527,6 +668,49 @@ export default function GroupWorkoutLobby() {
     );
   };
 
+  const handleKickMember = (member: Member) => {
+    if (!isInitiator) {
+      Alert.alert('Permission Denied', 'Only the lobby creator can remove members.');
+      return;
+    }
+
+    if (member.user_id === Number(user?.id)) {
+      Alert.alert('Invalid Action', 'You cannot kick yourself from the lobby.');
+      return;
+    }
+
+    Alert.alert(
+      'Remove Member',
+      `Are you sure you want to remove ${member.name} from the lobby?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🚫 Kicking member from lobby:', {
+                memberId: member.user_id,
+                memberName: member.name,
+                sessionId
+              });
+
+              await socialService.kickUserFromLobby(sessionId as string, member.user_id);
+
+              // Remove member from local state immediately
+              setMembers((prev) => prev.filter((m) => m.user_id !== member.user_id));
+
+              console.log('✅ Member kicked successfully');
+            } catch (error) {
+              console.error('❌ Failed to kick member:', error);
+              Alert.alert('Error', 'Failed to remove member. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getDifficultyLabel = (level: number) => {
     switch (level) {
       case 1: return 'Beginner';
@@ -581,21 +765,26 @@ export default function GroupWorkoutLobby() {
       <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleLeave} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
+        <TouchableOpacity onPress={handleMinimize} style={styles.backButton}>
+          <Ionicons name="chevron-down" size={24} color={COLORS.SECONDARY[900]} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Workout Lobby</Text>
           <Text style={styles.headerSubtitle}>Waiting for all members...</Text>
         </View>
-        <TouchableOpacity onPress={handleOpenChat} style={styles.chatButton}>
-          <Ionicons name="chatbubbles" size={24} color={COLORS.PRIMARY[600]} />
-          {unreadMessagesCount > 0 && (
-            <View style={styles.chatBadge}>
-              <Text style={styles.chatBadgeText}>{unreadMessagesCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleOpenChat} style={styles.chatButton}>
+            <Ionicons name="chatbubbles" size={24} color={COLORS.PRIMARY[600]} />
+            {unreadMessagesCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>{unreadMessagesCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLeave} style={styles.menuButton}>
+            <Ionicons name="exit-outline" size={24} color={COLORS.ERROR[600]} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -667,14 +856,22 @@ export default function GroupWorkoutLobby() {
                     )}
                   </View>
                   <View style={styles.memberActionsContainer}>
-                    {/* Show Pass Role button if current user is initiator and this member is not the initiator */}
+                    {/* Show Pass Role and Kick buttons if current user is initiator and this member is not the initiator */}
                     {isInitiator && member.user_id !== Number(currentInitiatorId) && (
-                      <TouchableOpacity
-                        style={styles.passRoleButton}
-                        onPress={() => handlePassInitiatorRole(member)}
-                      >
-                        <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
-                      </TouchableOpacity>
+                      <>
+                        <TouchableOpacity
+                          style={styles.passRoleButton}
+                          onPress={() => handlePassInitiatorRole(member)}
+                        >
+                          <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.kickButton}
+                          onPress={() => handleKickMember(member)}
+                        >
+                          <Ionicons name="close-circle" size={16} color={COLORS.ERROR[600]} />
+                        </TouchableOpacity>
+                      </>
                     )}
                     <View style={[styles.statusBadge, member.status === 'ready' && styles.statusReady]}>
                       <Ionicons
@@ -903,23 +1100,29 @@ export default function GroupWorkoutLobby() {
                     const isCurrentUser = parseInt(gm.userId) === Number(user?.id);
                     return !isInLobby && !isCurrentUser;
                   })
-                  .map((member) => (
-                    <View key={member.id} style={styles.inviteMemberCard}>
-                      <View style={styles.memberAvatar}>
-                        <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
+                  .map((member) => {
+                    const isOnline = onlineMemberIds.has(member.userId);
+                    return (
+                      <View key={member.id} style={styles.inviteMemberCard}>
+                        <View style={styles.memberAvatarContainer}>
+                          <View style={styles.memberAvatar}>
+                            <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
+                          </View>
+                          {isOnline && <View style={styles.onlineIndicator} />}
+                        </View>
+                        <View style={styles.inviteMemberInfo}>
+                          <Text style={styles.memberName}>{member.username}</Text>
+                          <Text style={styles.inviteMemberRole}>{member.role}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.inviteIconButton}
+                          onPress={() => handleInviteMember(member)}
+                        >
+                          <Ionicons name="send" size={20} color={COLORS.PRIMARY[600]} />
+                        </TouchableOpacity>
                       </View>
-                      <View style={styles.inviteMemberInfo}>
-                        <Text style={styles.memberName}>{member.username}</Text>
-                        <Text style={styles.inviteMemberRole}>{member.role}</Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.inviteIconButton}
-                        onPress={() => handleInviteMember(member)}
-                      >
-                        <Ionicons name="send" size={20} color={COLORS.PRIMARY[600]} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                    );
+                  })}
                 {groupMembers.filter((gm) => {
                   const isInLobby = members.find((m) => m.user_id === parseInt(gm.userId));
                   const isCurrentUser = parseInt(gm.userId) === Number(user?.id);
@@ -1056,11 +1259,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  menuButton: {
+    padding: 8,
+  },
   passRoleButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: COLORS.PRIMARY[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kickButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.ERROR[100],
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1346,6 +1565,20 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginBottom: 8,
+  },
+  memberAvatarContainer: {
+    position: 'relative',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.SUCCESS[500],
+    borderWidth: 2,
+    borderColor: COLORS.NEUTRAL.WHITE,
   },
   inviteMemberInfo: {
     flex: 1,

@@ -593,6 +593,27 @@ export class AuthService {
     }
   }
 
+  public async searchUserByUsername(username: string): Promise<{ id: number; username: string; email: string } | null> {
+    try {
+      const response = await apiClient.get<{ data: Array<{ user_id: number; username: string; email: string }> }>('auth', `/api/all-users?search=${encodeURIComponent(username)}`);
+
+      if (!response.data || !response.data.data || response.data.data.length === 0) {
+        return null;
+      }
+
+      // Get the first matching user and transform to expected format
+      const user = response.data.data[0];
+      return {
+        id: user.user_id,
+        username: user.username,
+        email: user.email,
+      };
+    } catch (error) {
+      console.error('Search user by username failed:', error);
+      return null;
+    }
+  }
+
   public async validateToken(): Promise<{ valid: boolean; user?: User }> {
     try {
       // Use the user endpoint to validate token - if it succeeds, token is valid

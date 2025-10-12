@@ -78,8 +78,8 @@ const getTestingConfig = () => {
 
 // Export the appropriate config based on environment
 export const API_CONFIG = ENVIRONMENT === 'testing'
-  ? getDevelopmentConfig()
-  : getTestingConfig();
+  ? getTestingConfig()       // ✅ Use ngrok URLs for testing (APK)
+  : getDevelopmentConfig();  // ✅ Use local IP for development (Expo Go)
 
 // 💡 HOW TO USE:
 //

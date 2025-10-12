@@ -570,6 +570,21 @@ export class SocialService {
     }
   }
 
+  public async inviteUser(groupId: string, userIdOrUsername: string): Promise<{ message: string }> {
+    try {
+      // Try to parse as number first to determine if it's user_id or username
+      const isNumeric = !isNaN(Number(userIdOrUsername));
+      const payload = isNumeric
+        ? { user_id: parseInt(userIdOrUsername) }
+        : { username: userIdOrUsername };
+
+      const response = await apiClient.post<{ message: string }>('social', `/api/social/groups/${groupId}/invite`, payload);
+      return response.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to invite user to group');
+    }
+  }
+
   // Friend Management
   public async sendFriendRequest(request: SendFriendRequestRequest): Promise<{ message: string }> {
     try {
@@ -651,7 +666,7 @@ export class SocialService {
           sharedInterests: string[];
           location?: string;
         }>;
-      }>('social', `/social/users/search?${params}`);
+      }>('social', `/api/social/users/search?${params}`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to search users');
@@ -1124,6 +1139,35 @@ export class SocialService {
     } catch (error) {
       console.error('❌ [SOCIAL] Failed to pass initiator role:', error);
       throw new Error((error as any).message || 'Failed to pass initiator role');
+    }
+  }
+
+  public async kickUserFromLobby(
+    sessionId: string,
+    userId: number
+  ): Promise<{
+    kicked_user_id: number;
+    kicked_user_name: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Kicking user from lobby:', {
+        sessionId,
+        userId
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/kick`,
+        {
+          user_id: userId
+        }
+      );
+
+      console.log('✅ [SOCIAL] User kicked successfully');
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to kick user:', error);
+      throw new Error((error as any).message || 'Failed to kick user from lobby');
     }
   }
 

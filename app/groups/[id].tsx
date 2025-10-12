@@ -10,11 +10,13 @@ import {
   Share,
   RefreshControl,
   Clipboard,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { COLORS, FONTS } from '../../constants/colors';
+import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
@@ -38,6 +40,15 @@ export default function GroupDetailsScreen() {
   const [isGeneratingWorkout, setIsGeneratingWorkout] = useState(false);
   const [showGroupWorkoutModal, setShowGroupWorkoutModal] = useState(false);
   const [groupWorkout, setGroupWorkout] = useState<any>(null);
+
+  // Invite by username states
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+
+  // Settings modal state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   useEffect(() => {
     loadGroupDetails();
@@ -269,7 +280,69 @@ export default function GroupDetailsScreen() {
   };
 
   const handleManageGroup = () => {
-    Alert.alert('Coming Soon', 'Group management features will be available soon!');
+    setShowSettingsModal(true);
+  };
+
+  const handleKickMember = (member: GroupMember) => {
+    if (!group || member.userId === user?.id) return;
+
+    Alert.alert(
+      'Kick Member',
+      `Are you sure you want to kick ${member.username} from the group?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Kick',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await socialService.removeGroupMember(id as string, member.userId);
+              Alert.alert('Success', `${member.username} has been kicked from the group.`);
+              // Refresh members list
+              await loadGroupDetails();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to kick member.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleInviteByUsername = async () => {
+    if (!usernameInput.trim()) {
+      Alert.alert('Error', 'Please enter a username');
+      return;
+    }
+
+    try {
+      setIsInviting(true);
+
+      // Invite user to group directly by username
+      // The backend will handle the username lookup and validation
+      await socialService.inviteUser(id as string, usernameInput.trim());
+
+      Alert.alert(
+        'Invitation Sent!',
+        `Successfully invited ${usernameInput.trim()} to join the group.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowInviteModal(false);
+              setUsernameInput('');
+              // Refresh group details to show new member if they accepted
+              setTimeout(() => loadGroupDetails(), 1000);
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error inviting user:', error);
+      Alert.alert('Error', error.message || 'Failed to invite user. Please try again.');
+    } finally {
+      setIsInviting(false);
+    }
   };
 
   const handleGenerateGroupWorkout = async () => {
@@ -444,6 +517,15 @@ export default function GroupDetailsScreen() {
               <Text style={styles.actionButtonText}>Share Code</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity style={styles.actionButton} onPress={() => setShowInviteModal(true)}>
+              <Ionicons name="person-add" size={20} color={COLORS.PRIMARY[600]} />
+              <Text style={styles.actionButtonText}>Invite User</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Second Row for Destructive Actions */}
+          {(userRole === 'owner' || userRole === 'member') && (
+            <View style={[styles.actionButtonsRow, { marginTop: 12 }]}>
             {userRole === 'owner' && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.actionButtonDanger]}
@@ -463,7 +545,8 @@ export default function GroupDetailsScreen() {
                 <Text style={[styles.actionButtonText, { color: '#EF4444' }]}>Leave Group</Text>
               </TouchableOpacity>
             )}
-          </View>
+            </View>
+          )}
         </View>
 
         {/* Group Code Section */}
@@ -522,6 +605,15 @@ export default function GroupDetailsScreen() {
                       {member.role}
                     </Text>
                   </View>
+                  {/* Kick button for owner */}
+                  {userRole === 'owner' && member.userId !== user?.id && (
+                    <TouchableOpacity
+                      style={styles.kickButton}
+                      onPress={() => handleKickMember(member)}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#EF4444" />
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -575,6 +667,184 @@ export default function GroupDetailsScreen() {
         onStartWorkout={handleStartGroupWorkout}
         groupName={group.name}
       />
+
+      {/* Invite by Username Modal */}
+      <Modal
+        visible={showInviteModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInviteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.inviteModalContent}>
+            <View style={styles.inviteModalHeader}>
+              <Text style={styles.inviteModalTitle}>Invite by Username</Text>
+              <TouchableOpacity onPress={() => {
+                setShowInviteModal(false);
+                setUsernameInput('');
+              }}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inviteModalBody}>
+              <Text style={styles.inviteModalLabel}>Enter username</Text>
+              <TextInput
+                style={styles.usernameInput}
+                placeholder="username"
+                placeholderTextColor={COLORS.SECONDARY[400]}
+                value={usernameInput}
+                onChangeText={setUsernameInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.inviteButton,
+                  (!usernameInput.trim() || isInviting) && styles.inviteButtonDisabled,
+                ]}
+                onPress={handleInviteByUsername}
+                disabled={!usernameInput.trim() || isInviting}
+              >
+                {isInviting ? (
+                  <>
+                    <ActivityIndicator color="white" size="small" />
+                    <Text style={styles.inviteButtonText}>Inviting...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="send" size={20} color={COLORS.NEUTRAL.WHITE} />
+                    <Text style={styles.inviteButtonText}>Send Invite</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Group Settings Modal */}
+      <Modal
+        visible={showSettingsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.settingsModalContent}>
+            <View style={styles.settingsModalHeader}>
+              <Text style={styles.settingsModalTitle}>Group Settings</Text>
+              <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.settingsModalBody} showsVerticalScrollIndicator={false}>
+              {/* Group Info Section */}
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>Group Information</Text>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Edit group name feature coming soon')}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="create-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Edit Group Name</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Edit description feature coming soon')}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="document-text-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Edit Description</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Change privacy feature coming soon')}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name={group?.type === 'public' ? 'globe' : 'lock-closed'} size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Privacy Settings</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Member Management Section */}
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>Member Management</Text>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  setShowInviteModal(true);
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Invite Members</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Manage roles feature coming soon')}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="shield-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Manage Member Roles</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  Alert.alert('Info', 'You can kick members by tapping the X icon next to their name in the members list.');
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="remove-circle-outline" size={22} color="#EF4444" />
+                    <Text style={[styles.settingsOptionText, { color: '#EF4444' }]}>Remove Members</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Group Content Section */}
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>Group Content</Text>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Group announcements coming soon')}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="megaphone-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Post Announcement</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Group rules feature coming soon')}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="list-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Set Group Rules</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Danger Zone */}
+              <View style={[styles.settingsSection, styles.dangerSection]}>
+                <Text style={[styles.settingsSectionTitle, { color: '#EF4444' }]}>Danger Zone</Text>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  handleDeleteGroup();
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                    <Text style={[styles.settingsOptionText, { color: '#EF4444' }]}>Delete Group</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -959,5 +1229,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONTS.REGULAR,
     color: COLORS.PRIMARY[700],
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inviteModalContent: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+  },
+  inviteModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  inviteModalTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  inviteModalBody: {
+    gap: 16,
+  },
+  inviteModalLabel: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+  },
+  usernameInput: {
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 12,
+    padding: 16,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[900],
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.PRIMARY[600],
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  inviteButtonDisabled: {
+    backgroundColor: COLORS.SECONDARY[300],
+  },
+  inviteButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  kickButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  settingsModalContent: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80%',
+  },
+  settingsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  settingsModalTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  settingsModalBody: {
+    maxHeight: 500,
+  },
+  settingsSection: {
+    marginBottom: 24,
+  },
+  settingsSectionTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    marginBottom: 12,
+  },
+  settingsOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  settingsOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingsOptionText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  dangerSection: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.SECONDARY[200],
+    paddingTop: 16,
   },
 });

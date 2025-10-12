@@ -14,6 +14,7 @@ import { useMLService } from '../../hooks/api/useMLService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
+import { commsService } from '../../services/microservices/commsService';
 import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
@@ -34,6 +35,7 @@ export default function HomeScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
   useEffect(() => {
@@ -45,11 +47,24 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        console.log('🔄 [DASHBOARD] Screen focused - refreshing recent workouts');
+        console.log('🔄 [DASHBOARD] Screen focused - refreshing recent workouts and notifications');
         loadRecentWorkouts();
+        loadUnreadCount();
       }
     }, [user])
   );
+
+  const loadUnreadCount = async () => {
+    if (!user) return;
+
+    try {
+      const count = await commsService.getUnreadCount(user.id);
+      setUnreadCount(count);
+    } catch (error) {
+      console.warn('Failed to load unread count:', error);
+      // Silently fail - don't disrupt user experience
+    }
+  };
 
   const loadRecentWorkouts = async () => {
     if (!user) return;
@@ -422,10 +437,17 @@ export default function HomeScreen() {
         <Text style={styles.headerTitle}>Dashboard</Text>
         <TouchableOpacity
           style={styles.notificationButton}
-          onPress={() => Alert.alert('Notifications', 'Notification feature coming soon!')}
+          onPress={() => router.push('/notifications')}
           activeOpacity={0.7}
         >
           <Ionicons name="notifications-outline" size={24} color="#111827" />
+          {unreadCount > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -777,6 +799,26 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
   },
   scrollView: {
     flex: 1,

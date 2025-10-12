@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 
 // Context Providers
 import { AuthProvider } from '../contexts/AuthContext';
@@ -10,6 +11,10 @@ import { UserProvider } from '../contexts/UserContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
+import { LobbyProvider } from '../contexts/LobbyContext';
+
+// Components
+import MinimizedLobbyButton from '../components/lobby/MinimizedLobbyButton';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -42,10 +47,15 @@ export default function RootLayout() {
         <NetworkProvider>
           <AuthProvider>
             <WebSocketProvider>
-              <UserProvider>
-                <StatusBar style="auto" />
-                <Slot />
-              </UserProvider>
+              <LobbyProvider>
+                <UserProvider>
+                  <StatusBar style="auto" />
+                  <View style={{ flex: 1 }}>
+                    <Slot />
+                    <MinimizedLobbyButton />
+                  </View>
+                </UserProvider>
+              </LobbyProvider>
             </WebSocketProvider>
           </AuthProvider>
         </NetworkProvider>
