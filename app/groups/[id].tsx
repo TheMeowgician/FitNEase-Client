@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLobby } from '../../contexts/LobbyContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
@@ -29,6 +30,7 @@ export default function GroupDetailsScreen() {
   const { user } = useAuth();
   const { goBack } = useSmartBack();
   const { getGroupWorkoutRecommendations } = useMLService();
+  const { lobbyState, isInLobby, leaveLobby } = useLobby();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [group, setGroup] = useState<Group | null>(null);
@@ -492,15 +494,56 @@ export default function GroupDetailsScreen() {
 
           {/* Create Lobby Button */}
           <TouchableOpacity
-            style={styles.startWorkoutButton}
-            onPress={handleGenerateGroupWorkout}
-            disabled={isGeneratingWorkout}
+            style={[
+              styles.startWorkoutButton,
+              isInLobby && styles.startWorkoutButtonDisabled
+            ]}
+            onPress={isInLobby ? () => {
+              Alert.alert(
+                'Already in Lobby',
+                'You are currently in an active lobby. You can either go to the lobby or clear it if the session is no longer active.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Go to Lobby',
+                    onPress: () => {
+                      if (lobbyState) {
+                        router.push({
+                          pathname: '/workout/group-lobby',
+                          params: {
+                            sessionId: lobbyState.sessionId,
+                            groupId: lobbyState.groupId,
+                            workoutData: lobbyState.workoutData,
+                            initiatorId: lobbyState.initiatorId,
+                            isCreatingLobby: lobbyState.isCreatingLobby,
+                          },
+                        });
+                      }
+                    }
+                  },
+                  {
+                    text: 'Clear Lobby',
+                    style: 'destructive',
+                    onPress: () => {
+                      leaveLobby();
+                      Alert.alert('Lobby Cleared', 'The lobby state has been cleared. You can now create a new lobby.');
+                    }
+                  }
+                ]
+              );
+            } : handleGenerateGroupWorkout}
+            disabled={isGeneratingWorkout || isInLobby}
             activeOpacity={0.8}
           >
             {isGeneratingWorkout ? (
               <>
                 <ActivityIndicator color="white" />
                 <Text style={styles.startWorkoutButtonText}>Creating Lobby...</Text>
+              </>
+            ) : isInLobby ? (
+              <>
+                <Ionicons name="alert-circle" size={24} color="white" />
+                <Text style={styles.startWorkoutButtonText}>Already in Lobby</Text>
               </>
             ) : (
               <>
@@ -1013,6 +1056,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+  },
+  startWorkoutButtonDisabled: {
+    backgroundColor: COLORS.SECONDARY[400],
+    shadowColor: COLORS.SECONDARY[400],
   },
   startWorkoutButtonText: {
     fontSize: 17,

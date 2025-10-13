@@ -1171,6 +1171,74 @@ export class SocialService {
     }
   }
 
+  public async leaveLobby(
+    sessionId: string
+  ): Promise<{
+    user_id: number;
+    user_name: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Leaving lobby:', {
+        sessionId
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/lobby/${sessionId}/leave`,
+        {}
+      );
+
+      console.log('✅ [SOCIAL] Left lobby successfully');
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to leave lobby:', error);
+      throw new Error((error as any).message || 'Failed to leave lobby');
+    }
+  }
+
+  public async getLobbyState(
+    sessionId: string
+  ): Promise<{
+    session_id: string;
+    group_id: string;
+    initiator_id: number;
+    workout_data: any;
+    lobby_status: string;
+    started_at: number | null;
+    expires_at: number;
+    members: Array<{
+      user_id: number;
+      username: string;
+      status: 'waiting' | 'ready';
+      joined_at: number;
+    }>;
+    messages: Array<{
+      message_id: string;
+      user_id: number | null;
+      username: string;
+      message: string;
+      timestamp: number;
+      is_system_message: boolean;
+    }>;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Fetching lobby state:', {
+        sessionId
+      });
+
+      const response = await apiClient.get(
+        'social',
+        `/api/social/lobby/${sessionId}`
+      );
+
+      console.log('✅ [SOCIAL] Lobby state fetched successfully');
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to fetch lobby state:', error);
+      throw new Error((error as any).message || 'Failed to fetch lobby state');
+    }
+  }
+
   // Workout Session Control
   public async pauseWorkout(sessionId: string): Promise<{
     session_id: string;

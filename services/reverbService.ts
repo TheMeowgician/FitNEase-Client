@@ -76,6 +76,13 @@ class ReverbService {
   }
 
   /**
+   * Check if Reverb is connected
+   */
+  public isConnected(): boolean {
+    return this.pusher !== null && this.pusher.connection.state === 'connected';
+  }
+
+  /**
    * Disconnect from Reverb
    */
   public disconnect() {

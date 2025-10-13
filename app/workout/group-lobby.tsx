@@ -53,7 +53,7 @@ interface Member {
 
 export default function GroupWorkoutLobby() {
   const { user } = useAuth();
-  const { joinLobby, minimizeLobby, leaveLobby } = useLobby();
+  const { lobbyState: globalLobbyState, joinLobby, minimizeLobby, leaveLobby, updateLobbyMembers, updateLobbyChatMessages } = useLobby();
   const params = useLocalSearchParams();
   const { sessionId, groupId, workoutData: workoutDataString, initiatorId, isCreatingLobby } = params;
 
@@ -72,6 +72,8 @@ export default function GroupWorkoutLobby() {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [currentInitiatorId, setCurrentInitiatorId] = useState<string>(initiatorId as string);
   const [onlineMemberIds, setOnlineMemberIds] = useState<Set<string>>(new Set());
+  const [isRestoringFromMinimized, setIsRestoringFromMinimized] = useState(false);
+  const isLeavingRef = useRef(false);
 
   // Initial mount effect - runs once
   useEffect(() => {
@@ -82,6 +84,93 @@ export default function GroupWorkoutLobby() {
       currentUserId: user?.id,
       isCreatingLobby
     });
+
+    // Check if we're restoring from a minimized lobby
+    const isRestoring = globalLobbyState?.sessionId === sessionId &&
+                       globalLobbyState?.members &&
+                       globalLobbyState?.members.length > 0;
+
+    if (isRestoring) {
+      console.log('🔄 Restoring lobby from minimized state - fetching fresh state from server');
+
+      setIsRestoringFromMinimized(true);
+
+      // Fetch fresh state from server instead of trusting in-memory state
+      (async () => {
+        try {
+          const freshState = await socialService.getLobbyState(sessionId as string);
+          console.log('✅ Fresh lobby state fetched:', {
+            membersCount: freshState.members.length,
+            messagesCount: freshState.messages.length
+          });
+
+          // Transform server members to component format
+          const freshMembers: Member[] = freshState.members.map(m => ({
+            user_id: m.user_id,
+            name: m.username,
+            status: m.status
+          }));
+
+          // Transform server messages to component format
+          const freshMessages: ChatMessage[] = freshState.messages.map(msg => ({
+            id: msg.message_id,
+            userId: msg.user_id || 0,
+            userName: msg.username,
+            message: msg.message,
+            timestamp: msg.timestamp * 1000, // Convert to milliseconds
+            isOwnMessage: msg.user_id === Number(user?.id),
+            isSystemMessage: msg.is_system_message
+          }));
+
+          console.log('👥 Restoring members from server:', freshMembers);
+          console.log('💬 Restoring messages from server:', freshMessages.length);
+
+          setMembers(freshMembers);
+          setChatMessages(freshMessages);
+
+          // Mark restoration as complete after state updates
+          setTimeout(() => setIsRestoringFromMinimized(false), 100);
+        } catch (error: any) {
+          console.error('❌ Failed to fetch fresh lobby state:', error);
+
+          // Check if lobby was deleted (404)
+          if (error.message?.includes('not found') || error.message?.includes('deleted')) {
+            Alert.alert(
+              'Lobby Closed',
+              'This lobby has been closed or deleted.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    leaveLobby();
+                    router.back();
+                  },
+                },
+              ]
+            );
+          } else {
+            // For other errors, fallback to in-memory state
+            console.log('⚠️ Falling back to in-memory state due to error');
+            setMembers(globalLobbyState.members || []);
+            setChatMessages(globalLobbyState.chatMessages || []);
+            setTimeout(() => setIsRestoringFromMinimized(false), 100);
+          }
+        }
+      })();
+    } else {
+      console.log('🆕 Creating new lobby or first time joining');
+
+      // Add self to members list immediately with 'waiting' status
+      if (user) {
+        console.log('👤 Adding self to members list (waiting)');
+        const initialMembers = [{
+          user_id: Number(user.id),
+          name: user.username || 'You',
+          status: 'waiting' as const
+        }];
+        setMembers(initialMembers);
+      }
+    }
 
     // Register this lobby with the global context
     joinLobby({
@@ -104,38 +193,56 @@ export default function GroupWorkoutLobby() {
     setIsInitiator(isInit);
     console.log('👤 Is initiator:', isInit);
 
-    // Add self to members list immediately with 'waiting' status
-    if (user) {
-      console.log('👤 Adding self to members list (waiting)');
-      setMembers([{
-        user_id: Number(user.id),
-        name: user.username || 'You',
-        status: 'waiting'
-      }]);
-
-      // If we're NOT the initiator, also add the initiator to the list
-      if (!isInit && initiatorId) {
-        console.log('👑 Adding initiator to members list (will get name from event)');
-        // We'll get the name when they broadcast or we can fetch it
-        // For now, add a placeholder - it will be updated when we receive their status
-      }
-    }
-
     // Subscribe to lobby updates first, then broadcast status
+    console.log('🔌 Setting up lobby subscription...');
     setupLobbySubscription();
 
     // Small delay to ensure subscription is established before broadcasting
     // This ensures we receive status updates from others who re-broadcast
     setTimeout(() => {
       // Mark self as waiting (NOT ready by default)
+      console.log('📡 Broadcasting initial member status...');
       broadcastMemberStatus('waiting');
     }, 500);
 
     return () => {
-      console.log('🔌 Unsubscribing from lobby channel');
+      console.log('🔌 Unsubscribing from lobby channel on unmount');
       reverbService.unsubscribe(`private-lobby.${sessionId}`);
+
+      // Only auto-minimize if user didn't explicitly leave/get kicked
+      // Use ref to check if user is leaving intentionally
+      if (isLeavingRef.current) {
+        console.log('🚫 Skipping auto-minimize - user explicitly left lobby');
+      } else if (globalLobbyState && globalLobbyState.sessionId === sessionId) {
+        console.log('📉 Auto-minimizing lobby on unmount (user navigated away)');
+        minimizeLobby();
+      } else {
+        console.log('🚫 Skipping auto-minimize - lobby state already cleared (kicked)');
+      }
     };
-  }, []);
+  }, []); // Empty dependency - only run on mount/unmount
+
+  // Sync members to global lobby state whenever they change
+  useEffect(() => {
+    // Don't sync during initial restoration to avoid overwriting
+    if (isRestoringFromMinimized) {
+      console.log('⏳ Skipping members sync during restoration');
+      return;
+    }
+
+    if (members.length > 0) {
+      console.log('💾 Syncing members to global lobby state:', members.length);
+      updateLobbyMembers(members);
+    }
+  }, [members, isRestoringFromMinimized]);
+
+  // Sync chat messages to global lobby state whenever they change
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      console.log('💾 Syncing chat messages to global lobby state:', chatMessages.length);
+      updateLobbyChatMessages(chatMessages);
+    }
+  }, [chatMessages]);
 
   // Separate effect to handle initiator changes
   useEffect(() => {
@@ -250,6 +357,7 @@ export default function GroupWorkoutLobby() {
             message: data.message,
             timestamp: data.timestamp * 1000, // Convert to milliseconds
             isOwnMessage: data.user_id === Number(user?.id),
+            isSystemMessage: data.is_system_message || false,
           };
           setChatMessages((prev) => [...prev, newMessage]);
 
@@ -282,6 +390,9 @@ export default function GroupWorkoutLobby() {
 
           // Check if current user was kicked
           if (Number(data.kickedUserId) === Number(user?.id)) {
+            // Set flag to indicate user was kicked (not navigating away)
+            isLeavingRef.current = true;
+
             Alert.alert(
               'Removed from Lobby',
               'You have been removed from the workout lobby by the creator.',
@@ -296,22 +407,30 @@ export default function GroupWorkoutLobby() {
               ]
             );
           } else {
-            // Add system message for member leaving (kicked)
-            const leaveMessage: ChatMessage = {
-              id: `system-leave-${data.kickedUserId}-${Date.now()}`,
-              userId: 0, // System message
-              userName: 'System',
-              message: `${data.kickedUserName} left the lobby`,
-              timestamp: Date.now(),
-              isOwnMessage: false,
-              isSystemMessage: true,
-            };
-            setChatMessages((prev) => [...prev, leaveMessage]);
-
             // Remove the kicked member from the list
+            // System message will be broadcast separately and restored from server
             setMembers((prev) => prev.filter((m) => m.user_id !== Number(data.kickedUserId)));
             Alert.alert('Member Removed', `${data.kickedUserName} has been removed from the lobby.`);
           }
+        } else if (eventName === 'LobbyDeleted') {
+          console.log('🗑️ Lobby deleted event received');
+          // Set flag to indicate lobby was deleted (not navigating away)
+          isLeavingRef.current = true;
+
+          // Lobby was deleted (all members left or expired)
+          Alert.alert(
+            'Lobby Closed',
+            'This lobby has been closed.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  leaveLobby();
+                  router.back();
+                },
+              },
+            ]
+          );
         } else {
           console.log('❓ Unknown event:', eventName);
         }
@@ -331,19 +450,8 @@ export default function GroupWorkoutLobby() {
         console.log('🆕 New member joined, re-broadcasting own status');
         setTimeout(() => broadcastMemberStatus(myStatus), 100);
 
-        // Add system message for member join (only if not self)
-        if (userId !== Number(user?.id)) {
-          const joinMessage: ChatMessage = {
-            id: `system-join-${userId}-${Date.now()}`,
-            userId: 0,
-            userName: 'System',
-            message: `${name} joined the lobby`,
-            timestamp: Date.now(),
-            isOwnMessage: false,
-            isSystemMessage: true,
-          };
-          setChatMessages((prevMessages) => [...prevMessages, joinMessage]);
-        }
+        // System message for member join will be created by backend and broadcast
+        // No need to create it locally - it will be restored from server
 
         return [...prev, { user_id: userId, name, status }];
       }
@@ -549,10 +657,26 @@ export default function GroupWorkoutLobby() {
         {
           text: 'Leave',
           style: 'destructive',
-          onPress: () => {
-            broadcastMemberStatus('waiting');
-            leaveLobby();
-            router.back();
+          onPress: async () => {
+            try {
+              // Set flag to indicate user is intentionally leaving
+              // This prevents auto-minimize in cleanup function
+              console.log('🚪 User is leaving lobby - setting flag');
+              isLeavingRef.current = true;
+
+              // Clear lobby state
+              console.log('🚪 Clearing lobby state');
+              leaveLobby();
+
+              // Call API to broadcast member left event
+              await socialService.leaveLobby(sessionId as string);
+              console.log('✅ Left lobby and broadcasted to other members');
+            } catch (error) {
+              console.error('❌ Failed to broadcast leave:', error);
+            } finally {
+              // Navigate back regardless of API success
+              router.back();
+            }
           },
         },
       ]

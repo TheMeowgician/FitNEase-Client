@@ -301,7 +301,6 @@ export default function NotificationsScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView
