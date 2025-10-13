@@ -12,6 +12,7 @@ import ProgressionCard from '../../components/ProgressionCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMLService } from '../../hooks/api/useMLService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
@@ -23,6 +24,7 @@ export default function HomeScreen() {
   const { user, logout } = useAuth();
   const { getRecommendations } = useMLService();
   const { getUserStats, getUserAchievements } = useEngagementService();
+  const { unreadCount } = useNotifications();
 
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -35,7 +37,6 @@ export default function HomeScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
   useEffect(() => {
@@ -47,24 +48,11 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        console.log('🔄 [DASHBOARD] Screen focused - refreshing recent workouts and notifications');
+        console.log('🔄 [DASHBOARD] Screen focused - refreshing recent workouts');
         loadRecentWorkouts();
-        loadUnreadCount();
       }
     }, [user])
   );
-
-  const loadUnreadCount = async () => {
-    if (!user) return;
-
-    try {
-      const count = await commsService.getUnreadCount(user.id);
-      setUnreadCount(count);
-    } catch (error) {
-      console.warn('Failed to load unread count:', error);
-      // Silently fail - don't disrupt user experience
-    }
-  };
 
   const loadRecentWorkouts = async () => {
     if (!user) return;

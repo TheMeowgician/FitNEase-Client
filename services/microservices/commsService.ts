@@ -127,6 +127,27 @@ export class CommsService {
   }
 
   /**
+   * Delete all notifications for a user
+   * DELETE /api/comms/notifications/{userId}/delete-all
+   */
+  public async deleteAllNotifications(userId: number): Promise<{ message: string; deleted_count: number }> {
+    try {
+      console.log('🗑️🗑️ [COMMS] Deleting all notifications for user:', userId);
+
+      const response = await apiClient.delete(
+        'communications',
+        `/api/comms/notifications/${userId}/delete-all`
+      );
+
+      console.log('✅ [COMMS] All notifications deleted successfully:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ [COMMS] Failed to delete all notifications:', error);
+      throw new Error((error as any).message || 'Failed to delete all notifications');
+    }
+  }
+
+  /**
    * Send a custom notification (for testing or admin purposes)
    * POST /api/comms/notifications
    */
@@ -151,6 +172,66 @@ export class CommsService {
     } catch (error) {
       console.error('❌ [COMMS] Failed to send notification:', error);
       throw new Error((error as any).message || 'Failed to send notification');
+    }
+  }
+
+  /**
+   * Send notification when user declines group invitation
+   * POST /api/comms/group-invitation-declined
+   */
+  public async sendGroupInvitationDeclined(
+    inviterUserId: number,
+    groupName: string,
+    declinedUserId: number
+  ): Promise<{ message: string }> {
+    try {
+      console.log('🚫 [COMMS] Sending group invitation declined notification to user:', inviterUserId);
+
+      const response = await apiClient.post(
+        'communications',
+        '/api/comms/group-invitation-declined',
+        {
+          inviter_user_id: inviterUserId,
+          group_name: groupName,
+          declined_user_id: declinedUserId,
+        }
+      );
+
+      console.log('✅ [COMMS] Invitation declined notification sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [COMMS] Failed to send invitation declined notification:', error);
+      throw new Error((error as any).message || 'Failed to send invitation declined notification');
+    }
+  }
+
+  /**
+   * Send notification when user accepts group invitation
+   * POST /api/comms/group-invitation-accepted
+   */
+  public async sendGroupInvitationAccepted(
+    inviterUserId: number,
+    groupName: string,
+    acceptedUserId: number
+  ): Promise<{ message: string }> {
+    try {
+      console.log('✅ [COMMS] Sending group invitation accepted notification to user:', inviterUserId);
+
+      const response = await apiClient.post(
+        'communications',
+        '/api/comms/group-invitation-accepted',
+        {
+          inviter_user_id: inviterUserId,
+          group_name: groupName,
+          accepted_user_id: acceptedUserId,
+        }
+      );
+
+      console.log('✅ [COMMS] Invitation accepted notification sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [COMMS] Failed to send invitation accepted notification:', error);
+      throw new Error((error as any).message || 'Failed to send invitation accepted notification');
     }
   }
 }

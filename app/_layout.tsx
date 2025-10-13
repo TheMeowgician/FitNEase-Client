@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Context Providers
 import { AuthProvider } from '../contexts/AuthContext';
@@ -12,6 +13,7 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { LobbyProvider } from '../contexts/LobbyContext';
+import { NotificationProvider } from '../contexts/NotificationContext';
 
 // Components
 import MinimizedLobbyButton from '../components/lobby/MinimizedLobbyButton';
@@ -42,24 +44,28 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <NetworkProvider>
-          <AuthProvider>
-            <WebSocketProvider>
-              <LobbyProvider>
-                <UserProvider>
-                  <StatusBar style="auto" />
-                  <View style={{ flex: 1 }}>
-                    <Slot />
-                    <MinimizedLobbyButton />
-                  </View>
-                </UserProvider>
-              </LobbyProvider>
-            </WebSocketProvider>
-          </AuthProvider>
-        </NetworkProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <NetworkProvider>
+            <AuthProvider>
+              <NotificationProvider>
+                <WebSocketProvider>
+                  <LobbyProvider>
+                    <UserProvider>
+                      <StatusBar style="auto" />
+                      <View style={{ flex: 1 }}>
+                        <Slot />
+                        <MinimizedLobbyButton />
+                      </View>
+                    </UserProvider>
+                  </LobbyProvider>
+                </WebSocketProvider>
+              </NotificationProvider>
+            </AuthProvider>
+          </NetworkProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

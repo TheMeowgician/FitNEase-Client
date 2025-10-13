@@ -141,7 +141,7 @@ export default function ProgressScreen() {
     switch (level) {
       case 'beginner':
         return {
-          emoji: '🌱',
+          icon: 'flag-outline' as const,
           color: COLORS.SUCCESS[500],
           gradient: [COLORS.SUCCESS[400], COLORS.SUCCESS[600]] as const,
           title: 'Beginner',
@@ -149,7 +149,7 @@ export default function ProgressScreen() {
         };
       case 'intermediate':
         return {
-          emoji: '🔥',
+          icon: 'flash' as const,
           color: COLORS.PRIMARY[500],
           gradient: [COLORS.PRIMARY[400], COLORS.PRIMARY[600]] as const,
           title: 'Intermediate',
@@ -157,7 +157,7 @@ export default function ProgressScreen() {
         };
       case 'advanced':
         return {
-          emoji: '⭐',
+          icon: 'trophy' as const,
           color: COLORS.WARNING[500],
           gradient: [COLORS.WARNING[400], COLORS.WARNING[600]] as const,
           title: 'Advanced',
@@ -165,7 +165,7 @@ export default function ProgressScreen() {
         };
       default:
         return {
-          emoji: '💪',
+          icon: 'fitness' as const,
           color: COLORS.SECONDARY[500],
           gradient: [COLORS.SECONDARY[400], COLORS.SECONDARY[600]] as const,
           title: 'Unknown',
@@ -186,8 +186,8 @@ export default function ProgressScreen() {
               <Text style={styles.headerTitle}>Your Progress</Text>
               <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
             </View>
-            <View style={styles.levelBadge}>
-              <Text style={styles.levelEmoji}>{levelInfo.emoji}</Text>
+            <View style={[styles.levelBadge, { backgroundColor: levelInfo.color + '20' }]}>
+              <Ionicons name={levelInfo.icon} size={28} color={levelInfo.color} />
             </View>
           </View>
         </View>
@@ -208,8 +208,8 @@ export default function ProgressScreen() {
             <Text style={styles.headerTitle}>Your Progress</Text>
             <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
           </View>
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelEmoji}>{levelInfo.emoji}</Text>
+          <View style={[styles.levelBadge, { backgroundColor: levelInfo.color + '20' }]}>
+            <Ionicons name={levelInfo.icon} size={28} color={levelInfo.color} />
           </View>
         </View>
       </View>
@@ -225,7 +225,9 @@ export default function ProgressScreen() {
         {/* Current Level Card */}
         <LinearGradient colors={levelInfo.gradient} style={styles.levelCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <View style={styles.levelCardContent}>
-            <Text style={styles.levelCardEmoji}>{levelInfo.emoji}</Text>
+            <View style={styles.levelCardIconContainer}>
+              <Ionicons name={levelInfo.icon} size={40} color="white" />
+            </View>
             <View style={styles.levelCardText}>
               <Text style={styles.levelCardTitle}>{levelInfo.title} Level</Text>
               <Text style={styles.levelCardDescription}>{levelInfo.description}</Text>
@@ -422,12 +424,8 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: COLORS.NEUTRAL[100],
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  levelEmoji: {
-    fontSize: 32,
   },
   scrollView: {
     flex: 1,
@@ -450,8 +448,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  levelCardEmoji: {
-    fontSize: 48,
+  levelCardIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 16,
   },
   levelCardText: {

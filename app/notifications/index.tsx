@@ -8,12 +8,15 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { commsService } from '../../services/microservices/commsService';
 import { socialService } from '../../services/microservices/socialService';
 import { reverbService } from '../../services/reverbService';
@@ -32,54 +35,39 @@ interface Notification {
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
+  const { markAsRead: markAsReadInContext, refreshUnreadCount, addNotificationListener } = useNotifications();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadNotifications();
-    setupRealtimeNotifications();
+
+    // Subscribe to notification events from NotificationContext
+    console.log('🔌 [NOTIFICATIONS SCREEN] Setting up notification listener');
+    const unsubscribe = addNotificationListener((notification) => {
+      console.log('🔔 [NOTIFICATIONS SCREEN] Received notification from context:', notification);
+
+      // Add the new notification to the top of the list
+      setNotifications((prev) => [notification, ...prev]);
+
+      console.log('📬 [NOTIFICATIONS SCREEN] Added new notification to list');
+
+      // Show a brief alert
+      Alert.alert(
+        notification.title,
+        notification.message,
+        [{ text: 'OK' }]
+      );
+    });
+
+    console.log('✅ [NOTIFICATIONS SCREEN] Notification listener setup complete');
 
     return () => {
-      // Cleanup: disconnect when component unmounts
-      reverbService.disconnect();
+      console.log('🔌 [NOTIFICATIONS SCREEN] Cleaning up notification listener');
+      unsubscribe();
     };
-  }, []);
-
-  const setupRealtimeNotifications = async () => {
-    if (!user) return;
-
-    try {
-      console.log('🔌 Setting up real-time notifications for user:', user.id);
-
-      // Connect to Reverb
-      await reverbService.connect(user.id);
-
-      // Subscribe to user's private notification channel
-      reverbService.subscribeToPrivateChannel(`user.${user.id}`, {
-        onEvent: (eventName: string, data: any) => {
-          console.log('🔔 Received real-time notification:', eventName, data);
-
-          // Check if it's a notification created event
-          if (eventName === 'notification.created' || eventName === '.notification.created') {
-            // Add the new notification to the top of the list
-            setNotifications((prev) => [data.notification, ...prev]);
-
-            // Show a brief alert
-            Alert.alert(
-              data.notification.title,
-              data.notification.message,
-              [{ text: 'OK' }]
-            );
-          }
-        },
-      });
-
-      console.log('✅ Real-time notifications setup complete');
-    } catch (error) {
-      console.error('❌ Failed to setup real-time notifications:', error);
-    }
-  };
+  }, [addNotificationListener]);
 
   const loadNotifications = async () => {
     if (!user) return;
@@ -105,7 +93,8 @@ export default function NotificationsScreen() {
 
   const handleMarkAsRead = async (notificationId: number) => {
     try {
-      await commsService.markNotificationAsRead(notificationId);
+      // Use the context method which also updates badge count
+      await markAsReadInContext(notificationId);
 
       // Update local state
       setNotifications((prev) =>
@@ -115,8 +104,10 @@ export default function NotificationsScreen() {
             : notif
         )
       );
+
+      console.log('✅ [NOTIFICATIONS SCREEN] Marked notification as read and updated badge');
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('❌ [NOTIFICATIONS SCREEN] Error marking notification as read:', error);
     }
   };
 
@@ -132,6 +123,15 @@ export default function NotificationsScreen() {
 
       // Mark notification as read
       await handleMarkAsRead(notification.notification_id);
+
+      // Notify the inviter that their invitation was accepted
+      if (notification.action_data?.inviter_user_id && user) {
+        await commsService.sendGroupInvitationAccepted(
+          notification.action_data.inviter_user_id,
+          notification.action_data.group_name,
+          Number(user.id)
+        );
+      }
 
       Alert.alert(
         'Success',
@@ -163,9 +163,76 @@ export default function NotificationsScreen() {
             try {
               // Mark as read
               await handleMarkAsRead(notification.notification_id);
+
+              // Notify the inviter that their invitation was declined
+              if (notification.action_data?.inviter_user_id && user) {
+                await commsService.sendGroupInvitationDeclined(
+                  notification.action_data.inviter_user_id,
+                  notification.action_data.group_name,
+                  Number(user.id)
+                );
+              }
+
               Alert.alert('Declined', 'Invitation declined');
             } catch (error) {
               console.error('Error declining invitation:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteNotification = async (notificationId: number) => {
+    try {
+      // Delete from backend
+      await commsService.deleteNotification(notificationId);
+
+      // Update local state
+      setNotifications((prev) => prev.filter((notif) => notif.notification_id !== notificationId));
+
+      // Refresh unread count
+      await refreshUnreadCount();
+
+      console.log('✅ [NOTIFICATIONS SCREEN] Notification deleted successfully');
+    } catch (error) {
+      console.error('❌ [NOTIFICATIONS SCREEN] Error deleting notification:', error);
+      Alert.alert('Error', 'Failed to delete notification');
+    }
+  };
+
+  const handleClearAllNotifications = async () => {
+    if (notifications.length === 0) {
+      Alert.alert('No Notifications', 'You have no notifications to clear.');
+      return;
+    }
+
+    Alert.alert(
+      'Clear All Notifications',
+      `Are you sure you want to delete all ${notifications.length} notification${notifications.length > 1 ? 's' : ''}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!user) return;
+
+              // Delete all from backend
+              const response = await commsService.deleteAllNotifications(Number(user.id));
+
+              // Clear local state
+              setNotifications([]);
+
+              // Refresh unread count
+              await refreshUnreadCount();
+
+              console.log(`✅ [NOTIFICATIONS SCREEN] Cleared ${response.deleted_count} notifications`);
+              Alert.alert('Success', `${response.deleted_count} notification${response.deleted_count > 1 ? 's' : ''} cleared`);
+            } catch (error) {
+              console.error('❌ [NOTIFICATIONS SCREEN] Error clearing all notifications:', error);
+              Alert.alert('Error', 'Failed to clear all notifications');
             }
           },
         },
@@ -208,8 +275,49 @@ export default function NotificationsScreen() {
     return date.toLocaleDateString();
   };
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
+  const renderRightActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+    notificationId: number
+  ) => {
+    const trans = dragX.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [0, 100],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => handleDeleteNotification(notificationId)}
+      >
+        <Animated.View
+          style={[
+            styles.deleteButtonContent,
+            {
+              transform: [{ translateX: trans }],
+            },
+          ]}
+        >
+          <Ionicons name="trash" size={24} color="white" />
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
+  const getNotificationIcon = (notification: Notification) => {
+    // Check action_data.type first for more specific icons
+    if (notification.action_data?.type === 'group_invite_declined') {
+      return { name: 'person-remove' as const, color: '#EF4444' };
+    }
+
+    if (notification.action_data?.type === 'group_invite_accepted') {
+      return { name: 'person-add' as const, color: '#10B981' };
+    }
+
+    // Fall back to notification_type
+    switch (notification.notification_type) {
       case 'group_invite':
         return { name: 'people' as const, color: COLORS.PRIMARY[600] };
       case 'achievement':
@@ -218,61 +326,70 @@ export default function NotificationsScreen() {
         return { name: 'person-add' as const, color: '#3B82F6' };
       case 'workout_reminder':
         return { name: 'fitness' as const, color: '#8B5CF6' };
+      case 'social':
+        return { name: 'people-circle' as const, color: COLORS.PRIMARY[600] };
       default:
         return { name: 'notifications' as const, color: COLORS.SECONDARY[400] };
     }
   };
 
   const renderNotificationItem = (notification: Notification) => {
-    const icon = getNotificationIcon(notification.notification_type);
+    const icon = getNotificationIcon(notification);
     const isGroupInvitation = notification.action_data?.type === 'group_invite';
 
     return (
-      <TouchableOpacity
+      <Swipeable
         key={notification.notification_id}
-        style={[
-          styles.notificationCard,
-          !notification.is_read && styles.notificationUnread,
-        ]}
-        onPress={() => handleNotificationPress(notification)}
-        activeOpacity={0.7}
+        renderRightActions={(progress, dragX) =>
+          renderRightActions(progress, dragX, notification.notification_id)
+        }
+        overshootRight={false}
       >
-        <View style={[styles.notificationIconContainer, { backgroundColor: icon.color + '15' }]}>
-          <Ionicons name={icon.name} size={24} color={icon.color} />
-        </View>
-
-        <View style={styles.notificationContent}>
-          <View style={styles.notificationHeader}>
-            <Text style={styles.notificationTitle}>{notification.title}</Text>
-            {!notification.is_read && <View style={styles.unreadDot} />}
+        <TouchableOpacity
+          style={[
+            styles.notificationCard,
+            !notification.is_read && styles.notificationUnread,
+          ]}
+          onPress={() => handleNotificationPress(notification)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.notificationIconContainer, { backgroundColor: icon.color + '15' }]}>
+            <Ionicons name={icon.name} size={24} color={icon.color} />
           </View>
 
-          <Text style={styles.notificationMessage}>{notification.message}</Text>
-
-          <Text style={styles.notificationTime}>{formatTimeAgo(notification.created_at)}</Text>
-
-          {/* Group Invitation Action Buttons */}
-          {isGroupInvitation && !notification.is_read && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.acceptButton]}
-                onPress={() => handleAcceptGroupInvitation(notification)}
-              >
-                <Ionicons name="checkmark" size={18} color="white" />
-                <Text style={styles.acceptButtonText}>Accept</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButton, styles.declineButton]}
-                onPress={() => handleDeclineGroupInvitation(notification)}
-              >
-                <Ionicons name="close" size={18} color="#EF4444" />
-                <Text style={styles.declineButtonText}>Decline</Text>
-              </TouchableOpacity>
+          <View style={styles.notificationContent}>
+            <View style={styles.notificationHeader}>
+              <Text style={styles.notificationTitle}>{notification.title}</Text>
+              {!notification.is_read && <View style={styles.unreadDot} />}
             </View>
-          )}
-        </View>
-      </TouchableOpacity>
+
+            <Text style={styles.notificationMessage}>{notification.message}</Text>
+
+            <Text style={styles.notificationTime}>{formatTimeAgo(notification.created_at)}</Text>
+
+            {/* Group Invitation Action Buttons */}
+            {isGroupInvitation && !notification.is_read && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.acceptButton]}
+                  onPress={() => handleAcceptGroupInvitation(notification)}
+                >
+                  <Ionicons name="checkmark" size={18} color="white" />
+                  <Text style={styles.acceptButtonText}>Accept</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.declineButton]}
+                  onPress={() => handleDeclineGroupInvitation(notification)}
+                >
+                  <Ionicons name="close" size={18} color="#EF4444" />
+                  <Text style={styles.declineButtonText}>Decline</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
@@ -284,7 +401,7 @@ export default function NotificationsScreen() {
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Notifications</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 80 }} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
@@ -301,6 +418,18 @@ export default function NotificationsScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
+        <TouchableOpacity
+          onPress={handleClearAllNotifications}
+          style={styles.clearAllButton}
+          disabled={notifications.length === 0}
+        >
+          <Text style={[
+            styles.clearAllButtonText,
+            notifications.length === 0 && styles.clearAllButtonTextDisabled
+          ]}>
+            Clear All
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -328,28 +457,26 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: 'white',
   },
   header: {
     backgroundColor: 'white',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   backButton: {
     padding: 8,
+    marginRight: 12,
   },
   headerTitle: {
     fontSize: 18,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
-  },
-  placeholder: {
-    width: 40,
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -366,22 +493,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    paddingBottom: 16,
   },
   notificationCard: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   notificationUnread: {
-    borderLeftWidth: 4,
+    backgroundColor: '#F0F9FF',
+    borderLeftWidth: 3,
     borderLeftColor: COLORS.PRIMARY[600],
   },
   notificationIconContainer: {
@@ -474,5 +597,35 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[500],
     textAlign: 'center',
     paddingHorizontal: 32,
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    width: 100,
+  },
+  deleteButtonContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 100,
+    height: '100%',
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+    marginTop: 4,
+  },
+  clearAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  clearAllButtonText: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#EF4444',
+  },
+  clearAllButtonTextDisabled: {
+    color: COLORS.SECONDARY[300],
   },
 });
