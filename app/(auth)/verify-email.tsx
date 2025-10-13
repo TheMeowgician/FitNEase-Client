@@ -113,21 +113,17 @@ export default function VerifyEmailScreen() {
       verificationInputRef.current?.clear();
       setEnteredCode('');
 
-      // Email verified successfully! Now redirect to login with pre-filled email
-      const userEmail = user?.email || email || '';
-
+      // Email verified successfully! Backend automatically logged in the user
+      // Show success message and redirect to onboarding
       Alert.alert(
-        '✅ Email Verified Successfully!',
-        'Your email has been verified. Please log in to complete your registration and access FitNEase.',
+        'Email Verified Successfully!',
+        'Welcome to FitNEase! Let\'s personalize your workout experience.',
         [
           {
-            text: 'Log In Now',
+            text: 'Continue',
             onPress: () => {
-              // Redirect to login with pre-filled email
-              router.replace({
-                pathname: '/(auth)/login',
-                params: { email: userEmail, verified: 'true' }
-              });
+              // Redirect to onboarding welcome page
+              router.replace('/(onboarding)/welcome');
             }
           }
         ]
@@ -373,7 +369,7 @@ export default function VerifyEmailScreen() {
               </Text>
 
               <Text style={styles.description}>
-                After verification, you&apos;ll be automatically logged in.
+                After verification, you&apos;ll be automatically logged in and taken to personalize your workout experience.
               </Text>
             </View>
 

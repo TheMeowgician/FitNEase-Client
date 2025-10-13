@@ -1,11 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { Button } from '../../components/ui/Button';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
+
+const { width } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const handleContinue = () => {
@@ -15,6 +17,18 @@ export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
+        {/* FitNEase Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/images/FitNEase_logo_without_text.png')}
+            style={[styles.logo, {
+              width: width * 0.3,
+              height: width * 0.3,
+            }]}
+            resizeMode="contain"
+          />
+        </View>
+
         <Text style={styles.title}>Welcome to FitNEase!</Text>
         <Text style={styles.subtitle}>
           Your personalized Tabata workout companion
@@ -40,6 +54,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
+    // Dynamic size set inline
   },
   title: {
     fontSize: 32,

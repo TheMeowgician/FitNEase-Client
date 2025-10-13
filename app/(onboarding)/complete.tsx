@@ -178,10 +178,14 @@ export default function CompleteScreen() {
   const formatActivityLevel = (level: string): string => {
     const levelNames: { [key: string]: string } = {
       low: 'Low Activity',
+      lightly_active: 'Lightly Active',
       moderate: 'Moderate Activity',
+      moderately_active: 'Moderately Active',
       high: 'High Activity',
+      very_active: 'Very Active',
+      extremely_active: 'Extremely Active',
     };
-    return levelNames[level] || level;
+    return levelNames[level] || level.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   const getBMICategory = (bmiValue: number) => {
@@ -208,6 +212,33 @@ export default function CompleteScreen() {
     };
     return (equipment || []).slice(0, 3).map((item) => equipmentNames[item] || item).join(', ') +
            (equipment.length > 3 ? ` +${equipment.length - 3} more` : '');
+  };
+
+  const formatMuscleGroups = (muscleGroups: string[] | null | undefined): string => {
+    if (!muscleGroups || muscleGroups.length === 0) {
+      return 'Full Body';
+    }
+
+    const muscleGroupNames: { [key: string]: string } = {
+      upper_body: 'Upper Body',
+      lower_body: 'Lower Body',
+      core: 'Core',
+      full_body: 'Full Body',
+      chest: 'Chest',
+      back: 'Back',
+      shoulders: 'Shoulders',
+      arms: 'Arms',
+      legs: 'Legs',
+      glutes: 'Glutes',
+      abs: 'Abs',
+      cardio: 'Cardio',
+    };
+
+    const formatted = (muscleGroups || []).slice(0, 3).map((item) =>
+      muscleGroupNames[item] || item.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    ).join(', ');
+
+    return formatted + (muscleGroups.length > 3 ? ` +${muscleGroups.length - 3} more` : '');
   };
 
   const handleGetStarted = () => {
@@ -332,7 +363,7 @@ export default function CompleteScreen() {
                 {/* BMI & Body Info */}
                 <View style={styles.profileRow}>
                   <Text style={styles.profileLabel}>Body Profile:</Text>
-                  <Text style={styles.profileValue}>
+                  <Text style={[styles.profileValue, styles.profileValueMultiline]}>
                     {onboardingData.assessment.height}cm, {onboardingData.assessment.weight}kg (BMI: {onboardingData.assessment.bmi.toFixed(1)})
                   </Text>
                 </View>
@@ -411,8 +442,7 @@ export default function CompleteScreen() {
                 <View style={styles.profileRow}>
                   <Text style={styles.profileLabel}>Focus Areas:</Text>
                   <Text style={[styles.profileValue, styles.profileValueMultiline]}>
-                    {(onboardingData.preferences.targetMuscleGroups || []).slice(0, 3).join(', ') || 'Full Body'}
-                    {(onboardingData.preferences.targetMuscleGroups || []).length > 3 ? ` +${onboardingData.preferences.targetMuscleGroups.length - 3} more` : ''}
+                    {formatMuscleGroups(onboardingData.preferences.targetMuscleGroups)}
                   </Text>
                 </View>
 
@@ -437,12 +467,12 @@ export default function CompleteScreen() {
 
         {/* What to Expect */}
         <View style={styles.expectationCard}>
-          <Text style={styles.expectationTitle}>What to Expect 📊</Text>
+          <Text style={styles.expectationTitle}>What to Expect</Text>
 
           <View style={styles.expectationList}>
             <View style={styles.expectationItem}>
               <View style={[styles.expectationBullet, { backgroundColor: COLORS.SUCCESS[100] }]}>
-                <Text style={styles.expectationIcon}>✓</Text>
+                <Ionicons name="checkmark" size={16} color={COLORS.SUCCESS[600]} />
               </View>
               <Text style={styles.expectationText}>
                 Personalized Tabata workouts based on your profile
@@ -451,7 +481,7 @@ export default function CompleteScreen() {
 
             <View style={styles.expectationItem}>
               <View style={[styles.expectationBullet, { backgroundColor: COLORS.PRIMARY[100] }]}>
-                <Text style={styles.expectationIcon}>📈</Text>
+                <Ionicons name="trending-up" size={16} color={COLORS.PRIMARY[600]} />
               </View>
               <Text style={styles.expectationText}>
                 Progress tracking and workout history
@@ -460,7 +490,7 @@ export default function CompleteScreen() {
 
             <View style={styles.expectationItem}>
               <View style={[styles.expectationBullet, { backgroundColor: COLORS.SECONDARY[100] }]}>
-                <Text style={styles.expectationIcon}>🎯</Text>
+                <Ionicons name="target" size={16} color={COLORS.SECONDARY[600]} />
               </View>
               <Text style={styles.expectationText}>
                 Smart recommendations that adapt as you progress
@@ -469,7 +499,7 @@ export default function CompleteScreen() {
 
             <View style={styles.expectationItem}>
               <View style={[styles.expectationBullet, { backgroundColor: COLORS.WARNING[100] }]}>
-                <Text style={styles.expectationIcon}>🤖</Text>
+                <Ionicons name="sparkles" size={16} color={COLORS.WARNING[600]} />
               </View>
               <Text style={styles.expectationText}>
                 AI-powered workouts that learn your preferences
@@ -482,7 +512,7 @@ export default function CompleteScreen() {
       {/* Get Started Button */}
       <View style={styles.buttonContainer}>
         <Button
-          title="Start Your Fitness Journey 🚀"
+          title="Start Your Fitness Journey"
           onPress={handleGetStarted}
           style={styles.button}
         />
@@ -688,9 +718,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-  },
-  expectationIcon: {
-    fontSize: 14,
   },
   expectationText: {
     fontSize: 14,

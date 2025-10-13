@@ -358,14 +358,70 @@ export class AuthService {
     }
   }
 
-  public async verifyEmail(request: VerifyEmailRequest): Promise<{ message: string; user: User }> {
+  public async verifyEmail(request: VerifyEmailRequest): Promise<{ message: string; user: User; token?: string; abilities?: string[]; expires_at?: string }> {
     try {
       // For 6-digit codes, use verify-code endpoint
-      const response = await apiClient.post<{ message: string; user: User }>('auth', '/api/auth/verify-code', {
+      const response = await apiClient.post('auth', '/api/auth/verify-code', {
         email: request.email,
         code: request.token
       });
-      return response.data;
+
+      const rawData = response.data;
+      console.log('✅ Email verification response:', rawData);
+
+      // If backend returns token (auto-login after verification), save it
+      if (rawData.token) {
+        const tokens = {
+          accessToken: rawData.token,
+          refreshToken: rawData.token, // Laravel Sanctum uses same token
+        };
+
+        await tokenManager.updateTokensWithAutoMetadata(tokens);
+        console.log('✅ Verification tokens saved to storage');
+      }
+
+      // Transform user data from snake_case to camelCase
+      const transformedUser: User = {
+        id: rawData.user.user_id?.toString() || '',
+        email: rawData.user.email,
+        username: rawData.user.username,
+        firstName: rawData.user.first_name,
+        lastName: rawData.user.last_name,
+        isEmailVerified: !!rawData.user.email_verified_at,
+        onboardingCompleted: !!rawData.user.onboarding_completed,
+        profilePicture: rawData.user.profile_picture,
+        dateOfBirth: rawData.user.date_of_birth,
+        gender: rawData.user.gender,
+        height: rawData.user.height,
+        weight: rawData.user.weight,
+        fitnessLevel: rawData.user.fitness_level,
+        goals: rawData.user.fitness_goals || [],
+        role: rawData.user.role,
+        createdAt: rawData.user.created_at,
+        updatedAt: rawData.user.updated_at,
+        // User Personalization fields
+        targetMuscleGroups: rawData.user.target_muscle_groups || [],
+        availableEquipment: rawData.user.available_equipment || [],
+        timeConstraints: rawData.user.time_constraints_minutes,
+        activityLevel: rawData.user.activity_level,
+        workoutExperience: rawData.user.workout_experience_years,
+        phoneNumber: rawData.user.phone_number,
+        workoutDays: rawData.user.preferred_workout_days || [],
+        // User Progression fields
+        totalWorkoutsCompleted: rawData.user.total_workouts_completed,
+        totalWorkoutMinutes: rawData.user.total_workout_minutes,
+        activeDays: rawData.user.active_days,
+        currentStreakDays: rawData.user.current_streak_days,
+        longestStreakDays: rawData.user.longest_streak_days,
+      };
+
+      return {
+        message: rawData.message,
+        user: transformedUser,
+        token: rawData.token,
+        abilities: rawData.abilities,
+        expires_at: rawData.expires_at
+      };
     } catch (error) {
       throw new Error((error as any).message || 'Email verification failed');
     }

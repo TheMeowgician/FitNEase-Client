@@ -136,9 +136,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         token: code
       });
 
-      // Note: After email verification, user needs to login to get tokens
-      // Don't try to refresh user data here since user isn't authenticated yet
-      console.log('✅ Email verified. User needs to login to get tokens.');
+      // Backend now returns tokens and user data after verification
+      // Automatically log in the user
+      if (response.user && response.token) {
+        console.log('✅ Email verified successfully! Auto-logging in user...');
+        setUser(response.user);
+        // Small delay to ensure state propagates
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } else {
+        console.log('✅ Email verified. User needs to login to get tokens.');
+      }
     } catch (error) {
       console.error('Email verification failed:', error);
       throw error;
