@@ -15,22 +15,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLobby } from '../../contexts/LobbyContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import reverbService from '../../services/reverbService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function GroupDetailsScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
   const { goBack } = useSmartBack();
   const { getGroupWorkoutRecommendations } = useMLService();
-  const { lobbyState, isInLobby, leaveLobby } = useLobby();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [group, setGroup] = useState<Group | null>(null);
@@ -42,6 +41,9 @@ export default function GroupDetailsScreen() {
   const [isGeneratingWorkout, setIsGeneratingWorkout] = useState(false);
   const [showGroupWorkoutModal, setShowGroupWorkoutModal] = useState(false);
   const [groupWorkout, setGroupWorkout] = useState<any>(null);
+
+  // Active lobby state - tracks if user is currently in a lobby for this group
+  const [activeLobbySession, setActiveLobbySession] = useState<string | null>(null);
 
   // Invite by username states
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -55,6 +57,47 @@ export default function GroupDetailsScreen() {
   useEffect(() => {
     loadGroupDetails();
   }, [id]);
+
+  // Check for active lobby when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      checkForActiveLobby();
+    }, [id])
+  );
+
+  const checkForActiveLobby = async () => {
+    try {
+      const storageKey = `activeLobby_group_${id}_user_${user?.id}`;
+      const storedSessionId = await AsyncStorage.getItem(storageKey);
+
+      if (storedSessionId) {
+        console.log('✅ Found stored lobby session:', storedSessionId);
+
+        // Validate that the lobby still exists on the server
+        try {
+          const response = await socialService.getLobbyStateV2(storedSessionId);
+
+          if (response.status === 'success' && response.data) {
+            console.log('✅ Lobby is still active on server');
+            setActiveLobbySession(storedSessionId);
+          } else {
+            console.log('⚠️ Lobby not found on server, clearing storage');
+            await AsyncStorage.removeItem(storageKey);
+            setActiveLobbySession(null);
+          }
+        } catch (error) {
+          console.log('❌ Failed to validate lobby, clearing storage:', error);
+          await AsyncStorage.removeItem(storageKey);
+          setActiveLobbySession(null);
+        }
+      } else {
+        console.log('ℹ️ No active lobby session found');
+        setActiveLobbySession(null);
+      }
+    } catch (error) {
+      console.error('❌ Error checking for active lobby:', error);
+    }
+  };
 
   // Listen to presence channel events for real-time online status
   // Note: The global subscription is already done in ReverbProvider
@@ -357,26 +400,35 @@ export default function GroupDetailsScreen() {
       setIsGeneratingWorkout(true);
       console.log('🚪 Creating workout lobby for', members.length, 'members...');
 
-      // Create a workout session immediately with minimal workout data
-      // This allows WebSocket to work from the start
+      // Create a V2 event-sourced lobby session
+      // This creates an event-sourced lobby that works with the new architecture
       // Exercises will be generated later when user clicks "Generate Exercises"
-      console.log('📡 Creating workout session on backend...');
-      const sessionResponse = await socialService.initiateGroupWorkout(
-        id as string,
+      console.log('📡 Creating V2 lobby session on backend...');
+      const sessionResponse = await socialService.createLobbyV2(
+        parseInt(id as string),
         {
           workout_format: 'tabata',
           exercises: [], // Empty exercises initially - will be populated when user generates them
         }
       );
 
-      console.log('✅ Workout session created:', sessionResponse);
+      console.log('✅ V2 Lobby session created:', sessionResponse);
 
-      // Navigate to lobby with the session ID
+      // Store active lobby session ID in state and AsyncStorage
+      const sessionId = sessionResponse.data.session_id;
+      setActiveLobbySession(sessionId);
+
+      // Persist to AsyncStorage so it survives navigation
+      const storageKey = `activeLobby_group_${id}_user_${user?.id}`;
+      await AsyncStorage.setItem(storageKey, sessionId);
+      console.log('💾 Saved active lobby to storage:', storageKey, sessionId);
+
+      // Navigate to lobby with the session ID from V2 response
       // The lobby will show online members and have a "Generate Exercises" button
       router.push({
         pathname: '/workout/group-lobby',
         params: {
-          sessionId: sessionResponse.session_id,
+          sessionId: sessionResponse.data.session_id,
           groupId: id as string,
           workoutData: '', // Empty - exercises will be generated in lobby
           initiatorId: user?.id.toString() || '',
@@ -392,6 +444,21 @@ export default function GroupDetailsScreen() {
     } finally {
       setIsGeneratingWorkout(false);
     }
+  };
+
+  const handleReturnToLobby = () => {
+    if (!activeLobbySession) return;
+
+    router.push({
+      pathname: '/workout/group-lobby',
+      params: {
+        sessionId: activeLobbySession,
+        groupId: id as string,
+        workoutData: '',
+        initiatorId: user?.id.toString() || '',
+        isCreatingLobby: 'false',
+      },
+    });
   };
 
   const handleStartGroupWorkout = (workout?: any, sessionId?: string) => {
@@ -492,47 +559,32 @@ export default function GroupDetailsScreen() {
             <Text style={styles.groupDescriptionLarge}>{group.description}</Text>
           )}
 
-          {/* Create Lobby Button */}
+          {/* Active Lobby Indicator - Shows when user is in a lobby */}
+          {activeLobbySession && (
+            <TouchableOpacity
+              style={styles.activeLobbyBanner}
+              onPress={handleReturnToLobby}
+              activeOpacity={0.8}
+            >
+              <View style={styles.activeLobbyIcon}>
+                <Ionicons name="people" size={20} color="white" />
+              </View>
+              <View style={styles.activeLobbyContent}>
+                <Text style={styles.activeLobbyTitle}>Active Lobby</Text>
+                <Text style={styles.activeLobbySubtitle}>Tap to return to your workout lobby</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.SUCCESS[600]} />
+            </TouchableOpacity>
+          )}
+
+          {/* Create Lobby Button - Disabled if already in lobby */}
           <TouchableOpacity
             style={[
               styles.startWorkoutButton,
-              isInLobby && styles.startWorkoutButtonDisabled
+              (isGeneratingWorkout || activeLobbySession) && styles.startWorkoutButtonDisabled
             ]}
-            onPress={isInLobby ? () => {
-              Alert.alert(
-                'Already in Lobby',
-                'You are currently in an active lobby. You can either go to the lobby or clear it if the session is no longer active.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Go to Lobby',
-                    onPress: () => {
-                      if (lobbyState) {
-                        router.push({
-                          pathname: '/workout/group-lobby',
-                          params: {
-                            sessionId: lobbyState.sessionId,
-                            groupId: lobbyState.groupId,
-                            workoutData: lobbyState.workoutData,
-                            initiatorId: lobbyState.initiatorId,
-                            isCreatingLobby: lobbyState.isCreatingLobby,
-                          },
-                        });
-                      }
-                    }
-                  },
-                  {
-                    text: 'Clear Lobby',
-                    style: 'destructive',
-                    onPress: () => {
-                      leaveLobby();
-                      Alert.alert('Lobby Cleared', 'The lobby state has been cleared. You can now create a new lobby.');
-                    }
-                  }
-                ]
-              );
-            } : handleGenerateGroupWorkout}
-            disabled={isGeneratingWorkout || isInLobby}
+            onPress={handleGenerateGroupWorkout}
+            disabled={isGeneratingWorkout || !!activeLobbySession}
             activeOpacity={0.8}
           >
             {isGeneratingWorkout ? (
@@ -540,9 +592,9 @@ export default function GroupDetailsScreen() {
                 <ActivityIndicator color="white" />
                 <Text style={styles.startWorkoutButtonText}>Creating Lobby...</Text>
               </>
-            ) : isInLobby ? (
+            ) : activeLobbySession ? (
               <>
-                <Ionicons name="alert-circle" size={24} color="white" />
+                <Ionicons name="checkmark-circle" size={24} color="white" />
                 <Text style={styles.startWorkoutButtonText}>Already in Lobby</Text>
               </>
             ) : (
@@ -1395,5 +1447,39 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.SECONDARY[200],
     paddingTop: 16,
+  },
+  activeLobbyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[50],
+    borderColor: COLORS.SUCCESS[300],
+    borderWidth: 2,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    width: '100%',
+  },
+  activeLobbyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.SUCCESS[600],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  activeLobbyContent: {
+    flex: 1,
+  },
+  activeLobbyTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SUCCESS[700],
+  },
+  activeLobbySubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SUCCESS[600],
+    marginTop: 2,
   },
 });

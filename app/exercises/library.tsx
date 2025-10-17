@@ -7,10 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { contentService, Exercise } from '../../services/microservices/contentService';
@@ -189,7 +189,7 @@ export default function ExerciseLibraryScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="white" />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
@@ -200,7 +200,7 @@ export default function ExerciseLibraryScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="white" />
 
       {/* Fixed Header */}

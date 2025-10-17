@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
@@ -25,6 +26,7 @@ import { socialService } from '../../services/microservices/socialService';
 import { reverbService } from '../../services/reverbService';
 import { TabataWorkoutSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS } from '../../constants/colors';
+import { useLobbyStore } from '../../stores/lobbyStore';
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
 type SessionStatus = 'ready' | 'running' | 'paused' | 'completed';
@@ -180,11 +182,40 @@ export default function WorkoutSessionScreen() {
           setSessionState(prev => ({ ...prev, status: 'running' }));
         } else if (eventName === 'WorkoutStopped') {
           console.log(`🛑 Workout stopped by ${data.stopped_by_name}`);
+          // Clear AsyncStorage and lobby state
+          clearLobbyAndStorage();
+
+          // Navigate immediately to group screen (don't wait for user to dismiss alert)
+          if (groupId) {
+            console.log('🏠 [WORKOUT STOPPED] Navigating to group screen:', groupId);
+            router.replace(`/groups/${groupId}`);
+          } else {
+            console.log('🏠 [WORKOUT STOPPED] No group ID, going back');
+            router.back();
+          }
+
+          // Show alert after navigation (non-blocking)
+          setTimeout(() => {
+            Alert.alert(
+              'Workout Ended',
+              `The workout has been stopped by ${data.stopped_by_name}.`,
+              [{ text: 'OK' }]
+            );
+          }, 500);
+        } else if (eventName === 'MemberLeftSession') {
+          console.log(`👋 Member left session: ${data.member_name}`);
+          // Show toast notification that member left
           Alert.alert(
-            'Workout Ended',
-            `The workout has been stopped by ${data.stopped_by_name}.`,
-            [{ text: 'OK', onPress: () => router.back() }]
+            'Member Left',
+            `${data.member_name} has left the workout session.`,
+            [{ text: 'OK' }],
+            { cancelable: true }
           );
+        } else if (eventName === 'WorkoutCompleted') {
+          console.log(`✅ Workout finished by ${data.initiatorName}`);
+          // Complete the workout for this member
+          setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+          setTimeout(() => completeSession(), 100);
         }
       },
     });
@@ -216,6 +247,21 @@ export default function WorkoutSessionScreen() {
 
   const handleBackPress = () => {
     if (sessionState.status === 'running') {
+      // For group workouts, only initiator can pause - skip pause for non-initiators
+      if (type === 'group_tabata' && !isInitiator) {
+        // Non-initiator trying to exit - show confirm dialog without pausing
+        Alert.alert(
+          'Leave Workout',
+          'Are you sure you want to leave this workout? You will exit the session.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Leave', style: 'destructive', onPress: exitSession }
+          ]
+        );
+        return true;
+      }
+
+      // Solo workout or group initiator - pause then show exit dialog
       pauseSession();
       Alert.alert(
         'Exit Workout',
@@ -320,12 +366,50 @@ export default function WorkoutSessionScreen() {
     }
   };
 
+  /**
+   * Clear lobby state and AsyncStorage
+   */
+  const clearLobbyAndStorage = async () => {
+    if (!tabataSession || !groupId || !user) return;
+
+    const sessionId = tabataSession.session_id;
+    const storageKey = `activeLobby_group_${groupId}_user_${user.id}`;
+
+    console.log('🗑️ [CLEANUP] Clearing lobby and storage', {
+      sessionId,
+      groupId,
+      storageKey
+    });
+
+    try {
+      // Clear AsyncStorage
+      await AsyncStorage.removeItem(storageKey);
+      console.log('✅ [CLEANUP] AsyncStorage cleared');
+
+      // Unsubscribe from session channel (prevent receiving pause/resume/stop events after leaving)
+      reverbService.unsubscribe(`private-session.${sessionId}`);
+      console.log('✅ [CLEANUP] Unsubscribed from session channel');
+
+      // Unsubscribe from lobby channel (uses private- prefix)
+      reverbService.unsubscribe(`private-lobby.${sessionId}`);
+      console.log('✅ [CLEANUP] Unsubscribed from lobby channel');
+
+      // Clear lobby from global store
+      const store = useLobbyStore.getState();
+      store.clearLobby();
+      console.log('✅ [CLEANUP] Lobby cleared from global store');
+    } catch (error) {
+      console.error('❌ [CLEANUP] Failed to clear lobby/storage:', error);
+    }
+  };
+
   const startSession = () => {
     setSessionStartTime(new Date());
     setSessionState(prev => ({ ...prev, status: 'running' }));
   };
 
   const pauseSession = async () => {
+    console.log('⏸️ [PAUSE] Pause button pressed');
     // For group workouts, only initiator can pause
     if (type === 'group_tabata') {
       if (!isInitiator) {
@@ -333,26 +417,30 @@ export default function WorkoutSessionScreen() {
         return;
       }
 
+      console.log('⏸️ [PAUSE] Pausing locally for instant feedback');
       // Pause locally IMMEDIATELY for instant feedback
       setSessionState(prev => ({ ...prev, status: 'paused' }));
 
       // Then broadcast pause to all members
       if (tabataSession) {
         try {
+          console.log('⏸️ [PAUSE] Broadcasting pause to all members');
           await socialService.pauseWorkout(tabataSession.session_id);
-          console.log('⏸️ Pause broadcasted to all members');
+          console.log('✅ [PAUSE] Pause broadcasted successfully');
         } catch (error) {
-          console.error('❌ Failed to broadcast pause:', error);
+          console.error('❌ [PAUSE] Failed to broadcast pause:', error);
           Alert.alert('Error', 'Failed to pause workout for all members');
         }
       }
     } else {
       // Solo workout - pause immediately
+      console.log('⏸️ [PAUSE] Solo workout - pausing immediately');
       setSessionState(prev => ({ ...prev, status: 'paused' }));
     }
   };
 
   const resumeSession = async () => {
+    console.log('▶️ [RESUME] Resume button pressed');
     // For group workouts, only initiator can resume
     if (type === 'group_tabata') {
       if (!isInitiator) {
@@ -360,26 +448,30 @@ export default function WorkoutSessionScreen() {
         return;
       }
 
+      console.log('▶️ [RESUME] Resuming locally for instant feedback');
       // Resume locally IMMEDIATELY for instant feedback
       setSessionState(prev => ({ ...prev, status: 'running' }));
 
       // Then broadcast resume to all members
       if (tabataSession) {
         try {
+          console.log('▶️ [RESUME] Broadcasting resume to all members');
           await socialService.resumeWorkout(tabataSession.session_id);
-          console.log('▶️ Resume broadcasted to all members');
+          console.log('✅ [RESUME] Resume broadcasted successfully');
         } catch (error) {
-          console.error('❌ Failed to broadcast resume:', error);
+          console.error('❌ [RESUME] Failed to broadcast resume:', error);
           Alert.alert('Error', 'Failed to resume workout for all members');
         }
       }
     } else {
       // Solo workout - resume immediately
+      console.log('▶️ [RESUME] Solo workout - resuming immediately');
       setSessionState(prev => ({ ...prev, status: 'running' }));
     }
   };
 
   const stopGroupSession = async () => {
+    console.log('🛑 [STOP] Stop button pressed');
     if (!isInitiator) {
       Alert.alert('Notice', 'Only the workout initiator can stop the session for everyone.');
       return;
@@ -397,14 +489,25 @@ export default function WorkoutSessionScreen() {
             // Broadcast stop to all members
             if (tabataSession) {
               try {
+                console.log('🛑 [STOP] Broadcasting stop to all members');
                 await socialService.stopWorkout(tabataSession.session_id);
-                console.log('🛑 Stop broadcasted to all members');
+                console.log('✅ [STOP] Stop broadcasted successfully');
               } catch (error) {
-                console.error('❌ Failed to broadcast stop:', error);
+                console.error('❌ [STOP] Failed to broadcast stop:', error);
               }
             }
-            // Exit for initiator
-            await exitSession();
+
+            // Clear local storage and state
+            await clearLobbyAndStorage();
+
+            // Navigate to group screen
+            if (groupId) {
+              console.log('🏠 [STOP] Navigating to group screen:', groupId);
+              router.replace(`/groups/${groupId}`);
+            } else {
+              console.log('🛑 [STOP] Exiting session for initiator');
+              router.back();
+            }
           }
         }
       ]
@@ -412,6 +515,8 @@ export default function WorkoutSessionScreen() {
   };
 
   const exitSession = async () => {
+    console.log('❌ [EXIT] Exit session called');
+
     try {
       if (sessionStartTime && user) {
         // Use session_id for new Tabata sessions, or workoutId for old format
@@ -420,7 +525,7 @@ export default function WorkoutSessionScreen() {
         // Save partial session data
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
-          userId: user.id,
+          userId: Number(user.id),
           sessionType: type === 'group_tabata' ? 'group' : 'individual',
           startTime: sessionStartTime,
           endTime: new Date(),
@@ -430,10 +535,35 @@ export default function WorkoutSessionScreen() {
           notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises completed` : 'Partial workout'}`
         });
       }
+
+      // For group workouts, leave lobby and clean up
+      if (type === 'group_tabata' && tabataSession && user) {
+        try {
+          console.log('👋 [EXIT] Leaving lobby and notifying session members...');
+
+          // Leave the lobby (removes user from lobby members list)
+          // Backend automatically broadcasts member left event to LOBBY channel
+          await socialService.leaveLobbyV2(tabataSession.session_id);
+          console.log('✅ [EXIT] Left lobby successfully');
+
+          // Clear local storage and state
+          await clearLobbyAndStorage();
+          console.log('✅ [EXIT] Cleanup completed');
+        } catch (error) {
+          console.error('❌ [EXIT] Failed to leave lobby:', error);
+        }
+      }
     } catch (error) {
-      console.error('Error saving partial session:', error);
+      console.error('❌ [EXIT] Error saving partial session:', error);
     }
-    router.back();
+
+    // Navigate to groups screen for group workouts, otherwise go back
+    if (type === 'group_tabata' && groupId) {
+      console.log('🏠 [EXIT] Navigating to group screen:', groupId);
+      router.replace(`/groups/${groupId}`);
+    } else {
+      router.back();
+    }
   };
 
   const completeSession = async () => {
@@ -444,7 +574,7 @@ export default function WorkoutSessionScreen() {
 
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
-          userId: user.id,
+          userId: Number(user.id),
           sessionType: type === 'group_tabata' ? 'group' : 'individual',
           startTime: sessionStartTime,
           endTime: new Date(),
@@ -737,8 +867,8 @@ export default function WorkoutSessionScreen() {
             </View>
           )}
 
-          {/* Auto Finish Button - DEV ONLY for testing */}
-          {__DEV__ && sessionState.status === 'running' && (
+          {/* Auto Finish Button - DEV ONLY for testing - Only for group initiator or solo workouts */}
+          {__DEV__ && sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator) && (
             <TouchableOpacity
               style={[styles.secondaryButton, {
                 backgroundColor: 'rgba(251, 146, 60, 0.25)',
@@ -746,13 +876,32 @@ export default function WorkoutSessionScreen() {
                 marginTop: 12,
                 maxWidth: '100%',
               }]}
-              onPress={() => {
-                setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
-                setTimeout(() => completeSession(), 100);
+              onPress={async () => {
+                if (type === 'group_tabata' && tabataSession) {
+                  // For group workouts, broadcast finish to all members
+                  try {
+                    console.log('🏁 [AUTO FINISH] Broadcasting finish to all members');
+                    console.log('🏁 [AUTO FINISH] Session ID:', tabataSession.session_id);
+                    await socialService.finishWorkout(tabataSession.session_id);
+                    console.log('✅ [AUTO FINISH] Finish broadcasted successfully');
+                    // Complete locally as well
+                    setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+                    setTimeout(() => completeSession(), 100);
+                  } catch (error) {
+                    console.error('❌ [AUTO FINISH] Failed to broadcast finish:', error);
+                    Alert.alert('Error', 'Failed to finish workout for all members');
+                  }
+                } else {
+                  // Solo workout - finish immediately
+                  setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+                  setTimeout(() => completeSession(), 100);
+                }
               }}
             >
               <Ionicons name="flash" size={24} color="#F59E0B" />
-              <Text style={[styles.secondaryButtonText, { color: '#F59E0B' }]}>AUTO FINISH (TEST)</Text>
+              <Text style={[styles.secondaryButtonText, { color: '#F59E0B' }]}>
+                {type === 'group_tabata' ? 'FINISH FOR ALL (TEST)' : 'AUTO FINISH (TEST)'}
+              </Text>
             </TouchableOpacity>
           )}
 

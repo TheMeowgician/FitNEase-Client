@@ -490,7 +490,7 @@ export default function CompleteScreen() {
 
             <View style={styles.expectationItem}>
               <View style={[styles.expectationBullet, { backgroundColor: COLORS.SECONDARY[100] }]}>
-                <Ionicons name="target" size={16} color={COLORS.SECONDARY[600]} />
+                <Ionicons name="radio-button-on" size={16} color={COLORS.SECONDARY[600]} />
               </View>
               <Text style={styles.expectationText}>
                 Smart recommendations that adapt as you progress

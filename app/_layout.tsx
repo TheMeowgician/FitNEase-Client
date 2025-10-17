@@ -12,11 +12,7 @@ import { UserProvider } from '../contexts/UserContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
-import { LobbyProvider } from '../contexts/LobbyContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
-
-// Components
-import MinimizedLobbyButton from '../components/lobby/MinimizedLobbyButton';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -51,15 +47,12 @@ export default function RootLayout() {
             <AuthProvider>
               <NotificationProvider>
                 <WebSocketProvider>
-                  <LobbyProvider>
-                    <UserProvider>
-                      <StatusBar style="auto" />
-                      <View style={{ flex: 1 }}>
-                        <Slot />
-                        <MinimizedLobbyButton />
-                      </View>
-                    </UserProvider>
-                  </LobbyProvider>
+                  <UserProvider>
+                    <StatusBar style="auto" />
+                    <View style={{ flex: 1 }}>
+                      <Slot />
+                    </View>
+                  </UserProvider>
                 </WebSocketProvider>
               </NotificationProvider>
             </AuthProvider>

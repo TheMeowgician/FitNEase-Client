@@ -997,21 +997,6 @@ export class SocialService {
   }
 
   // Workout Lobby
-  public async updateLobbyStatus(
-    sessionId: string,
-    status: 'waiting' | 'ready'
-  ): Promise<void> {
-    try {
-      await apiClient.post(
-        'social',
-        `/api/social/lobby/${sessionId}/status`,
-        { status }
-      );
-    } catch (error) {
-      throw new Error((error as any).message || 'Failed to update lobby status');
-    }
-  }
-
   public async startWorkout(sessionId: string): Promise<{
     session_id: string;
     start_time: number;
@@ -1025,37 +1010,6 @@ export class SocialService {
       return response.data.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to start workout');
-    }
-  }
-
-  public async inviteMemberToLobby(
-    sessionId: string,
-    targetUserId: number,
-    groupId: string,
-    workoutData: any
-  ): Promise<void> {
-    try {
-      console.log('📤 [SOCIAL] Sending lobby invitation:', {
-        sessionId,
-        targetUserId,
-        groupId,
-        workoutData
-      });
-
-      await apiClient.post(
-        'social',
-        `/api/social/lobby/${sessionId}/invite`,
-        {
-          target_user_id: targetUserId,
-          group_id: parseInt(groupId),
-          workout_data: workoutData
-        }
-      );
-
-      console.log('✅ [SOCIAL] Lobby invitation sent successfully');
-    } catch (error) {
-      console.error('❌ [SOCIAL] Failed to send lobby invitation:', error);
-      throw new Error((error as any).message || 'Failed to send lobby invitation');
     }
   }
 
@@ -1084,160 +1038,10 @@ export class SocialService {
     }
   }
 
-  public async sendLobbyMessage(
-    sessionId: string,
-    message: string
-  ): Promise<{
-    message_id: string;
-    timestamp: number;
-  }> {
-    try {
-      console.log('📤 [SOCIAL] Sending lobby chat message:', {
-        sessionId,
-        messageLength: message.length
-      });
 
-      const response = await apiClient.post(
-        'social',
-        `/api/social/lobby/${sessionId}/message`,
-        {
-          message
-        }
-      );
 
-      console.log('✅ [SOCIAL] Chat message sent successfully');
-      return response.data.data;
-    } catch (error) {
-      console.error('❌ [SOCIAL] Failed to send chat message:', error);
-      throw new Error((error as any).message || 'Failed to send chat message');
-    }
-  }
 
-  public async passInitiatorRole(
-    sessionId: string,
-    newInitiatorId: number
-  ): Promise<{
-    new_initiator_id: number;
-    new_initiator_name: string;
-  }> {
-    try {
-      console.log('📤 [SOCIAL] Passing initiator role:', {
-        sessionId,
-        newInitiatorId
-      });
 
-      const response = await apiClient.post(
-        'social',
-        `/api/social/lobby/${sessionId}/pass-initiator`,
-        {
-          new_initiator_id: newInitiatorId
-        }
-      );
-
-      console.log('✅ [SOCIAL] Initiator role passed successfully');
-      return response.data.data;
-    } catch (error) {
-      console.error('❌ [SOCIAL] Failed to pass initiator role:', error);
-      throw new Error((error as any).message || 'Failed to pass initiator role');
-    }
-  }
-
-  public async kickUserFromLobby(
-    sessionId: string,
-    userId: number
-  ): Promise<{
-    kicked_user_id: number;
-    kicked_user_name: string;
-  }> {
-    try {
-      console.log('📤 [SOCIAL] Kicking user from lobby:', {
-        sessionId,
-        userId
-      });
-
-      const response = await apiClient.post(
-        'social',
-        `/api/social/lobby/${sessionId}/kick`,
-        {
-          user_id: userId
-        }
-      );
-
-      console.log('✅ [SOCIAL] User kicked successfully');
-      return response.data.data;
-    } catch (error) {
-      console.error('❌ [SOCIAL] Failed to kick user:', error);
-      throw new Error((error as any).message || 'Failed to kick user from lobby');
-    }
-  }
-
-  public async leaveLobby(
-    sessionId: string
-  ): Promise<{
-    user_id: number;
-    user_name: string;
-  }> {
-    try {
-      console.log('📤 [SOCIAL] Leaving lobby:', {
-        sessionId
-      });
-
-      const response = await apiClient.post(
-        'social',
-        `/api/social/lobby/${sessionId}/leave`,
-        {}
-      );
-
-      console.log('✅ [SOCIAL] Left lobby successfully');
-      return response.data.data;
-    } catch (error) {
-      console.error('❌ [SOCIAL] Failed to leave lobby:', error);
-      throw new Error((error as any).message || 'Failed to leave lobby');
-    }
-  }
-
-  public async getLobbyState(
-    sessionId: string
-  ): Promise<{
-    session_id: string;
-    group_id: string;
-    initiator_id: number;
-    workout_data: any;
-    lobby_status: string;
-    started_at: number | null;
-    expires_at: number;
-    members: Array<{
-      user_id: number;
-      username: string;
-      status: 'waiting' | 'ready';
-      joined_at: number;
-    }>;
-    messages: Array<{
-      message_id: string;
-      user_id: number | null;
-      username: string;
-      message: string;
-      timestamp: number;
-      is_system_message: boolean;
-    }>;
-  }> {
-    try {
-      console.log('📤 [SOCIAL] Fetching lobby state:', {
-        sessionId
-      });
-
-      const response = await apiClient.get(
-        'social',
-        `/api/social/lobby/${sessionId}`
-      );
-
-      console.log('✅ [SOCIAL] Lobby state fetched successfully');
-      return response.data.data;
-    } catch (error) {
-      console.error('❌ [SOCIAL] Failed to fetch lobby state:', error);
-      throw new Error((error as any).message || 'Failed to fetch lobby state');
-    }
-  }
 
   // Workout Session Control
   public async pauseWorkout(sessionId: string): Promise<{
@@ -1285,6 +1089,438 @@ export class SocialService {
       return response.data.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to stop workout');
+    }
+  }
+
+  public async finishWorkout(sessionId: string): Promise<{
+    session_id: string;
+    finished_at: number;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Finishing workout for all members:', { sessionId });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/session/${sessionId}/finish`,
+        {}
+      );
+      console.log('✅ [SOCIAL] Workout finished successfully');
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to finish workout:', error);
+      throw new Error((error as any).message || 'Failed to finish workout');
+    }
+  }
+
+  // ============================================================================
+  // V2 Event-Sourced Lobby API (Professional Architecture)
+  // ============================================================================
+
+  public async createLobbyV2(
+    groupId: number,
+    workoutData: any
+  ): Promise<{
+    status: string;
+    data: {
+      session_id: string;
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Creating lobby:', { groupId, workoutData });
+      const response = await apiClient.post(
+        'social',
+        '/api/social/v2/lobby/create',
+        {
+          group_id: groupId,
+          workout_data: workoutData
+        }
+      );
+      console.log('✅ [SOCIAL V2] Lobby created successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to create lobby:', error);
+      throw new Error((error as any).message || 'Failed to create lobby');
+    }
+  }
+
+  public async getLobbyStateV2(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Fetching lobby state:', { sessionId });
+      const response = await apiClient.get(
+        'social',
+        `/api/social/v2/lobby/${sessionId}`
+      );
+      console.log('✅ [SOCIAL V2] Lobby state fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to fetch lobby state:', error);
+      throw new Error((error as any).message || 'Failed to fetch lobby state');
+    }
+  }
+
+  public async joinLobbyV2(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Joining lobby:', { sessionId });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/join`,
+        {}
+      );
+      console.log('✅ [SOCIAL V2] Joined lobby successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to join lobby:', error);
+      throw new Error((error as any).message || 'Failed to join lobby');
+    }
+  }
+
+  public async updateLobbyStatusV2(
+    sessionId: string,
+    status: 'waiting' | 'ready'
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Updating lobby status:', { sessionId, status });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/status`,
+        { status }
+      );
+      console.log('✅ [SOCIAL V2] Lobby status updated successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to update lobby status:', error);
+      throw new Error((error as any).message || 'Failed to update lobby status');
+    }
+  }
+
+  public async leaveLobbyV2(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Leaving lobby:', { sessionId });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/leave`,
+        {}
+      );
+      console.log('✅ [SOCIAL V2] Left lobby successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to leave lobby:', error);
+      throw new Error((error as any).message || 'Failed to leave lobby');
+    }
+  }
+
+  public async updateWorkoutDataV2(
+    sessionId: string,
+    workoutData: any
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Updating workout data:', { sessionId });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/workout-data`,
+        { workout_data: workoutData }
+      );
+      console.log('✅ [SOCIAL V2] Workout data updated successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to update workout data:', error);
+      throw new Error((error as any).message || 'Failed to update workout data');
+    }
+  }
+
+  public async deleteLobbyV2(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Deleting lobby:', { sessionId });
+      const response = await apiClient.delete(
+        'social',
+        `/api/social/v2/lobby/${sessionId}`
+      );
+      console.log('✅ [SOCIAL V2] Lobby deleted successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to delete lobby:', error);
+      throw new Error((error as any).message || 'Failed to delete lobby');
+    }
+  }
+
+  public async passInitiatorRoleV2(
+    sessionId: string,
+    newInitiatorId: number
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Passing initiator role:', { sessionId, newInitiatorId });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/pass-initiator`,
+        { new_initiator_id: newInitiatorId }
+      );
+      console.log('✅ [SOCIAL V2] Initiator role passed successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to pass initiator role:', error);
+      throw new Error((error as any).message || 'Failed to pass initiator role');
+    }
+  }
+
+  public async startWorkoutV2(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    data: {
+      session_id: string;
+      start_time: number;
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Starting workout:', { sessionId });
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/start`,
+        {}
+      );
+      console.log('✅ [SOCIAL V2] Workout started successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to start workout:', error);
+      throw new Error((error as any).message || 'Failed to start workout');
+    }
+  }
+
+  public async sendLobbyMessageV2(
+    sessionId: string,
+    message: string,
+    isSystemMessage: boolean = false
+  ): Promise<{
+    status: string;
+    data: {
+      message_id: string;
+      timestamp: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Sending lobby chat message:', {
+        sessionId,
+        messageLength: message.length,
+        isSystemMessage
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/message`,
+        {
+          message,
+          is_system_message: isSystemMessage
+        }
+      );
+
+      console.log('✅ [SOCIAL V2] Chat message sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to send chat message:', error);
+      throw new Error((error as any).message || 'Failed to send chat message');
+    }
+  }
+
+  public async inviteMemberToLobbyV2(
+    sessionId: string,
+    invitedUserId: number,
+    groupId: number,
+    workoutData: any
+  ): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Sending lobby invitation:', {
+        sessionId,
+        invitedUserId,
+        groupId
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/invite`,
+        {
+          invited_user_id: invitedUserId,
+          group_id: groupId,
+          workout_data: workoutData
+        }
+      );
+
+      console.log('✅ [SOCIAL V2] Lobby invitation sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to send lobby invitation:', error);
+      throw new Error((error as any).message || 'Failed to send lobby invitation');
+    }
+  }
+
+  public async kickMemberFromLobbyV2(
+    sessionId: string,
+    kickedUserId: number
+  ): Promise<{
+    status: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Kicking user from lobby:', {
+        sessionId,
+        kickedUserId
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/kick`,
+        {
+          kicked_user_id: kickedUserId
+        }
+      );
+
+      console.log('✅ [SOCIAL V2] User kicked successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to kick user:', error);
+      throw new Error((error as any).message || 'Failed to kick user from lobby');
+    }
+  }
+
+  // ============================================================================
+  // V2 Invitation Management (Professional Persistence)
+  // ============================================================================
+
+  public async acceptInvitation(
+    invitationId: string
+  ): Promise<{
+    status: string;
+    message: string;
+    data: {
+      session_id: string;
+      lobby_state: any;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Accepting invitation:', { invitationId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/invitations/${invitationId}/accept`,
+        {}
+      );
+
+      console.log('✅ [SOCIAL V2] Invitation accepted successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to accept invitation:', error);
+      throw new Error((error as any).message || 'Failed to accept invitation');
+    }
+  }
+
+  public async declineInvitation(
+    invitationId: string
+  ): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Declining invitation:', { invitationId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/invitations/${invitationId}/decline`,
+        {}
+      );
+
+      console.log('✅ [SOCIAL V2] Invitation declined successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to decline invitation:', error);
+      throw new Error((error as any).message || 'Failed to decline invitation');
+    }
+  }
+
+  public async getPendingInvitations(): Promise<{
+    status: string;
+    message: string;
+    data: {
+      invitations: Array<{
+        invitation_id: string;
+        session_id: string;
+        group_id: number;
+        initiator_id: number;
+        initiator_name: string;
+        workout_data: any;
+        expires_at: number;
+        sent_at: string;
+      }>;
+      count: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Fetching pending invitations');
+
+      const response = await apiClient.get(
+        'social',
+        '/api/social/v2/invitations/pending'
+      );
+
+      console.log('✅ [SOCIAL V2] Pending invitations fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to fetch pending invitations:', error);
+      throw new Error((error as any).message || 'Failed to fetch pending invitations');
     }
   }
 }

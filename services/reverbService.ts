@@ -5,11 +5,21 @@ import { API_CONFIG } from '../config/api.config';
 class ReverbService {
   private pusher: Pusher | null = null;
   private channels: Map<string, any> = new Map();
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 10;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private isReconnecting: boolean = false;
+  private onReconnectCallback: (() => void) | null = null;
+  private lastUserId: number | null = null;
+  private maxRetriesReached: boolean = false;
+  private connectionStateCallbacks: ((state: string) => void)[] = [];
 
   /**
    * Initialize Reverb connection
    */
   public async connect(userId: number) {
+    this.lastUserId = userId; // Store for manual reconnect
+
     if (this.pusher) {
       console.log('⚠️ Reverb already connected, disconnecting first');
       this.disconnect();
@@ -60,6 +70,24 @@ class ReverbService {
 
     this.pusher.connection.bind('connected', () => {
       console.log('✅ Reverb connected successfully');
+      this.reconnectAttempts = 0;
+      this.isReconnecting = false;
+      this.maxRetriesReached = false;
+
+      // Clear any pending reconnect timeout
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+
+      // Notify state change listeners
+      this.notifyStateChange('connected');
+
+      // Trigger reconnect callback (used by WebSocketContext to refetch invitations)
+      if (this.onReconnectCallback) {
+        console.log('🔄 Triggering reconnect callback');
+        this.onReconnectCallback();
+      }
     });
 
     this.pusher.connection.bind('error', (err: any) => {
@@ -68,11 +96,77 @@ class ReverbService {
 
     this.pusher.connection.bind('disconnected', () => {
       console.log('🔌 Reverb disconnected');
+      this.scheduleReconnect(userId);
+    });
+
+    this.pusher.connection.bind('unavailable', () => {
+      console.log('⚠️ Reverb unavailable');
+      this.scheduleReconnect(userId);
+    });
+
+    this.pusher.connection.bind('failed', () => {
+      console.error('❌ Reverb connection failed permanently');
+      this.scheduleReconnect(userId);
     });
 
     this.pusher.connection.bind('state_change', (states: any) => {
       console.log('🔄 Reverb state changed:', states.previous, '→', states.current);
     });
+  }
+
+  /**
+   * Schedule reconnection with exponential backoff
+   */
+  private scheduleReconnect(userId: number) {
+    if (this.isReconnecting || !this.pusher) {
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('❌ Max reconnection attempts reached. Giving up.');
+      this.maxRetriesReached = true;
+      this.notifyStateChange('max_retries_reached');
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+    this.notifyStateChange('reconnecting');
+
+    // Exponential backoff: 2^attempt seconds, max 60 seconds
+    const delaySeconds = Math.min(Math.pow(2, this.reconnectAttempts), 60);
+    const delayMs = delaySeconds * 1000;
+
+    console.log(`🔄 Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delaySeconds}s`);
+
+    this.reconnectTimeout = setTimeout(async () => {
+      console.log('🔄 Attempting reconnect...');
+      this.isReconnecting = false;
+
+      try {
+        // Save current channels for resubscription
+        const channelsToResubscribe = Array.from(this.channels.keys());
+
+        // Disconnect and reconnect
+        this.disconnect();
+        await this.connect(userId);
+
+        // Note: Channels will need to be resubscribed by WebSocketContext
+        // The onReconnectCallback will handle this
+        console.log('✅ Reconnect successful, channels to resubscribe:', channelsToResubscribe);
+      } catch (error) {
+        console.error('❌ Reconnect failed:', error);
+        this.scheduleReconnect(userId);
+      }
+    }, delayMs);
+  }
+
+  /**
+   * Set callback to be called after successful reconnection
+   * Used by WebSocketContext to resubscribe to channels and refetch pending invitations
+   */
+  public onReconnect(callback: () => void) {
+    this.onReconnectCallback = callback;
   }
 
   /**
@@ -250,6 +344,174 @@ class ReverbService {
         // Convert to array of member objects with id property
         const membersList = memberIds.map(id => ({ id }));
         callbacks.onInitialMembers?.(membersList);
+      });
+    }
+
+    return channel;
+  }
+
+  /**
+   * Manual reconnect - can be called after max retries reached
+   */
+  public async manualReconnect(): Promise<boolean> {
+    console.log('🔄 Manual reconnect triggered');
+
+    if (!this.lastUserId) {
+      console.error('❌ No user ID available for manual reconnect');
+      return false;
+    }
+
+    // Reset retry counters
+    this.reconnectAttempts = 0;
+    this.maxRetriesReached = false;
+    this.isReconnecting = false;
+
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
+    try {
+      await this.connect(this.lastUserId);
+      return true;
+    } catch (error) {
+      console.error('❌ Manual reconnect failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if max retries have been reached
+   */
+  public hasMaxRetriesReached(): boolean {
+    return this.maxRetriesReached;
+  }
+
+  /**
+   * Get current connection state
+   */
+  public getConnectionState(): string {
+    if (!this.pusher) return 'disconnected';
+    return this.pusher.connection.state;
+  }
+
+  /**
+   * Subscribe to connection state changes
+   */
+  public onConnectionStateChange(callback: (state: string) => void): () => void {
+    this.connectionStateCallbacks.push(callback);
+
+    // Return unsubscribe function
+    return () => {
+      const index = this.connectionStateCallbacks.indexOf(callback);
+      if (index > -1) {
+        this.connectionStateCallbacks.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Notify all listeners of state change
+   */
+  private notifyStateChange(state: string) {
+    this.connectionStateCallbacks.forEach(callback => {
+      try {
+        callback(state);
+      } catch (error) {
+        console.error('❌ Error in connection state callback:', error);
+      }
+    });
+  }
+
+  /**
+   * Get reconnect attempts count
+   */
+  public getReconnectAttempts(): number {
+    return this.reconnectAttempts;
+  }
+
+  /**
+   * Get max reconnect attempts
+   */
+  public getMaxReconnectAttempts(): number {
+    return this.maxReconnectAttempts;
+  }
+
+  /**
+   * Subscribe to lobby channel for real-time lobby events
+   */
+  public subscribeToLobby(
+    sessionId: string,
+    callbacks: {
+      onLobbyStateChanged?: (data: any) => void;
+      onMemberJoined?: (data: any) => void;
+      onMemberLeft?: (data: any) => void;
+      onMemberStatusUpdated?: (data: any) => void;
+      onLobbyMessageSent?: (data: any) => void;
+      onWorkoutStarted?: (data: any) => void;
+      onLobbyDeleted?: (data: any) => void;
+      onMemberKicked?: (data: any) => void;
+    }
+  ) {
+    const channelName = `private-lobby.${sessionId}`;
+
+    return this.subscribeToPrivateChannel(`lobby.${sessionId}`, {
+      onEvent: (eventName, data) => {
+        switch (eventName) {
+          case 'LobbyStateChanged':
+            callbacks.onLobbyStateChanged?.(data);
+            break;
+          case 'MemberJoined':
+            callbacks.onMemberJoined?.(data);
+            break;
+          case 'MemberLeft':
+            callbacks.onMemberLeft?.(data);
+            break;
+          case 'MemberStatusUpdated':
+            callbacks.onMemberStatusUpdated?.(data);
+            break;
+          case 'LobbyMessageSent':
+            callbacks.onLobbyMessageSent?.(data);
+            break;
+          case 'WorkoutStarted':
+            callbacks.onWorkoutStarted?.(data);
+            break;
+          case 'LobbyDeleted':
+            callbacks.onLobbyDeleted?.(data);
+            break;
+          case 'MemberKicked':
+            callbacks.onMemberKicked?.(data);
+            break;
+        }
+      },
+    });
+  }
+
+  /**
+   * Subscribe to presence channel (for online/offline status)
+   */
+  public subscribeToPresence(
+    channelName: string,
+    callbacks: {
+      onHere?: (members: any[]) => void;
+      onJoining?: (member: any) => void;
+      onLeaving?: (member: any) => void;
+    }
+  ) {
+    const channel = this.subscribeToPresenceChannel(channelName, {
+      onEvent: () => {},
+      onMemberAdded: callbacks.onJoining,
+      onMemberRemoved: callbacks.onLeaving,
+    });
+
+    // Get initial members
+    if (channel && callbacks.onHere) {
+      channel.bind('pusher:subscription_succeeded', (members: any) => {
+        const membersList = Object.keys(members.members || {}).map(id => ({
+          user_id: parseInt(id)
+        }));
+        callbacks.onHere?.(membersList);
       });
     }
 

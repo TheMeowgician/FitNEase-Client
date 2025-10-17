@@ -359,17 +359,6 @@ export class APIClient {
         status: response.status
       } as ApiResponse<T>;
     } catch (error) {
-      console.error(`❌ [${service}] CAUGHT ERROR in request method:`, {
-        error,
-        errorType: error?.constructor?.name,
-        errorMessage: (error as any)?.message,
-        errorStack: (error as any)?.stack,
-        isAxiosError: (error as any)?.isAxiosError,
-        hasResponse: !!(error as any)?.response,
-        hasRequest: !!(error as any)?.request,
-        hasConfig: !!(error as any)?.config
-      });
-
       const axiosError = error as any;
       const errorMessage = axiosError?.message || '';
       const isServiceUnavailable = errorMessage.includes('Network error') ||
@@ -406,6 +395,17 @@ export class APIClient {
         throw error;
       } else {
         // Log detailed error for critical services or unexpected errors
+        console.error(`❌ [${service}] CAUGHT ERROR in request method:`, {
+          error,
+          errorType: error?.constructor?.name,
+          errorMessage: (error as any)?.message,
+          errorStack: (error as any)?.stack,
+          isAxiosError: (error as any)?.isAxiosError,
+          hasResponse: !!(error as any)?.response,
+          hasRequest: !!(error as any)?.request,
+          hasConfig: !!(error as any)?.config
+        });
+
         console.error(`❌ [API REQUEST ERROR] Service: ${service}`, {
           message: errorMessage,
           code: axiosError?.code,

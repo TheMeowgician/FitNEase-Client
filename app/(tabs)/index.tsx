@@ -37,6 +37,7 @@ export default function HomeScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
+  const [isRefreshingWorkouts, setIsRefreshingWorkouts] = useState(false);
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
   useEffect(() => {
@@ -220,6 +221,37 @@ export default function HomeScreen() {
     setRefreshing(true);
     await loadDashboardData();
     setRefreshing(false);
+  };
+
+  const refreshWorkoutRecommendations = async () => {
+    if (!user) return;
+
+    try {
+      setIsRefreshingWorkouts(true);
+      console.log('🔄 [DASHBOARD] Refreshing workout recommendations only');
+
+      // Only fetch new recommendations from ML service
+      const userId = String(user.id);
+      const recsResponse = await getRecommendations(userId, 8);
+
+      console.log('🔄 [DASHBOARD] Received', recsResponse?.length || 0, 'new recommendations');
+      setRecommendations(recsResponse || []);
+
+      if (!recsResponse || recsResponse.length === 0) {
+        console.warn('🔄 [DASHBOARD] No recommendations received');
+      } else {
+        console.log('✅ [DASHBOARD] Successfully refreshed', recsResponse.length, 'recommendations!');
+      }
+    } catch (error) {
+      console.error('🔄 [DASHBOARD] Error refreshing recommendations:', error);
+      Alert.alert(
+        'Refresh Failed',
+        'Unable to refresh workout recommendations. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsRefreshingWorkouts(false);
+    }
   };
 
   const handleViewWorkoutSet = () => {
@@ -527,7 +559,21 @@ export default function HomeScreen() {
         {/* Today's Recommended Workout Set - Only show on workout days */}
         {isWorkoutDay() ? (
           <View style={styles.workoutSection}>
-            <Text style={styles.sectionHeader}>Today's Tabata Workout</Text>
+            <View style={styles.sectionHeaderWithAction}>
+              <Text style={styles.sectionHeader}>Today's Tabata Workout</Text>
+              <TouchableOpacity
+                onPress={refreshWorkoutRecommendations}
+                disabled={isRefreshingWorkouts}
+                style={styles.refreshButton}
+                activeOpacity={0.7}
+              >
+                {isRefreshingWorkouts ? (
+                  <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
+                ) : (
+                  <Ionicons name="refresh" size={20} color={COLORS.PRIMARY[600]} />
+                )}
+              </TouchableOpacity>
+            </View>
             {recommendations.length > 0 ? (
               <TouchableOpacity
                 style={styles.workoutSetCard}
@@ -1024,6 +1070,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
+  },
+  sectionHeaderWithAction: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.PRIMARY[600] + '10',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statsGrid: {
     flexDirection: 'row',
