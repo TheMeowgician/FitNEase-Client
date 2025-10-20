@@ -4,7 +4,7 @@
     "slug": "fitnease-client",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/FitNEase-App-Pic-logo.jpg",
+    "icon": "./assets/images/FitNEase-App-Pic-logo.png",
     "scheme": "fitneaseclient",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -16,7 +16,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/FitNEase-App-Pic-logo.jpg",
+        "foregroundImage": "./assets/images/FitNEase-App-Pic-logo.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -30,7 +30,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/FitNEase-App-Pic-logo.jpg"
+      "favicon": "./assets/images/FitNEase-App-Pic-logo.png"
     },
     "plugins": [
       "expo-router",
