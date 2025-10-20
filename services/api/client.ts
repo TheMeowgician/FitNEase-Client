@@ -366,9 +366,9 @@ export class APIClient {
                                    errorMessage.includes('could not be found');
 
       // Check if this is a logout request (which can fail gracefully)
-      const isLogoutRequest = config.url?.includes('/logout');
-      const isLogoutError = errorMessage.includes('currentAccessToken') ||
-                           errorMessage.includes('null') ||
+      const isLogoutRequest = config.url?.includes('/logout') || config.url?.includes('/auth/logout');
+      const isLogoutError = (errorMessage.includes('currentAccessToken') ||
+                           (errorMessage.includes('null') && errorMessage.includes('token'))) &&
                            isLogoutRequest;
 
       // For non-critical services (ML, tracking, engagement, planning), log as warning instead of error

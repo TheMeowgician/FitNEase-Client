@@ -208,8 +208,12 @@ export class ContentService {
 
   public async getExercise(exerciseId: string): Promise<Exercise | null> {
     try {
-      const response = await apiClient.get<Exercise>(this.serviceName, `/content/exercises/${exerciseId}`);
-      return response.data;
+      // Route is /api/content/exercises/{id} on backend
+      const response = await apiClient.get<{ data: Exercise; success: boolean }>(
+        this.serviceName,
+        `/api/content/exercises/${exerciseId}`
+      );
+      return response.data.data; // Backend wraps in { data: { data: {...} } }
     } catch (error) {
       console.warn('Content service unavailable - exercise details disabled:', error);
       return null;
@@ -218,7 +222,8 @@ export class ContentService {
 
   public async getExercisesByMuscleGroup(muscleGroup: string): Promise<Exercise[]> {
     try {
-      const response = await apiClient.get<Exercise[]>(this.serviceName, `/content/exercises/muscle-group/${muscleGroup}`);
+      // Route is /api/content/exercises/by-muscle-group/{group} on backend
+      const response = await apiClient.get<Exercise[]>(this.serviceName, `/api/content/exercises/by-muscle-group/${muscleGroup}`);
       return response.data;
     } catch (error) {
       console.warn('Content service unavailable - muscle group exercises disabled:', error);
@@ -270,7 +275,8 @@ export class ContentService {
 
   public async getWorkout(workoutId: string): Promise<Workout | null> {
     try {
-      const response = await apiClient.get<Workout>(this.serviceName, `/content/workouts/${workoutId}`);
+      // Route is /api/content/workout/{id} (singular) on backend
+      const response = await apiClient.get<Workout>(this.serviceName, `/api/content/workout/${workoutId}`);
       return response.data;
     } catch (error) {
       console.warn('Content service unavailable - workout details disabled:', error);

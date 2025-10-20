@@ -34,11 +34,13 @@ interface LobbyChatProps {
 export default function LobbyChat({ sessionId, currentUserId }: LobbyChatProps) {
   const chatMessages = useLobbyStore(selectChatMessages);
   const addChatMessages = useLobbyStore((state) => state.addChatMessages);
+  const removeTempMessage = useLobbyStore((state) => state.removeTempMessage);
 
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [currentTempId, setCurrentTempId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -51,28 +53,65 @@ export default function LobbyChat({ sessionId, currentUserId }: LobbyChatProps) 
     }
   }, [chatMessages.length]);
 
+  // Remove temp message when real message arrives
+  useEffect(() => {
+    if (currentTempId) {
+      // Check if a real message from current user exists (not temp)
+      const hasRealMessage = chatMessages.some(
+        (m) =>
+          m.user_id === currentUserId &&
+          !m.message_id.startsWith('temp-') &&
+          m.timestamp > Math.floor(Date.now() / 1000) - 5 // Within last 5 seconds
+      );
+
+      if (hasRealMessage) {
+        removeTempMessage(currentTempId);
+        setCurrentTempId(null);
+      }
+    }
+  }, [chatMessages, currentTempId, currentUserId, removeTempMessage]);
+
   /**
-   * Send message to lobby
+   * Send message to lobby with optimistic UI update
    */
   const handleSendMessage = async () => {
     if (!messageText.trim() || isSending) return;
 
     const textToSend = messageText.trim();
+    const tempMessageId = `temp-${Date.now()}-${Math.random()}`;
+
+    // Optimistic UI update - add message immediately
+    const optimisticMessage: ChatMessage = {
+      message_id: tempMessageId,
+      user_id: currentUserId,
+      user_name: 'You',
+      message: textToSend,
+      timestamp: Math.floor(Date.now() / 1000),
+      is_system_message: false,
+    };
+
+    addChatMessages([optimisticMessage]);
     setMessageText('');
     setIsSending(true);
+    setCurrentTempId(tempMessageId); // Track temp message ID
 
     try {
-      const response = await socialService.sendLobbyMessage(sessionId, textToSend);
+      const response = await socialService.sendLobbyMessageV2(sessionId, textToSend);
 
-      if (!response.success) {
-        console.error('❌ Failed to send message:', response.error);
-        // Restore message on failure
-        setMessageText(textToSend);
+      if (response.status === 'success') {
+        // Temp message will be automatically removed when real message arrives via WebSocket
+        console.log('✅ Message sent successfully');
+      } else {
+        throw new Error('Failed to send message');
       }
     } catch (error) {
       console.error('❌ Error sending message:', error);
-      // Restore message on error
+      // Remove optimistic message on failure
+      removeTempMessage(tempMessageId);
+      setCurrentTempId(null);
+      // Restore message text
       setMessageText(textToSend);
+      alert('Failed to send message. Please try again.');
     } finally {
       setIsSending(false);
     }
@@ -91,19 +130,26 @@ export default function LobbyChat({ sessionId, currentUserId }: LobbyChatProps) 
       const oldestMessage = chatMessages[0];
       const beforeTimestamp = oldestMessage?.timestamp;
 
-      const response = await socialService.getLobbyChatMessages(sessionId, {
+      const response = await socialService.getChatMessagesV2(sessionId, {
         limit: 20,
-        before: beforeTimestamp,
+        before: beforeTimestamp?.toString(),
       });
 
-      if (response.success && response.data) {
+      if (response.status === 'success' && response.data) {
         const messages = response.data.messages || [];
 
-        if (messages.length === 0) {
+        if (messages.length === 0 || !response.data.has_more) {
           setHasMoreMessages(false);
-        } else {
+        }
+
+        if (messages.length > 0) {
+          // Map messages to ensure user_name is always a string
+          const mappedMessages: ChatMessage[] = messages.map((msg) => ({
+            ...msg,
+            user_name: msg.user_name || 'Unknown',
+          }));
           // Add to store (deduplication handled there)
-          addChatMessages(messages);
+          addChatMessages(mappedMessages);
         }
       }
     } catch (error) {
@@ -111,6 +157,17 @@ export default function LobbyChat({ sessionId, currentUserId }: LobbyChatProps) 
     } finally {
       setIsLoadingMore(false);
     }
+  };
+
+  /**
+   * Get initials from user name for avatar
+   */
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   };
 
   /**
@@ -133,6 +190,13 @@ export default function LobbyChat({ sessionId, currentUserId }: LobbyChatProps) 
 
     return (
       <View style={[styles.messageContainer, isOwnMessage && styles.ownMessageContainer]}>
+        {/* Avatar for other users (left side) */}
+        {!isOwnMessage && (
+          <View style={styles.avatarContainer}>
+            <Text style={styles.avatarText}>{getInitials(item.user_name)}</Text>
+          </View>
+        )}
+
         <View style={[styles.messageBubble, isOwnMessage && styles.ownMessageBubble]}>
           {!isOwnMessage && (
             <Text style={styles.messageSender}>{item.user_name}</Text>
@@ -277,18 +341,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   messageContainer: {
+    flexDirection: 'row',
     marginBottom: 12,
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
+    paddingHorizontal: 4,
   },
   ownMessageContainer: {
-    alignItems: 'flex-end',
+    flexDirection: 'row-reverse',
+    alignSelf: 'flex-end',
+  },
+  avatarContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.PRIMARY[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    marginBottom: 2,
+  },
+  avatarText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
   messageBubble: {
     backgroundColor: COLORS.SECONDARY[100],
     borderRadius: 16,
     borderBottomLeftRadius: 4,
     padding: 12,
-    maxWidth: '75%',
+    maxWidth: '70%',
   },
   ownMessageBubble: {
     backgroundColor: COLORS.PRIMARY[600],
@@ -335,7 +417,7 @@ const styles = StyleSheet.create({
   },
   systemMessageText: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
     fontStyle: 'italic',
   },

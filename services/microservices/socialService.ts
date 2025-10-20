@@ -1043,7 +1043,7 @@ export class SocialService {
 
 
 
-  // Workout Session Control
+  // Workout Session Control (Server-Authoritative)
   public async pauseWorkout(sessionId: string): Promise<{
     session_id: string;
     paused_at: number;
@@ -1234,9 +1234,28 @@ export class SocialService {
       );
       console.log('✅ [SOCIAL V2] Left lobby successfully');
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Check if error is "not in lobby" - this is an expected state, not a failure
+      const errorMessage = error?.message || '';
+      const isNotInLobbyError = errorMessage.includes('You are not in this lobby') ||
+                                errorMessage.includes('not in this lobby') ||
+                                errorMessage.includes('already left');
+
+      if (isNotInLobbyError) {
+        console.log('ℹ️ [SOCIAL V2] User already left lobby or not in lobby - treating as success');
+        // Return a success response since the desired end state is achieved
+        return {
+          status: 'success',
+          data: {
+            lobby_state: null,
+            version: 0
+          }
+        };
+      }
+
+      // For other errors, log and throw
       console.error('❌ [SOCIAL V2] Failed to leave lobby:', error);
-      throw new Error((error as any).message || 'Failed to leave lobby');
+      throw new Error(errorMessage || 'Failed to leave lobby');
     }
   }
 
@@ -1371,6 +1390,47 @@ export class SocialService {
     }
   }
 
+  public async getChatMessagesV2(
+    sessionId: string,
+    options?: {
+      limit?: number;
+      before?: string;
+    }
+  ): Promise<{
+    status: string;
+    data: {
+      messages: Array<{
+        message_id: string;
+        user_id: number;
+        user_name?: string;
+        message: string;
+        timestamp: number;
+        is_system_message: boolean;
+      }>;
+      has_more: boolean;
+      count: number;
+    };
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.limit) params.append('limit', options.limit.toString());
+      if (options?.before) params.append('before', options.before);
+
+      const queryString = params.toString();
+      const url = `/api/social/v2/lobby/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+
+      console.log('📤 [SOCIAL V2] Fetching chat messages:', { sessionId, options });
+
+      const response = await apiClient.get('social', url);
+
+      console.log('✅ [SOCIAL V2] Chat messages fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to fetch chat messages:', error);
+      throw new Error((error as any).message || 'Failed to fetch chat messages');
+    }
+  }
+
   public async inviteMemberToLobbyV2(
     sessionId: string,
     invitedUserId: number,
@@ -1434,6 +1494,31 @@ export class SocialService {
     } catch (error) {
       console.error('❌ [SOCIAL V2] Failed to kick user:', error);
       throw new Error((error as any).message || 'Failed to kick user from lobby');
+    }
+  }
+
+  public async forceLeaveAllLobbies(): Promise<{
+    status: string;
+    message: string;
+    data: {
+      lobbies_left: number;
+      errors: any[];
+    };
+  }> {
+    try {
+      console.log('🔥 [SOCIAL V2] Force leaving all active lobbies');
+
+      const response = await apiClient.post(
+        'social',
+        '/api/social/v2/lobby/force-leave-all',
+        {}
+      );
+
+      console.log('✅ [SOCIAL V2] Force leave successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to force leave lobbies:', error);
+      throw new Error((error as any).message || 'Failed to force leave lobbies');
     }
   }
 

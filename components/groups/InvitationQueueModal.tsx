@@ -8,11 +8,13 @@ import {
   Dimensions,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useInvitationStore, selectCurrentInvitation, selectInvitationCount } from '../../stores/invitationStore';
+import { useLobby } from '../../contexts/LobbyContext';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +36,9 @@ export default function InvitationQueueModal() {
   const declineInvitation = useInvitationStore((state) => state.declineInvitation);
   const showNextInvitation = useInvitationStore((state) => state.showNextInvitation);
   const isLoading = useInvitationStore((state) => state.isLoading);
+
+  // Access lobby context to check for active lobby
+  const { activeLobby, clearActiveLobby } = useLobby();
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -74,13 +79,47 @@ export default function InvitationQueueModal() {
   const handleAccept = async () => {
     if (!currentInvitation || isProcessing) return;
 
+    // Check if user is already in a lobby
+    if (activeLobby) {
+      Alert.alert(
+        'Already in Lobby',
+        `You're currently in a lobby for "${activeLobby.groupName}". Leave that lobby first before accepting this invitation.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Leave & Accept',
+            style: 'destructive',
+            onPress: async () => {
+              console.log('🔄 Leaving current lobby before accepting invitation');
+              await clearActiveLobby();
+              // Now accept the invitation
+              await acceptInvitationInternal();
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    await acceptInvitationInternal();
+  };
+
+  const acceptInvitationInternal = async () => {
+    if (!currentInvitation) return;
+
     setIsProcessing(true);
 
     try {
+      console.log('📤 Accepting invitation:', {
+        invitationId: currentInvitation.invitation_id,
+        sessionId: currentInvitation.session_id,
+        groupId: currentInvitation.group_id
+      });
+
       const result = await acceptInvitation(currentInvitation.invitation_id);
 
       if (result.success && result.sessionId) {
-        console.log('✅ Invitation accepted, navigating to lobby');
+        console.log('✅ Invitation accepted successfully, navigating to lobby');
 
         // Navigate to lobby
         router.push({
@@ -91,14 +130,24 @@ export default function InvitationQueueModal() {
             workoutData: JSON.stringify(currentInvitation.workout_data),
             initiatorId: currentInvitation.initiator_id.toString(),
             isCreatingLobby: 'false',
+            joinedViaInvite: 'true', // Backend already added user to lobby when accepting invitation
           },
         });
       } else {
         console.error('❌ Failed to accept invitation:', result.error);
-        // Show error to user (could add error state here)
+        Alert.alert(
+          'Failed to Join',
+          result.error || 'Could not accept invitation. The lobby may have been deleted or is full.',
+          [{ text: 'OK' }]
+        );
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error accepting invitation:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to accept invitation. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsProcessing(false);
     }

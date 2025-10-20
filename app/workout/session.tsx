@@ -66,6 +66,21 @@ export default function WorkoutSessionScreen() {
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
 
+  // Debug logging for button visibility
+  console.log('🎮 [SESSION] Button visibility check:', {
+    type: type,
+    isGroupTabata: type === 'group_tabata',
+    userId: user?.id,
+    userIdAsString: user?.id.toString(),
+    initiatorId: initiatorId,
+    initiatorIdType: typeof initiatorId,
+    isInitiator: isInitiator,
+    comparisonResult: user?.id.toString() === initiatorId,
+    sessionStatus: sessionState.status,
+    shouldShowPause: sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator),
+    shouldShowAutoFinish: __DEV__ && sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator)
+  });
+
   useEffect(() => {
     loadWorkout();
     setupAudio();
@@ -104,6 +119,14 @@ export default function WorkoutSessionScreen() {
   }, [tabataSession]);
 
   useEffect(() => {
+    // SERVER-AUTHORITATIVE: For group workouts, server controls timer
+    // Only start client-side timer for solo workouts
+    if (type === 'group_tabata') {
+      console.log('🎮 [SERVER-AUTH] Group workout - using server timer');
+      return; // Server sends ticks, no client timer needed
+    }
+
+    // Solo workout - use client-side timer
     if (sessionState.status === 'running') {
       startTimer();
     } else {
@@ -111,7 +134,7 @@ export default function WorkoutSessionScreen() {
     }
 
     return () => clearInterval(intervalRef.current!);
-  }, [sessionState.status]);
+  }, [sessionState.status, type]);
 
   const loadWorkout = async () => {
     try {
@@ -168,18 +191,109 @@ export default function WorkoutSessionScreen() {
     if (!tabataSession) return;
 
     const sessionId = tabataSession.session_id;
-    console.log('📡 Subscribing to session channel for pause/resume/stop events:', sessionId);
+    console.log('📡 [SERVER-AUTH] Subscribing to server-authoritative timer:', sessionId);
 
     reverbService.subscribeToPrivateChannel(`session.${sessionId}`, {
       onEvent: (eventName, data) => {
         console.log('📨 Session event received:', eventName, data);
 
+        // SERVER-AUTHORITATIVE TIMER: Listen to server ticks (single source of truth)
+        if (eventName === 'SessionTick') {
+          // Server sends timer update every second
+          // NO client-side timer needed - server is truth!
+          setSessionState(prev => ({
+            ...prev,
+            timeRemaining: data.time_remaining,
+            phase: data.phase,
+            currentExercise: data.current_exercise,
+            currentSet: data.current_set,
+            currentRound: data.current_round,
+            caloriesBurned: data.calories_burned,
+            status: data.status, // Server controls status too
+          }));
+          return; // Don't process other events
+        }
+
         if (eventName === 'WorkoutPaused') {
           console.log(`⏸️ Workout paused by ${data.paused_by_name}`);
-          setSessionState(prev => ({ ...prev, status: 'paused' }));
+
+          // INSTANT PAUSE: Pause IMMEDIATELY for all clients (like in games)
+          // This prevents the "delay then jump" visual glitch
+          setSessionState(prev => {
+            // CLIENT-SIDE PREDICTION with LATENCY COMPENSATION
+            // The pause event took time to arrive, so we need to adjust the time
+            let adjustedTimeRemaining = prev.timeRemaining;
+
+            if (data.session_state && data.session_state.time_remaining !== null) {
+              // Calculate how far off we are from the server state
+              const serverTime = data.session_state.time_remaining;
+              const localTime = prev.timeRemaining;
+              const timeDrift = localTime - serverTime;
+
+              console.log('🔄 [SYNC] Latency compensation:', {
+                serverTime,
+                localTime,
+                timeDrift,
+                willAdjust: Math.abs(timeDrift) > 2 // Only adjust if drift > 2 seconds
+              });
+
+              // If drift is significant (>2 seconds), use server time
+              // If drift is small (<2 seconds), use local time for smooth experience
+              if (Math.abs(timeDrift) > 2) {
+                adjustedTimeRemaining = serverTime;
+              } else {
+                // Small drift - use local time to avoid visual jump
+                adjustedTimeRemaining = localTime;
+              }
+
+              return {
+                ...prev,
+                status: 'paused',
+                timeRemaining: adjustedTimeRemaining,
+                phase: data.session_state.phase || prev.phase,
+                currentExercise: data.session_state.current_exercise ?? prev.currentExercise,
+                currentSet: data.session_state.current_set ?? prev.currentSet,
+                currentRound: data.session_state.current_round ?? prev.currentRound,
+                caloriesBurned: data.session_state.calories_burned ?? prev.caloriesBurned,
+              };
+            }
+
+            // Fallback: just pause at current time
+            return { ...prev, status: 'paused' };
+          });
         } else if (eventName === 'WorkoutResumed') {
           console.log(`▶️ Workout resumed by ${data.resumed_by_name}`);
-          setSessionState(prev => ({ ...prev, status: 'running' }));
+
+          // INSTANT RESUME: Resume IMMEDIATELY for all clients
+          // Sync to exact server state to ensure perfect synchronization
+          setSessionState(prev => {
+            let adjustedTimeRemaining = prev.timeRemaining;
+
+            if (data.session_state && data.session_state.time_remaining !== null) {
+              // Use server time for exact sync
+              adjustedTimeRemaining = data.session_state.time_remaining;
+
+              console.log('▶️ [RESUME] Syncing and resuming from server state:', {
+                serverTime: data.session_state.time_remaining,
+                localTime: prev.timeRemaining,
+                willUseServerTime: true
+              });
+
+              return {
+                ...prev,
+                status: 'running',
+                timeRemaining: adjustedTimeRemaining,
+                phase: data.session_state.phase || prev.phase,
+                currentExercise: data.session_state.current_exercise ?? prev.currentExercise,
+                currentSet: data.session_state.current_set ?? prev.currentSet,
+                currentRound: data.session_state.current_round ?? prev.currentRound,
+                caloriesBurned: data.session_state.calories_burned ?? prev.caloriesBurned,
+              };
+            }
+
+            console.log('▶️ [RESUME] Resuming from current position:', prev.timeRemaining);
+            return { ...prev, status: 'running' };
+          });
         } else if (eventName === 'WorkoutStopped') {
           console.log(`🛑 Workout stopped by ${data.stopped_by_name}`);
           // Clear AsyncStorage and lobby state
@@ -417,19 +531,16 @@ export default function WorkoutSessionScreen() {
         return;
       }
 
-      console.log('⏸️ [PAUSE] Pausing locally for instant feedback');
-      // Pause locally IMMEDIATELY for instant feedback
-      setSessionState(prev => ({ ...prev, status: 'paused' }));
-
-      // Then broadcast pause to all members
+      console.log('⏸️ [SERVER-AUTH] Sending pause to server');
+      // Server-authoritative: Just tell server to pause
+      // Server will pause instantly and broadcast to all clients
       if (tabataSession) {
         try {
-          console.log('⏸️ [PAUSE] Broadcasting pause to all members');
           await socialService.pauseWorkout(tabataSession.session_id);
-          console.log('✅ [PAUSE] Pause broadcasted successfully');
+          console.log('✅ [SERVER-AUTH] Pause request sent to server');
         } catch (error) {
-          console.error('❌ [PAUSE] Failed to broadcast pause:', error);
-          Alert.alert('Error', 'Failed to pause workout for all members');
+          console.error('❌ [PAUSE] Failed to pause:', error);
+          Alert.alert('Error', 'Failed to pause workout');
         }
       }
     } else {
@@ -448,19 +559,16 @@ export default function WorkoutSessionScreen() {
         return;
       }
 
-      console.log('▶️ [RESUME] Resuming locally for instant feedback');
-      // Resume locally IMMEDIATELY for instant feedback
-      setSessionState(prev => ({ ...prev, status: 'running' }));
-
-      // Then broadcast resume to all members
+      console.log('▶️ [SERVER-AUTH] Sending resume to server');
+      // Server-authoritative: Just tell server to resume
+      // Server will resume instantly and continue broadcasting ticks
       if (tabataSession) {
         try {
-          console.log('▶️ [RESUME] Broadcasting resume to all members');
           await socialService.resumeWorkout(tabataSession.session_id);
-          console.log('✅ [RESUME] Resume broadcasted successfully');
+          console.log('✅ [SERVER-AUTH] Resume request sent to server');
         } catch (error) {
-          console.error('❌ [RESUME] Failed to broadcast resume:', error);
-          Alert.alert('Error', 'Failed to resume workout for all members');
+          console.error('❌ [RESUME] Failed to resume:', error);
+          Alert.alert('Error', 'Failed to resume workout');
         }
       }
     } else {

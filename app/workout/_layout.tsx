@@ -30,15 +30,15 @@ export default function WorkoutLayout() {
 
     // Subscribe to lobby store state changes
     const unsubscribe = useLobbyStore.subscribe((state) => {
-      // Check all lobbies for workout starts
-      Object.values(state.lobbies).forEach((lobbyState: any) => {
-        if (!lobbyState) return;
+      // Check current lobby for workout start
+      const lobbyState = state.currentLobby;
+      if (!lobbyState) return;
 
-        const sessionId = lobbyState.session_id;
-        const status = lobbyState.status;
+      const sessionId = lobbyState.session_id;
+      const status = lobbyState.status;
 
-        // Check if workout started and we haven't navigated yet for this session
-        if ((status === 'in_progress' || status === 'starting') && !hasNavigatedToSessionRef.current.has(sessionId)) {
+      // Check if workout started and we haven't navigated yet for this session
+      if ((status === 'in_progress' || status === 'starting') && !hasNavigatedToSessionRef.current.has(sessionId)) {
           // Check if we're NOT already on the session screen or lobby screen
           const isOnSessionScreen = pathname?.includes('/workout/session');
           const isOnLobbyScreen = pathname?.includes('/workout/group-lobby');
@@ -59,12 +59,11 @@ export default function WorkoutLayout() {
               navigateToSession(lobbyState);
               hasNavigatedToSessionRef.current.add(sessionId);
             }
-          } else if (isOnLobbyScreen) {
-            // User is on lobby screen - let the lobby screen handle navigation
-            console.log('✅ User on lobby screen - let lobby handle navigation');
-          }
+        } else if (isOnLobbyScreen) {
+          // User is on lobby screen - let the lobby screen handle navigation
+          console.log('✅ User on lobby screen - let lobby handle navigation');
         }
-      });
+      }
     });
 
     return () => {
@@ -148,9 +147,10 @@ export default function WorkoutLayout() {
         console.log('🔍 Checking lobby session:', { sessionId, groupId, status });
 
         // Get current lobby state from store
-        const lobbyState = useLobbyStore.getState().lobbies[sessionId];
+        const lobbyState = useLobbyStore.getState().currentLobby;
 
-        if (lobbyState && (lobbyState.status === 'in_progress' || lobbyState.status === 'starting')) {
+        // Only process if this is the current lobby session
+        if (lobbyState && lobbyState.session_id === sessionId && (lobbyState.status === 'in_progress' || lobbyState.status === 'starting')) {
           console.log('🚨 MISSED WORKOUT START! Navigating to session...');
 
           // Transform workout data to session format

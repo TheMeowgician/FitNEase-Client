@@ -7,7 +7,7 @@ class ReverbService {
   private channels: Map<string, any> = new Map();
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isReconnecting: boolean = false;
   private onReconnectCallback: (() => void) | null = null;
   private lastUserId: number | null = null;
@@ -452,6 +452,7 @@ class ReverbService {
       onWorkoutStarted?: (data: any) => void;
       onLobbyDeleted?: (data: any) => void;
       onMemberKicked?: (data: any) => void;
+      onInitiatorRoleTransferred?: (data: any) => void;
     }
   ) {
     const channelName = `private-lobby.${sessionId}`;
@@ -482,6 +483,9 @@ class ReverbService {
             break;
           case 'MemberKicked':
             callbacks.onMemberKicked?.(data);
+            break;
+          case 'initiator.transferred':
+            callbacks.onInitiatorRoleTransferred?.(data);
             break;
         }
       },

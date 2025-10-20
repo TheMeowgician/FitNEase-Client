@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLobby } from '../../contexts/LobbyContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
@@ -30,6 +31,7 @@ export default function GroupDetailsScreen() {
   const { user } = useAuth();
   const { goBack } = useSmartBack();
   const { getGroupWorkoutRecommendations } = useMLService();
+  const { activeLobby, saveLobbySession, checkForActiveLobby: refreshLobbyState, forceCleanupAllLobbies } = useLobby();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [group, setGroup] = useState<Group | null>(null);
@@ -42,8 +44,8 @@ export default function GroupDetailsScreen() {
   const [showGroupWorkoutModal, setShowGroupWorkoutModal] = useState(false);
   const [groupWorkout, setGroupWorkout] = useState<any>(null);
 
-  // Active lobby state - tracks if user is currently in a lobby for this group
-  const [activeLobbySession, setActiveLobbySession] = useState<string | null>(null);
+  // Active lobby state - derived from LobbyContext
+  const activeLobbySession = activeLobby?.groupId === id ? activeLobby.sessionId : null;
 
   // Invite by username states
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -58,46 +60,12 @@ export default function GroupDetailsScreen() {
     loadGroupDetails();
   }, [id]);
 
-  // Check for active lobby when screen comes into focus
+  // Refresh lobby state when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      checkForActiveLobby();
+      refreshLobbyState();
     }, [id])
   );
-
-  const checkForActiveLobby = async () => {
-    try {
-      const storageKey = `activeLobby_group_${id}_user_${user?.id}`;
-      const storedSessionId = await AsyncStorage.getItem(storageKey);
-
-      if (storedSessionId) {
-        console.log('✅ Found stored lobby session:', storedSessionId);
-
-        // Validate that the lobby still exists on the server
-        try {
-          const response = await socialService.getLobbyStateV2(storedSessionId);
-
-          if (response.status === 'success' && response.data) {
-            console.log('✅ Lobby is still active on server');
-            setActiveLobbySession(storedSessionId);
-          } else {
-            console.log('⚠️ Lobby not found on server, clearing storage');
-            await AsyncStorage.removeItem(storageKey);
-            setActiveLobbySession(null);
-          }
-        } catch (error) {
-          console.log('❌ Failed to validate lobby, clearing storage:', error);
-          await AsyncStorage.removeItem(storageKey);
-          setActiveLobbySession(null);
-        }
-      } else {
-        console.log('ℹ️ No active lobby session found');
-        setActiveLobbySession(null);
-      }
-    } catch (error) {
-      console.error('❌ Error checking for active lobby:', error);
-    }
-  };
 
   // Listen to presence channel events for real-time online status
   // Note: The global subscription is already done in ReverbProvider
@@ -404,35 +372,86 @@ export default function GroupDetailsScreen() {
       // This creates an event-sourced lobby that works with the new architecture
       // Exercises will be generated later when user clicks "Generate Exercises"
       console.log('📡 Creating V2 lobby session on backend...');
-      const sessionResponse = await socialService.createLobbyV2(
-        parseInt(id as string),
-        {
-          workout_format: 'tabata',
-          exercises: [], // Empty exercises initially - will be populated when user generates them
+
+      let sessionResponse;
+      try {
+        sessionResponse = await socialService.createLobbyV2(
+          parseInt(id as string),
+          {
+            workout_format: 'tabata',
+            exercises: [], // Empty exercises initially - will be populated when user generates them
+          }
+        );
+      } catch (error: any) {
+        // If error is "already in another lobby", automatically force cleanup and retry
+        if (error.message && error.message.includes('already in another lobby')) {
+          console.log('⚠️ Stale lobby detected - running NUCLEAR CLEANUP and retrying...');
+
+          try {
+            // NUCLEAR CLEANUP - Force cleanup all lobbies (backend + frontend)
+            // This new implementation works even if backend has bugs
+            const cleanupResult = await forceCleanupAllLobbies();
+            console.log('✅ Nuclear cleanup complete:', cleanupResult);
+
+            // Wait 1 second to let backend process the cleanup
+            // Backend may need time to update its state
+            console.log('⏳ Waiting 1 second for backend to update...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            console.log('🔄 Retrying lobby creation after cleanup...');
+
+            // Retry lobby creation automatically
+            sessionResponse = await socialService.createLobbyV2(
+              parseInt(id as string),
+              {
+                workout_format: 'tabata',
+                exercises: [],
+              }
+            );
+
+            console.log('✅ Lobby created successfully after nuclear cleanup!');
+          } catch (retryError: any) {
+            console.error('❌ Retry failed after cleanup:', retryError);
+
+            // Even after nuclear cleanup, if it still fails, it's a backend issue
+            // Provide user with options
+            Alert.alert(
+              'Unable to Create Lobby',
+              'We performed emergency cleanup but the backend is still reporting you\'re in a lobby. This is a backend issue.\n\nOptions:\n1. Wait 1 minute and try again\n2. Contact support if issue persists',
+              [
+                { text: 'OK', style: 'cancel' },
+                {
+                  text: 'Try Again',
+                  onPress: () => {
+                    // User can manually retry by clicking the button again
+                    console.log('User will try again manually');
+                  }
+                }
+              ]
+            );
+            throw retryError;
+          }
+        } else {
+          throw error; // Re-throw if it's a different error
         }
-      );
+      }
 
       console.log('✅ V2 Lobby session created:', sessionResponse);
 
-      // Store active lobby session ID in state and AsyncStorage
+      // Store active lobby session using LobbyContext
       const sessionId = sessionResponse.data.session_id;
-      setActiveLobbySession(sessionId);
-
-      // Persist to AsyncStorage so it survives navigation
-      const storageKey = `activeLobby_group_${id}_user_${user?.id}`;
-      await AsyncStorage.setItem(storageKey, sessionId);
-      console.log('💾 Saved active lobby to storage:', storageKey, sessionId);
+      await saveLobbySession(sessionId, id as string, group?.name || `Group ${id}`);
 
       // Navigate to lobby with the session ID from V2 response
-      // The lobby will show online members and have a "Generate Exercises" button
+      // The lobby is already created, so we're JOINING it
       router.push({
         pathname: '/workout/group-lobby',
         params: {
           sessionId: sessionResponse.data.session_id,
           groupId: id as string,
-          workoutData: '', // Empty - exercises will be generated in lobby
+          workoutData: JSON.stringify({ workout_format: 'tabata', exercises: [] }),
           initiatorId: user?.id.toString() || '',
-          isCreatingLobby: 'true', // Flag to indicate we're just creating lobby
+          isCreatingLobby: 'false', // Lobby already created, just joining
         },
       });
     } catch (error: any) {

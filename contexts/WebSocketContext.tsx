@@ -136,8 +136,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     };
   }, [isAuthenticated, user?.id]);
 
-  const subscribeToGroupChannels = async () => {
+  const subscribeToGroupChannels = async (retryCount = 0) => {
     if (!user) return;
+
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 second
 
     try {
       console.log('📡 Fetching user groups for WebSocket subscriptions...');
@@ -180,8 +183,24 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       setSubscribedGroupIds(newSubscribedIds);
       setIsConnected(true);
       console.log('✅ Subscribed to all group channels');
-    } catch (error) {
-      console.error('❌ Failed to subscribe to group channels:', error);
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      const isDeadlock = errorMessage.includes('Deadlock') || errorMessage.includes('1213');
+
+      if (isDeadlock && retryCount < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = baseDelay * Math.pow(2, retryCount);
+        console.warn(`⚠️ Database deadlock detected (attempt ${retryCount + 1}/${maxRetries}), retrying in ${delay}ms...`);
+
+        setTimeout(() => {
+          subscribeToGroupChannels(retryCount + 1);
+        }, delay);
+      } else {
+        console.error('❌ Failed to subscribe to group channels:', error);
+        if (isDeadlock && retryCount >= maxRetries) {
+          console.error('❌ Max retries reached for database deadlock. Please try refreshing the app.');
+        }
+      }
     }
   };
 

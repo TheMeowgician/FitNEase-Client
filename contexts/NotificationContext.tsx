@@ -90,13 +90,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           console.log('🔔 [NOTIFICATION CONTEXT] Event Name:', eventName);
           console.log('🔔 [NOTIFICATION CONTEXT] Event Data:', JSON.stringify(data, null, 2));
 
+          // REAL-TIME UNREAD COUNT UPDATE (Most Efficient)
+          if (eventName === 'unread.count.updated' || eventName === '.unread.count.updated') {
+            console.log('📊 [NOTIFICATION CONTEXT] Unread count update received from server!');
+            const newCount = data.unread_count;
+            setUnreadCount(newCount);
+            console.log(`📊 [NOTIFICATION CONTEXT] Badge updated instantly: ${newCount}`);
+            return;
+          }
+
           // Check if it's a notification created event
           if (eventName === 'notification.created' || eventName === '.notification.created') {
             console.log('📬 [NOTIFICATION CONTEXT] This is a notification.created event!');
 
             const notification = data.notification;
 
-            // Increment unread count
+            // Increment unread count (backup - server should send unread.count.updated)
             setUnreadCount((prev) => {
               const newCount = prev + 1;
               console.log(`📬 [NOTIFICATION CONTEXT] Incrementing badge count: ${prev} -> ${newCount}`);
@@ -115,7 +124,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
             console.log('✅ [NOTIFICATION CONTEXT] Badge count updated and listeners notified successfully');
           } else {
-            console.log(`⚠️ [NOTIFICATION CONTEXT] Event type "${eventName}" does not match notification.created`);
+            console.log(`⚠️ [NOTIFICATION CONTEXT] Event type "${eventName}" - ignoring`);
           }
         },
       });
@@ -132,12 +141,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     try {
       await commsService.markNotificationAsRead(notificationId);
 
-      // Decrement unread count
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-
-      console.log('✅ [NOTIFICATION CONTEXT] Marked notification as read, decremented badge count');
+      // Server will broadcast updated unread count via WebSocket
+      // No need to manually decrement - real-time update will arrive
+      console.log('✅ [NOTIFICATION CONTEXT] Marked notification as read, waiting for server count update');
     } catch (error) {
       console.error('[NOTIFICATION CONTEXT] Error marking notification as read:', error);
+      // On error, refresh count from server
+      refreshUnreadCount();
       throw error;
     }
   };

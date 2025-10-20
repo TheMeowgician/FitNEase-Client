@@ -5,6 +5,7 @@ export interface LobbyMember {
   user_name: string;
   status: 'waiting' | 'ready';
   joined_at: number;
+  fitness_level?: 'beginner' | 'intermediate' | 'advanced';
 }
 
 export interface ChatMessage {
@@ -33,6 +34,8 @@ interface LobbyStore {
   // State
   currentLobby: LobbyState | null;
   chatMessages: ChatMessage[];
+  unreadMessageCount: number;
+  isChatOpen: boolean;
   isLoading: boolean;
 
   // Actions
@@ -42,6 +45,10 @@ interface LobbyStore {
   removeMember: (userId: number) => void;
   addChatMessage: (message: ChatMessage) => void;
   addChatMessages: (messages: ChatMessage[]) => void;
+  removeTempMessage: (tempMessageId: string) => void;
+  incrementUnreadCount: () => void;
+  resetUnreadCount: () => void;
+  setChatOpen: (isOpen: boolean) => void;
   clearLobby: () => void;
   setLoading: (isLoading: boolean) => void;
 }
@@ -49,6 +56,8 @@ interface LobbyStore {
 export const useLobbyStore = create<LobbyStore>((set, get) => ({
   currentLobby: null,
   chatMessages: [],
+  unreadMessageCount: 0,
+  isChatOpen: false,
   isLoading: false,
 
   /**
@@ -144,8 +153,12 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
         return state;
       }
 
+      // Increment unread count if chat is closed (unless it's a temp message)
+      const shouldIncrementUnread = !state.isChatOpen && !message.message_id.startsWith('temp-');
+
       return {
         chatMessages: [...state.chatMessages, message],
+        unreadMessageCount: shouldIncrementUnread ? state.unreadMessageCount + 1 : state.unreadMessageCount,
       };
     });
 
@@ -181,12 +194,52 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
   },
 
   /**
+   * Remove temporary optimistic message (when real message arrives)
+   */
+  removeTempMessage: (tempMessageId: string) => {
+    set((state) => ({
+      chatMessages: state.chatMessages.filter((m) => m.message_id !== tempMessageId),
+    }));
+    console.log('🗑️ [LOBBY STORE] Temp message removed:', tempMessageId);
+  },
+
+  /**
+   * Increment unread message count
+   */
+  incrementUnreadCount: () => {
+    set((state) => ({
+      unreadMessageCount: state.unreadMessageCount + 1,
+    }));
+  },
+
+  /**
+   * Reset unread message count (when chat is opened)
+   */
+  resetUnreadCount: () => {
+    set({ unreadMessageCount: 0 });
+    console.log('📬 [LOBBY STORE] Unread count reset');
+  },
+
+  /**
+   * Set chat open/closed state
+   */
+  setChatOpen: (isOpen: boolean) => {
+    set({ isChatOpen: isOpen });
+    if (isOpen) {
+      set({ unreadMessageCount: 0 });
+    }
+    console.log(`💬 [LOBBY STORE] Chat ${isOpen ? 'opened' : 'closed'}`);
+  },
+
+  /**
    * Clear lobby and chat
    */
   clearLobby: () => {
     set({
       currentLobby: null,
       chatMessages: [],
+      unreadMessageCount: 0,
+      isChatOpen: false,
       isLoading: false,
     });
     console.log('🗑️ [LOBBY STORE] Lobby cleared');
@@ -201,11 +254,17 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
 }));
 
 /**
+ * Stable empty array reference to prevent unnecessary re-renders
+ */
+const EMPTY_ARRAY: LobbyMember[] = [];
+
+/**
  * Selectors for optimized re-renders
  */
 export const selectCurrentLobby = (state: LobbyStore) => state.currentLobby;
 
-export const selectLobbyMembers = (state: LobbyStore) => state.currentLobby?.members || [];
+export const selectLobbyMembers = (state: LobbyStore) =>
+  state.currentLobby?.members ?? EMPTY_ARRAY;
 
 export const selectChatMessages = (state: LobbyStore) => state.chatMessages;
 
@@ -222,3 +281,5 @@ export const selectAreAllMembersReady = (state: LobbyStore) => {
 export const selectIsLobbyInitiator = (userId: number) => (state: LobbyStore) => {
   return state.currentLobby?.initiator_id === userId;
 };
+
+export const selectUnreadMessageCount = (state: LobbyStore) => state.unreadMessageCount;
