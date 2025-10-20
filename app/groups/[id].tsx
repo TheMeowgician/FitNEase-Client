@@ -19,6 +19,7 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
+import { useReverb } from '../../contexts/ReverbProvider';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
@@ -32,12 +33,12 @@ export default function GroupDetailsScreen() {
   const { goBack } = useSmartBack();
   const { getGroupWorkoutRecommendations } = useMLService();
   const { activeLobby, saveLobbySession, checkForActiveLobby: refreshLobbyState, forceCleanupAllLobbies } = useLobby();
+  const { onlineUsers } = useReverb(); // Get global online users from Reverb context
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [userRole, setUserRole] = useState<'owner' | 'moderator' | 'member' | null>(null);
-  const [onlineMemberIds, setOnlineMemberIds] = useState<Set<string>>(new Set());
 
   // Group workout states
   const [isGeneratingWorkout, setIsGeneratingWorkout] = useState(false);
@@ -67,104 +68,66 @@ export default function GroupDetailsScreen() {
     }, [id])
   );
 
-  // Listen to presence channel events for real-time online status
-  // Note: The global subscription is already done in ReverbProvider
-  // We just need to listen for the events and update local state
+  // Listen for real-time group member updates (joins/leaves/kicks)
   useEffect(() => {
     if (!id) return;
 
-    console.log(`🟢 Setting up presence listeners for group ${id}`);
+    console.log(`🔔 Setting up group member update listener for group ${id}`);
 
-    // Get the existing presence channel (already subscribed globally)
-    const channelName = `presence-group.${id}`;
-    const pusher = (reverbService as any).pusher;
-    const channel = pusher?.channel(channelName);
+    const channelName = `group.${id}`;
 
-    if (!channel) {
-      console.warn(`⚠️ Presence channel not found for group ${id}`);
-      return;
-    }
+    // Subscribe to group's private channel for member updates
+    reverbService.subscribeToPrivateChannel(channelName, {
+      onEvent: (eventName: string, data: any) => {
+        console.log('🔔 [GROUP DETAILS] Received event:', eventName, data);
 
-    console.log(`✅ Found presence channel for group ${id}`, {
-      channelName,
-      subscriptionState: channel.subscriptionState,
-      hasMembers: !!channel.members
+        // Handle group member updates
+        if (eventName === 'group.members.updated' || eventName === '.group.members.updated') {
+          console.log('👥 [GROUP DETAILS] Group members updated!', {
+            memberCount: data.member_count,
+            membersReceived: data.members?.length
+          });
+
+          // Update members list in real-time
+          if (data.members && Array.isArray(data.members)) {
+            setMembers(data.members);
+          }
+
+          // Update member count
+          if (data.member_count !== undefined && group) {
+            setGroup({
+              ...group,
+              memberCount: data.member_count
+            });
+          }
+
+          console.log('✅ [GROUP DETAILS] Member list updated in real-time');
+        }
+
+        // Handle group stats updates
+        if (eventName === 'group.stats.updated' || eventName === '.group.stats.updated') {
+          console.log('📊 [GROUP DETAILS] Group stats updated!', data.stats);
+
+          if (data.stats && group) {
+            setGroup({
+              ...group,
+              stats: data.stats
+            });
+          }
+
+          console.log('✅ [GROUP DETAILS] Stats updated in real-time');
+        }
+      }
     });
 
-    // Check if channel is already subscribed and has members
-    if (channel.members) {
-      const currentMembers = channel.members.members || {};
-      const memberIds = Object.keys(currentMembers);
-      console.log('👥 Channel already has members:', {
-        count: channel.members.count,
-        memberIds
-      });
-      setOnlineMemberIds(new Set(memberIds));
-    }
-
-    // Bind to presence events
-    const handleMemberAdded = (member: any) => {
-      console.log('👤 Member came online - FULL OBJECT:', JSON.stringify(member, null, 2));
-      console.log('👤 Member structure:', {
-        id: member.id,
-        user_id: member.user_id,
-        info: member.info,
-        keys: Object.keys(member)
-      });
-
-      // Pusher presence channels use member.id as the user identifier
-      const userId = member.id?.toString();
-      if (userId) {
-        console.log('✅ Adding online member with userId:', userId);
-        setOnlineMemberIds((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(userId);
-          console.log('📊 Online members after add:', Array.from(newSet));
-          return newSet;
-        });
-      }
-    };
-
-    const handleMemberRemoved = (member: any) => {
-      console.log('👋 Member went offline - FULL OBJECT:', JSON.stringify(member, null, 2));
-      const userId = member.id?.toString();
-      if (userId) {
-        console.log('❌ Removing offline member with userId:', userId);
-        setOnlineMemberIds((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(userId);
-          console.log('📊 Online members after remove:', Array.from(newSet));
-          return newSet;
-        });
-      }
-    };
-
-    const handleSubscriptionSucceeded = (members: any) => {
-      console.log('👥 Subscription succeeded event - FULL OBJECT:', JSON.stringify(members, null, 2));
-      console.log('👥 Members structure:', {
-        members: members.members,
-        count: members.count,
-        keys: Object.keys(members)
-      });
-
-      // Extract user IDs from presence members
-      const memberIds = Object.keys(members.members || {});
-      console.log('✅ Initial online user IDs:', memberIds);
-      setOnlineMemberIds(new Set(memberIds));
-    };
-
-    channel.bind('pusher:member_added', handleMemberAdded);
-    channel.bind('pusher:member_removed', handleMemberRemoved);
-    channel.bind('pusher:subscription_succeeded', handleSubscriptionSucceeded);
-
-    // Cleanup: unbind events when component unmounts (but don't unsubscribe)
     return () => {
-      console.log(`🔴 Removing presence listeners for group ${id}`);
-      channel.unbind('pusher:member_added', handleMemberAdded);
-      channel.unbind('pusher:member_removed', handleMemberRemoved);
-      channel.unbind('pusher:subscription_succeeded', handleSubscriptionSucceeded);
+      console.log(`🔴 Unsubscribing from group ${id} member updates`);
+      reverbService.unsubscribe(`private-${channelName}`);
     };
-  }, [id]);
+  }, [id, group]);
+
+  // Online status is now tracked globally via ReverbProvider
+  // No need for per-group presence channels anymore!
 
   const loadGroupDetails = async () => {
     try {
@@ -687,11 +650,11 @@ export default function GroupDetailsScreen() {
 
           <View style={styles.membersList}>
             {members.map((member) => {
-              const isOnline = onlineMemberIds.has(member.userId);
+              const isOnline = onlineUsers.has(member.userId);
               console.log(`🔍 Checking member ${member.username}:`, {
                 userId: member.userId,
                 isOnline,
-                onlineMemberIds: Array.from(onlineMemberIds)
+                globalOnlineUsers: Array.from(onlineUsers)
               });
               return (
                 <View key={member.id} style={styles.memberCard}>

@@ -37,9 +37,13 @@ interface InvitationData {
 
 interface ReverbContextType {
   isConnected: boolean;
+  onlineUsers: Set<string>;
 }
 
-const ReverbContext = createContext<ReverbContextType>({ isConnected: false });
+const ReverbContext = createContext<ReverbContextType>({
+  isConnected: false,
+  onlineUsers: new Set()
+});
 
 export function ReverbProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -48,6 +52,7 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
   const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
   const [showInvitationModal, setShowInvitationModal] = useState(false);
   const [userGroups, setUserGroups] = useState<number[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   // Connect to Reverb and fetch user's groups when user logs in
   useEffect(() => {
@@ -61,21 +66,61 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
 
     const setupReverb = async () => {
       try {
-        console.log('🔌 Setting up global Reverb connection for user:', user.id);
+        console.log('🔌 [REVERB PROVIDER] Setting up global Reverb connection for user:', user.id);
 
         // Connect to Reverb
         await reverbService.connect(Number(user.id));
+        console.log('✅ [REVERB PROVIDER] Connected to Reverb');
         setIsConnected(true);
 
         // Fetch all groups the user is a member of
+        console.log('📋 [REVERB PROVIDER] Fetching user groups...');
         const groupsResponse = await socialService.getGroups({ user_id: Number(user.id) });
         const groups = groupsResponse.groups || [];
         const groupIds = groups.map((group: any) => group.id);
 
-        console.log('📋 User is a member of groups:', groupIds);
+        console.log('📋 [REVERB PROVIDER] User is a member of groups:', groupIds);
         setUserGroups(groupIds);
 
-        // Subscribe to all groups for workout invitations AND presence
+        // Subscribe to GLOBAL presence channel for online status
+        console.log('🌍 [REVERB PROVIDER] About to subscribe to GLOBAL online users presence channel');
+
+        // Unsubscribe first if already subscribed (in case of reconnection)
+        reverbService.unsubscribe('presence-online-users');
+
+        const presenceChannel = reverbService.subscribeToGlobalPresence({
+          onMemberOnline: (member: any) => {
+            console.log('🟢 User came online globally:', member.id);
+            setOnlineUsers((prev) => {
+              const newSet = new Set(prev);
+              newSet.add(member.id.toString());
+              console.log('📊 Updated online users after member online:', Array.from(newSet));
+              return newSet;
+            });
+          },
+          onMemberOffline: (member: any) => {
+            console.log('🔴 User went offline globally:', member.id);
+            setOnlineUsers((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(member.id.toString());
+              console.log('📊 Updated online users after member offline:', Array.from(newSet));
+              return newSet;
+            });
+          },
+          onInitialMembers: (members: any[]) => {
+            const userIds = members.map(m => m.id.toString());
+            console.log('👥 Initial online users:', {
+              count: members.length,
+              userIds: userIds
+            });
+            setOnlineUsers(new Set(userIds));
+            console.log('📊 Set online users state to:', userIds);
+          },
+        });
+
+        console.log('✅ [REVERB PROVIDER] Global presence channel subscribed:', presenceChannel ? 'success' : 'failed');
+
+        // Subscribe to all groups for workout invitations
         groupIds.forEach((groupId: number) => {
           console.log(`✅ Subscribing to group ${groupId} for invitations`);
           reverbService.subscribeToGroupWorkoutInvitations(groupId, (data) => {
@@ -98,32 +143,11 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
             setInvitationData(data);
             setShowInvitationModal(true);
           });
-
-          // Subscribe to presence channel to broadcast online status
-          console.log(`🟢 Subscribing to presence channel for group ${groupId}`);
-          reverbService.subscribeToGroupPresence(groupId, {
-            onMemberOnline: (member: any) => {
-              console.log(`👤 Member came online in group ${groupId}:`, {
-                id: member.id,
-                info: member.info
-              });
-            },
-            onMemberOffline: (member: any) => {
-              console.log(`👋 Member went offline in group ${groupId}:`, {
-                id: member.id
-              });
-            },
-            onInitialMembers: (members: any[]) => {
-              console.log(`👥 Initial online members in group ${groupId}:`, {
-                count: members.length,
-                memberIds: members.map(m => m.id)
-              });
-            },
-          });
         });
 
       } catch (error) {
-        console.error('❌ Failed to setup Reverb:', error);
+        console.error('❌ [REVERB PROVIDER] Failed to setup Reverb:', error);
+        console.error('❌ [REVERB PROVIDER] Error details:', JSON.stringify(error, null, 2));
         setIsConnected(false);
       }
     };
@@ -135,8 +159,9 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
       console.log('🔌 Cleaning up Reverb connection');
       userGroups.forEach((groupId) => {
         reverbService.unsubscribe(`private-group.${groupId}`);
-        reverbService.unsubscribe(`presence-group.${groupId}`);
       });
+      // Unsubscribe from global presence
+      reverbService.unsubscribe('presence-online-users');
     };
   }, [user]);
 
@@ -167,7 +192,7 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ReverbContext.Provider value={{ isConnected }}>
+    <ReverbContext.Provider value={{ isConnected, onlineUsers }}>
       {children}
       <GroupWorkoutInvitationModal
         visible={showInvitationModal}

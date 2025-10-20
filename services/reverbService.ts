@@ -351,6 +351,42 @@ class ReverbService {
   }
 
   /**
+   * Subscribe to GLOBAL presence channel (track ALL online users in the app)
+   * More efficient than per-group presence for showing who's logged in
+   */
+  public subscribeToGlobalPresence(
+    callbacks: {
+      onMemberOnline: (member: any) => void;
+      onMemberOffline: (member: any) => void;
+      onInitialMembers?: (members: any[]) => void;
+    }
+  ) {
+    const channel = this.subscribeToPresenceChannel('online-users', {
+      onEvent: () => {},
+      onMemberAdded: callbacks.onMemberOnline,
+      onMemberRemoved: callbacks.onMemberOffline,
+    });
+
+    // Get initial list of ALL online users
+    if (channel && callbacks.onInitialMembers) {
+      channel.bind('pusher:subscription_succeeded', (members: any) => {
+        // Presence channel members object has user IDs as keys
+        const memberIds = Object.keys(members.members || {});
+        console.log(`🌍 Initial GLOBAL online users:`, {
+          count: memberIds.length,
+          userIds: memberIds
+        });
+
+        // Convert to array of member objects with id property
+        const membersList = memberIds.map(id => ({ id }));
+        callbacks.onInitialMembers?.(membersList);
+      });
+    }
+
+    return channel;
+  }
+
+  /**
    * Manual reconnect - can be called after max retries reached
    */
   public async manualReconnect(): Promise<boolean> {

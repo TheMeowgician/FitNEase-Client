@@ -2,15 +2,13 @@ import { Tabs } from 'expo-router';
 import { Platform, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { ReverbProvider } from '../../contexts/ReverbProvider';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
 
 export default function TabLayout() {
 
   return (
-    <ReverbProvider>
-      <View style={{ flex: 1 }}>
-        <Tabs
+    <View style={{ flex: 1 }}>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.PRIMARY[600],
@@ -95,9 +93,8 @@ export default function TabLayout() {
           ),
         }}
       />
-        </Tabs>
-        <GlobalLobbyIndicator />
-      </View>
-    </ReverbProvider>
+      </Tabs>
+      <GlobalLobbyIndicator />
+    </View>
   );
 }
