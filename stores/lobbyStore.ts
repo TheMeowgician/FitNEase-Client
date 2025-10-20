@@ -37,6 +37,7 @@ interface LobbyStore {
   unreadMessageCount: number;
   isChatOpen: boolean;
   isLoading: boolean;
+  lastUpdated: number; // Timestamp to force re-renders
 
   // Actions
   setLobbyState: (lobbyState: LobbyState) => void;
@@ -59,16 +60,22 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
   unreadMessageCount: 0,
   isChatOpen: false,
   isLoading: false,
+  lastUpdated: 0,
 
   /**
    * Set complete lobby state (from API or WebSocket)
+   * IMPORTANT: Updates lastUpdated timestamp to force re-renders on Android
    */
   setLobbyState: (lobbyState: LobbyState) => {
-    set({ currentLobby: lobbyState });
+    set({
+      currentLobby: lobbyState,
+      lastUpdated: Date.now() // Force re-render by updating timestamp
+    });
     console.log('📊 [LOBBY STORE] Lobby state updated:', {
       session_id: lobbyState.session_id,
       status: lobbyState.status,
       member_count: lobbyState.member_count,
+      members_count_actual: lobbyState.members?.length || 0,
     });
   },
 
@@ -88,6 +95,7 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
           ...state.currentLobby,
           members: updatedMembers,
         },
+        lastUpdated: Date.now() // Force re-render
       };
     });
 
@@ -114,6 +122,7 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
           members: [...state.currentLobby.members, member],
           member_count: state.currentLobby.member_count + 1,
         },
+        lastUpdated: Date.now() // Force re-render
       };
     });
 
@@ -135,6 +144,7 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
           members: updatedMembers,
           member_count: updatedMembers.length,
         },
+        lastUpdated: Date.now() // Force re-render
       };
     });
 
@@ -241,6 +251,7 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
       unreadMessageCount: 0,
       isChatOpen: false,
       isLoading: false,
+      lastUpdated: Date.now() // Force re-render
     });
     console.log('🗑️ [LOBBY STORE] Lobby cleared');
   },

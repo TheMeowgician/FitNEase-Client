@@ -20,6 +20,7 @@ import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMemb
 import { useConnectionStore, selectIsConnected, selectConnectionState } from '../../stores/connectionStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
+import { useReverb } from '../../contexts/ReverbProvider';
 import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
@@ -65,6 +66,9 @@ export default function GroupLobbyScreen() {
   const allMembersReady = useLobbyStore(selectAreAllMembersReady);
   const isConnected = useConnectionStore(selectIsConnected);
   const connectionState = useConnectionStore(selectConnectionState);
+
+  // Global online users from Reverb context
+  const { onlineUsers } = useReverb();
   const setLobbyState = useLobbyStore((state) => state.setLobbyState);
   const updateMemberStatus = useLobbyStore((state) => state.updateMemberStatus);
   const addMember = useLobbyStore((state) => state.addMember);
@@ -83,6 +87,7 @@ export default function GroupLobbyScreen() {
   const [onlineMembers, setOnlineMembers] = useState<Set<number>>(new Set());
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<Set<number>>(new Set());
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
@@ -90,6 +95,7 @@ export default function GroupLobbyScreen() {
   const [groupOnlineMembers, setGroupOnlineMembers] = useState<Set<number>>(new Set());
   const [exerciseDetails, setExerciseDetails] = useState<Exercise[]>([]);
   const [isLoadingExercises, setIsLoadingExercises] = useState(false);
+  const [isWorkoutDetailsExpanded, setIsWorkoutDetailsExpanded] = useState(false);
 
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -97,13 +103,22 @@ export default function GroupLobbyScreen() {
   const channelRef = useRef<any>(null);
   const presenceChannelRef = useRef<any>(null);
   const groupPresenceChannelRef = useRef<any>(null);
+  const userChannelRef = useRef<any>(null);
 
   // Check if current user is initiator
+  // IMPORTANT: This syncs with currentLobby.initiator_id (which updates via WebSocket)
+  // instead of just the URL parameter (which is static)
   useEffect(() => {
-    if (currentUser && initiatorId) {
-      setIsInitiator(currentUser.id === initiatorId);
+    if (currentUser && currentLobby) {
+      const isUserInitiator = parseInt(currentUser.id) === currentLobby.initiator_id;
+      setIsInitiator(isUserInitiator);
+      console.log('👑 [INITIATOR CHECK] Updated initiator status:', {
+        userId: currentUser.id,
+        lobbyInitiatorId: currentLobby.initiator_id,
+        isInitiator: isUserInitiator
+      });
     }
-  }, [currentUser, initiatorId]);
+  }, [currentUser, currentLobby?.initiator_id]);
 
   // Check if exercises have been generated
   const hasExercises = currentLobby?.workout_data?.exercises?.length > 0;
@@ -220,10 +235,19 @@ export default function GroupLobbyScreen() {
     try {
       setLoading(true);
 
-      // If creating lobby, call API to create it
+      // REAL-TIME FIRST APPROACH:
+      // 1. Subscribe to WebSocket FIRST (before any API calls)
+      // 2. LobbyStateChanged event will provide the initial state
+      // 3. Only call API if we need to CREATE or JOIN the lobby in the database
+
+      console.log('🔌 [REAL-TIME] Subscribing to WebSocket channels first...');
+      subscribeToChannels();
+
+      // If creating lobby, call API to create it in the database
       if (isCreatingLobby === 'true') {
         const workoutDataParsed = workoutData ? JSON.parse(workoutData) : null;
 
+        console.log('📤 [REAL-TIME] Creating lobby in database...');
         const response = await socialService.createLobbyV2(
           parseInt(groupId),
           workoutDataParsed
@@ -233,53 +257,50 @@ export default function GroupLobbyScreen() {
           throw new Error('Failed to create lobby');
         }
 
-        // Set initial lobby state
+        console.log('✅ [REAL-TIME] Lobby created');
+        // Set initial state from API response (safety net for race conditions)
+        // WebSocket will handle all future updates
         setLobbyState(response.data.lobby_state);
       } else {
-        // Lobby already exists - check if we're the initiator OR joined via invitation
+        // Lobby already exists - check if we need to join
         const isUserInitiator = initiatorId === currentUser.id;
         const alreadyJoined = joinedViaInvite === 'true';
 
         if (isUserInitiator || alreadyJoined) {
-          // Initiator just created lobby OR user already joined via invitation acceptance
-          // Just fetch state instead of joining again
+          // Initiator or user who already joined via invitation
+          // Fetch current state once, then rely on WebSocket for updates
           console.log(
             alreadyJoined
-              ? '✅ User already joined via invitation acceptance, fetching lobby state...'
-              : '✅ User is initiator, fetching lobby state...'
+              ? '✅ [REAL-TIME] Already joined via invitation, fetching initial state...'
+              : '✅ [REAL-TIME] User is initiator, fetching initial state...'
           );
 
           const response = await socialService.getLobbyStateV2(sessionId);
-
-          console.log('📊 Get lobby state response:', JSON.stringify(response, null, 2));
 
           if (response.status !== 'success' || !response.data) {
             throw new Error('Failed to get lobby state');
           }
 
-          // IMPORTANT: response.data contains lobby_state directly (service already unwraps it)
+          // Set initial state - WebSocket will handle all future updates
           setLobbyState(response.data.lobby_state);
         } else {
           // Not initiator and didn't join via invitation - join the lobby now
-          console.log('📤 Joining lobby...');
+          console.log('📤 [REAL-TIME] Joining lobby in database...');
           const response = await socialService.joinLobbyV2(sessionId);
-
-          console.log('📊 Join lobby response:', JSON.stringify(response, null, 2));
 
           if (response.status !== 'success' || !response.data) {
             throw new Error('Failed to join lobby');
           }
 
-          // IMPORTANT: response.data contains lobby_state directly (service already unwraps it)
+          console.log('✅ [REAL-TIME] Joined lobby');
+          // Set initial state from API response (safety net for race conditions)
+          // WebSocket will handle all future updates
           setLobbyState(response.data.lobby_state);
         }
       }
 
       // Save active lobby to AsyncStorage (for crash recovery)
       await saveActiveLobbyToStorage();
-
-      // Subscribe to WebSocket channels
-      subscribeToChannels();
 
       hasJoinedRef.current = true;
     } catch (error) {
@@ -326,15 +347,19 @@ export default function GroupLobbyScreen() {
       console.log('🔌 Calling subscribeToLobby...');
       channelRef.current = reverbService.subscribeToLobby(sessionId, {
       onLobbyStateChanged: (data: any) => {
-        console.log('📊 Lobby state changed:', data);
+        console.log('📊 [REAL-TIME] Lobby state changed:', data);
+        // CRITICAL: This is the single source of truth for lobby state
+        // Backend broadcasts this event for ALL changes (join, leave, status, kick, transfer, etc.)
         if (data?.lobby_state) {
           setLobbyState(data.lobby_state);
         }
       },
+      // NOTE: Individual events like MemberJoined, MemberLeft, MemberStatusUpdated are kept
+      // for system chat messages only. State updates come from LobbyStateChanged above.
       onMemberJoined: (data: any) => {
-        console.log('👤 Member joined:', data);
+        console.log('👤 [REAL-TIME] Member joined:', data);
+        // Add system chat message (don't update state - LobbyStateChanged handles it)
         if (data?.member) {
-          addMember(data.member);
           addChatMessage({
             message_id: `system-${Date.now()}`,
             user_id: null,
@@ -346,9 +371,9 @@ export default function GroupLobbyScreen() {
         }
       },
       onMemberLeft: (data: any) => {
-        console.log('👤 Member left:', data);
+        console.log('👤 [REAL-TIME] Member left:', data);
+        // Add system chat message (don't update state - LobbyStateChanged handles it)
         if (data?.user_id) {
-          removeMember(data.user_id);
           addChatMessage({
             message_id: `system-${Date.now()}`,
             user_id: null,
@@ -360,10 +385,9 @@ export default function GroupLobbyScreen() {
         }
       },
       onMemberStatusUpdated: (data: any) => {
-        console.log('✅ Member status updated:', data);
-        if (data?.user_id && data?.status) {
-          updateMemberStatus(data.user_id, data.status);
-        }
+        console.log('✅ [REAL-TIME] Member status updated:', data);
+        // State update handled by LobbyStateChanged event
+        // This event is kept for potential future use (analytics, etc.)
       },
       onLobbyMessageSent: (data: any) => {
         console.log('💬 Message received:', data);
@@ -458,13 +482,11 @@ export default function GroupLobbyScreen() {
         router.back();
       },
       onMemberKicked: (data: any) => {
-        console.log('⚠️ Member kicked:', data);
-        if (data?.kicked_user_id === parseInt(currentUser?.id || '0')) {
-          Alert.alert('Kicked', data.reason || 'You have been removed from the lobby.');
-          cleanup();
-          router.back();
-        } else if (data?.kicked_user_id) {
-          removeMember(data.kicked_user_id);
+        console.log('⚠️ [REAL-TIME] Member kicked:', data);
+        // NOTE: The kicked user receives this event on their PERSONAL channel (private-user.{id})
+        // NOT on the lobby channel. So this handler only processes OTHER users being kicked.
+        if (data?.kicked_user_id) {
+          // Add system chat message (don't update state - LobbyStateChanged handles it)
           addChatMessage({
             message_id: `system-${Date.now()}`,
             user_id: null,
@@ -476,15 +498,11 @@ export default function GroupLobbyScreen() {
         }
       },
       onInitiatorRoleTransferred: (data: any) => {
-        console.log('👑 Initiator role transferred:', data);
-        if (data?.lobby_state) {
-          setLobbyState(data.lobby_state);
-        }
-        // Update local isInitiator state
-        if (currentUser && data?.new_initiator_id) {
-          setIsInitiator(parseInt(currentUser.id) === data.new_initiator_id);
-        }
-        // Add system message
+        console.log('👑 [REAL-TIME] Initiator role transferred:', data);
+        // NOTE: isInitiator state is automatically updated by the useEffect watching currentLobby.initiator_id
+        // No manual state update needed here - LobbyStateChanged event updates the store
+
+        // Add system chat message
         addChatMessage({
           message_id: `system-${Date.now()}`,
           user_id: null,
@@ -499,7 +517,9 @@ export default function GroupLobbyScreen() {
       console.log('✅ Subscribed to lobby channel');
       console.log('🔌 Calling subscribeToPresence...');
 
-      // Subscribe to presence channel for online status
+      // Subscribe to presence channel for lobby-specific tracking
+      // Note: Online indicators use global presence (onlineUsers from useReverb)
+      // This channel tracks who's actively viewing this specific lobby screen
       presenceChannelRef.current = reverbService.subscribeToPresence(`lobby.${sessionId}`, {
         onHere: (members: any[]) => {
           console.log('👥 Members here:', members);
@@ -524,7 +544,33 @@ export default function GroupLobbyScreen() {
         },
       });
 
-      console.log('✅ Subscribed to lobby channels');
+      console.log('✅ Subscribed to presence channel');
+
+      // Subscribe to user's personal channel for kick notifications
+      if (currentUser) {
+        console.log('🔌 Subscribing to user channel for user:', currentUser.id);
+        userChannelRef.current = reverbService.subscribeToUserChannel(currentUser.id, {
+          onMemberKicked: (data: any) => {
+            console.log('🚫 YOU HAVE BEEN KICKED from lobby:', data);
+            Alert.alert(
+              'Removed from Lobby',
+              data.message || 'You have been removed from the lobby.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    cleanup();
+                    router.back();
+                  }
+                }
+              ]
+            );
+          },
+        });
+        console.log('✅ Subscribed to user channel');
+      }
+
+      console.log('✅ Subscribed to all lobby channels');
     } catch (error) {
       console.error('❌ Error subscribing to channels:', error);
       throw error;
@@ -731,11 +777,9 @@ export default function GroupLobbyScreen() {
   };
 
   /**
-   * Open invite modal
+   * Open invite modal (now available to all users)
    */
   const handleInviteMembers = async () => {
-    if (!isInitiator) return;
-
     setIsInviteModalOpen(true);
 
     // Subscribe to group presence if not already subscribed
@@ -871,8 +915,8 @@ export default function GroupLobbyScreen() {
     if (!isInitiator) return;
 
     Alert.alert(
-      'Transfer Creator Role',
-      `Transfer the creator role to ${userName}? You will become a regular member.`,
+      'Transfer Leader Role',
+      `Transfer the leader role to ${userName}? You will become a regular member.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -880,11 +924,15 @@ export default function GroupLobbyScreen() {
           style: 'default',
           onPress: async () => {
             try {
-              // TODO: Implement transfer role API call
-              Alert.alert('Coming Soon', 'Role transfer feature will be implemented soon!');
+              console.log('👑 Transferring initiator role to:', userName);
+              await socialService.transferInitiatorRoleV2(sessionId, userId);
+
+              // Real-time updates will be handled by WebSocket listener
+              // No need to manually update state - the broadcast will trigger it
+              console.log('✅ Role transfer initiated successfully');
             } catch (error) {
               console.error('❌ Error transferring role:', error);
-              Alert.alert('Error', 'Failed to transfer role.');
+              Alert.alert('Error', 'Failed to transfer leader role. Please try again.');
             }
           },
         },
@@ -908,10 +956,15 @@ export default function GroupLobbyScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🚫 Removing member from lobby:', userName);
               await socialService.kickMemberFromLobbyV2(sessionId, userId);
+
+              // Real-time updates will be handled by WebSocket listener
+              // The member will be removed from the list automatically via broadcast
+              console.log('✅ Member removed successfully');
             } catch (error) {
               console.error('❌ Error kicking member:', error);
-              Alert.alert('Error', 'Failed to remove member.');
+              Alert.alert('Error', 'Failed to remove member. Please try again.');
             }
           },
         },
@@ -1029,11 +1082,18 @@ export default function GroupLobbyScreen() {
         console.log('🧹 [CLEANUP] Unsubscribed from group presence channel');
       }
 
-      // 5. Clear lobby store
+      // 5. Unsubscribe from user personal channel
+      if (userChannelRef.current && currentUser) {
+        reverbService.unsubscribe(`private-user.${currentUser.id}`);
+        userChannelRef.current = null;
+        console.log('🧹 [CLEANUP] Unsubscribed from user channel');
+      }
+
+      // 6. Clear lobby store
       clearLobby();
       console.log('🧹 [CLEANUP] Cleared lobby store');
 
-      // 6. Reset all refs
+      // 7. Reset all refs
       hasJoinedRef.current = false;
       hasInitializedRef.current = false;
       console.log('🧹 [CLEANUP] Reset refs');
@@ -1092,10 +1152,10 @@ export default function GroupLobbyScreen() {
           <Text style={styles.headerTitle}>Group Workout Lobby</Text>
         </View>
         <View style={styles.headerActions}>
-          {/* Invite Members Button - Initiator Only */}
+          {/* Settings Button - Initiator Only */}
           {isInitiator && (
-            <TouchableOpacity onPress={handleInviteMembers} style={styles.iconButton}>
-              <Ionicons name="person-add-outline" size={24} color={COLORS.PRIMARY[600]} />
+            <TouchableOpacity style={styles.iconButton} onPress={() => setIsSettingsModalOpen(true)}>
+              <Ionicons name="settings-outline" size={24} color={COLORS.PRIMARY[600]} />
             </TouchableOpacity>
           )}
 
@@ -1122,17 +1182,30 @@ export default function GroupLobbyScreen() {
       <View style={styles.content}>
         {/* Members Section */}
         <View style={styles.membersSection}>
-          <Text style={styles.sectionTitle}>
-            Members ({lobbyMembers.length})
-          </Text>
+          <View style={styles.membersSectionHeader}>
+            <Text style={styles.sectionTitle}>
+              Members ({lobbyMembers.length})
+            </Text>
+            {/* Invite Members Button - Available to All Users */}
+            <TouchableOpacity onPress={handleInviteMembers} style={styles.inviteIconButton}>
+              <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
+          </View>
 
           <ScrollView style={styles.membersScrollView}>
             {lobbyMembers.map((member) => {
-              const isOnline = onlineMembers.has(member.user_id);
+              // Use global online users instead of lobby-specific presence
+              const isOnline = onlineUsers.has(member.user_id.toString());
               const isCurrentUser = member.user_id === parseInt(currentUser.id);
               // Check initiator from lobby state instead of URL param (for role transfer)
               const isLobbyInitiator = member.user_id === currentLobby?.initiator_id;
               const canTransferRole = isInitiator && !isCurrentUser && !isLobbyInitiator;
+
+              console.log(`🔍 [LOBBY] Checking member ${member.user_name}:`, {
+                userId: member.user_id,
+                isOnline,
+                globalOnlineUsers: Array.from(onlineUsers)
+              });
 
               return (
                 <View key={member.user_id} style={styles.memberCard}>
@@ -1191,19 +1264,9 @@ export default function GroupLobbyScreen() {
                             : styles.statusTextWaiting,
                         ]}
                       >
-                        {member.status === 'ready' ? '✓ Ready' : 'Waiting'}
+                        {member.status === 'ready' ? '✓ Ready' : 'Not Ready'}
                       </Text>
                     </View>
-
-                    {/* Kick Button - Initiator only, not for self or other initiators */}
-                    {isInitiator && !isCurrentUser && (
-                      <TouchableOpacity
-                        style={styles.kickButton}
-                        onPress={() => handleKickMember(member.user_id, member.user_name)}
-                      >
-                        <Ionicons name="close-circle" size={20} color={COLORS.ERROR[600]} />
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </View>
               );
@@ -1211,113 +1274,97 @@ export default function GroupLobbyScreen() {
           </ScrollView>
         </View>
 
-        {/* Workout Info Section */}
+        {/* Workout Exercises Section */}
         <View style={styles.workoutSection}>
-          <Text style={styles.sectionTitle}>Workout Details</Text>
-          <View style={styles.workoutInfo}>
-            <View style={styles.workoutInfoRow}>
-              <Ionicons name="fitness-outline" size={20} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.workoutInfoLabel}>Format:</Text>
-              <Text style={styles.workoutInfoValue}>
-                {currentLobby?.workout_data?.workout_format?.toUpperCase() || 'Tabata'}
-              </Text>
-            </View>
-            <View style={styles.workoutInfoRow}>
-              <Ionicons name="list-outline" size={20} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.workoutInfoLabel}>Exercises:</Text>
-              <Text style={styles.workoutInfoValue}>
-                {currentLobby?.workout_data?.exercises?.length || 0}
-              </Text>
-            </View>
+          <View style={styles.workoutHeader}>
+            <Text style={styles.sectionTitle}>
+              Workout Plan {hasExercises ? `(${currentLobby?.workout_data?.exercises?.length || 0} exercises)` : ''}
+            </Text>
+            {hasExercises && (
+              <View style={styles.workoutBadge}>
+                <Ionicons name="flash" size={14} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.workoutBadgeText}>Tabata</Text>
+              </View>
+            )}
           </View>
 
-          {/* Auto-generating indicator */}
-          {isGenerating && (
-            <View style={styles.generatingIndicator}>
-              <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
-              <Text style={styles.generatingText}>Generating personalized workout...</Text>
-            </View>
-          )}
-
-          {/* Exercise List - Show when exercises are loaded */}
-          {hasExercises && !isGenerating && (
-            <View style={styles.exercisesSection}>
-              <View style={styles.exercisesHeader}>
-                <Ionicons name="barbell-outline" size={20} color={COLORS.PRIMARY[700]} />
-                <Text style={styles.exercisesTitle}>Recommended Exercises</Text>
-                <View style={styles.exerciseCountBadge}>
-                  <Text style={styles.exerciseCountText}>{exerciseDetails.length}</Text>
-                </View>
+          <ScrollView style={styles.exercisesScrollView} showsVerticalScrollIndicator={false}>
+            {isGenerating ? (
+              <View style={styles.generatingContainer}>
+                <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
+                <Text style={styles.generatingText}>Generating personalized workout...</Text>
               </View>
-
-              {isLoadingExercises ? (
-                <View style={styles.exerciseLoadingContainer}>
-                  <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
-                  <Text style={styles.exerciseLoadingText}>Loading exercise details...</Text>
+            ) : hasExercises ? (
+              <>
+                {/* Workout Info Banner */}
+                <View style={styles.workoutInfoBanner}>
+                  <View style={styles.infoBannerItem}>
+                    <Ionicons name="timer-outline" size={20} color={COLORS.SUCCESS[600]} />
+                    <Text style={styles.infoBannerText}>{Math.round((currentLobby?.workout_data?.exercises?.length || 0) * 4)} min</Text>
+                  </View>
+                  <View style={styles.infoBannerDivider} />
+                  <View style={styles.infoBannerItem}>
+                    <Ionicons name="flame-outline" size={20} color={COLORS.WARNING[600]} />
+                    <Text style={styles.infoBannerText}>~{Math.round((currentLobby?.workout_data?.exercises?.length || 0) * 15)} cal</Text>
+                  </View>
+                  <View style={styles.infoBannerDivider} />
+                  <View style={styles.infoBannerItem}>
+                    <Ionicons name="repeat-outline" size={20} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.infoBannerText}>8 rounds</Text>
+                  </View>
                 </View>
-              ) : exerciseDetails.length > 0 ? (
-                <ScrollView
-                  style={styles.exercisesScrollView}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled={true}
-                >
-                  <View style={styles.exercisesList}>
-                    {exerciseDetails.map((exercise, index) => (
-                      <View key={`exercise-${exercise.exercise_id}-${index}`} style={styles.exerciseItem}>
-                      {/* Left: Number Badge */}
-                      <View style={styles.exerciseNumberBadge}>
+
+                {/* Exercise Cards */}
+                {currentLobby?.workout_data?.exercises?.map((exercise: any, index: number) => (
+                  <View key={`exercise-${exercise.exercise_id}-${index}`} style={styles.exerciseCard}>
+                    <View style={styles.exerciseCardHeader}>
+                      <View style={styles.exerciseNumber}>
                         <Text style={styles.exerciseNumberText}>{index + 1}</Text>
                       </View>
-
-                      {/* Center: Exercise Info */}
-                      <View style={styles.exerciseContent}>
-                        <Text style={styles.exerciseName} numberOfLines={1}>
+                      <View style={styles.exerciseHeaderRight}>
+                        <Text style={styles.exerciseName} numberOfLines={2}>
                           {exercise.exercise_name}
                         </Text>
-                        <View style={styles.exerciseMeta}>
-                          <View style={styles.exerciseMetaItem}>
-                            <Ionicons name="body-outline" size={12} color={COLORS.SECONDARY[600]} />
-                            <Text style={styles.exerciseMetaText} numberOfLines={1}>
-                              {exercise.target_muscle_group?.replace(/_/g, ' ')}
-                            </Text>
-                          </View>
-                          <View style={styles.exerciseMetaDivider} />
-                          <View style={styles.exerciseMetaItem}>
-                            <Ionicons name="time-outline" size={12} color={COLORS.SECONDARY[600]} />
-                            <Text style={styles.exerciseMetaText}>{exercise.default_duration_seconds}s</Text>
-                          </View>
-                          <View style={styles.exerciseMetaDivider} />
-                          <View style={styles.exerciseMetaItem}>
-                            <Ionicons name="flame-outline" size={12} color="#F59E0B" />
-                            <Text style={styles.exerciseMetaText}>
-                              ~{Math.round((exercise.calories_burned_per_minute * exercise.default_duration_seconds) / 60)} cal
-                            </Text>
-                          </View>
+                        {/* Difficulty Stars */}
+                        <View style={styles.difficultyStars}>
+                          {[...Array(3)].map((_, i) => {
+                            const difficultyLevel = Number(exercise.difficulty_level || 2);
+                            return (
+                              <Ionicons
+                                key={`diff-${i}`}
+                                name={i < difficultyLevel ? "star" : "star-outline"}
+                                size={12}
+                                color={i < difficultyLevel ? COLORS.WARNING[500] : COLORS.SECONDARY[300]}
+                              />
+                            );
+                          })}
                         </View>
                       </View>
-
-                      {/* Right: Difficulty Badge */}
-                      <View style={styles.difficultyBadge}>
-                        {[...Array(3)].map((_, i) => (
-                          <Ionicons
-                            key={`difficulty-${exercise.exercise_id}-flame-${i}`}
-                            name="flame"
-                            size={10}
-                            color={i < exercise.difficulty_level ? COLORS.WARNING[500] : COLORS.SECONDARY[200]}
-                          />
-                        ))}
-                      </View>
                     </View>
-                  ))}
+                    <View style={styles.exerciseCardBody}>
+                      <Text style={styles.exerciseDetailsLine}>
+                        {exercise.target_muscle_group?.replace(/_/g, ' ') || 'Full Body'}
+                      </Text>
+                      <View style={styles.exerciseDetailDivider} />
+                      <Text style={styles.exerciseDetailsLine}>
+                        20s work • 10s rest
+                      </Text>
+                      <View style={styles.exerciseDetailDivider} />
+                      <Text style={styles.exerciseDetailsLine}>
+                        8 rounds
+                      </Text>
+                    </View>
                   </View>
-                </ScrollView>
-              ) : (
-                <Text style={styles.exercisesEmpty}>
-                  Exercise details unavailable. You can still start the workout!
-                </Text>
-              )}
-            </View>
-          )}
+                ))}
+              </>
+            ) : (
+              <View style={styles.emptyWorkoutContainer}>
+                <Ionicons name="barbell-outline" size={64} color={COLORS.SECONDARY[300]} />
+                <Text style={styles.emptyWorkoutText}>No workout generated yet</Text>
+                <Text style={styles.emptyWorkoutSubtext}>Waiting for the host to start</Text>
+              </View>
+            )}
+          </ScrollView>
         </View>
       </View>
 
@@ -1357,21 +1404,6 @@ export default function GroupLobbyScreen() {
         )}
       </View>
 
-      {/* Help Text - Show why Start is disabled */}
-      {isInitiator && !canStartWorkout && (
-        <View style={styles.helpTextContainer}>
-          <Ionicons name="information-circle-outline" size={16} color={COLORS.SECONDARY[600]} />
-          <Text style={styles.helpText}>
-            {!hasExercises
-              ? 'Waiting for exercises to be generated. All members must be ready (2+ members).'
-              : !allMembersReady
-              ? 'Waiting for all members to mark themselves as ready.'
-              : lobbyMembers.length < 2
-              ? 'Need at least 2 members to start a group workout. Invite more members or start a solo workout from the Workouts page.'
-              : 'All conditions met! You can start the workout.'}
-          </Text>
-        </View>
-      )}
 
       {/* Chat Modal */}
       <Modal
@@ -1384,11 +1416,11 @@ export default function GroupLobbyScreen() {
           setChatOpen(false); // Update store to mark chat as closed
         }}
       >
-        <View style={styles.chatModalContainer}>
+        <SafeAreaView style={styles.chatModalContainer} edges={['top']}>
           <StatusBar barStyle="dark-content" />
 
-          {/* Header with manual safe area padding */}
-          <View style={[styles.chatModalHeaderSafe, { paddingTop: insets.top || (Platform.OS === 'android' ? 48 : 44) }]}>
+          {/* Header */}
+          <View style={styles.chatModalHeaderSafe}>
             <View style={styles.chatModalHeader}>
               <Text style={styles.chatModalTitle}>Chat</Text>
               <TouchableOpacity
@@ -1405,7 +1437,7 @@ export default function GroupLobbyScreen() {
 
           {/* Chat content */}
           <LobbyChat sessionId={sessionId} currentUserId={parseInt(currentUser.id)} />
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Invite Members Modal */}
@@ -1418,11 +1450,11 @@ export default function GroupLobbyScreen() {
           setSelectedMembers(new Set());
         }}
       >
-        <View style={styles.inviteModalContainer}>
+        <SafeAreaView style={styles.inviteModalContainer} edges={['top', 'bottom']}>
           <StatusBar barStyle="dark-content" />
 
-          {/* Header with manual safe area padding */}
-          <View style={[styles.inviteModalHeaderSafe, { paddingTop: insets.top || (Platform.OS === 'android' ? 48 : 44) }]}>
+          {/* Header */}
+          <View style={styles.inviteModalHeaderSafe}>
             <View style={styles.inviteModalHeader}>
               <View style={styles.inviteModalHeaderLeft}>
                 <TouchableOpacity
@@ -1465,7 +1497,15 @@ export default function GroupLobbyScreen() {
                 {groupMembers.map((member: any) => {
                   const userId = parseInt(member.userId);
                   const isSelected = selectedMembers.has(userId);
-                  const isMemberOnline = groupOnlineMembers.has(userId);
+                  // Use global online users instead of group-specific presence
+                  const isMemberOnline = onlineUsers.has(member.userId.toString());
+
+                  console.log(`🔍 [INVITE MODAL] Checking member ${member.username}:`, {
+                    userId: member.userId,
+                    isOnline: isMemberOnline,
+                    globalOnlineUsers: Array.from(onlineUsers)
+                  });
+
                   return (
                     <TouchableOpacity
                       key={member.id}
@@ -1518,9 +1558,9 @@ export default function GroupLobbyScreen() {
             )}
           </View>
 
-          {/* Footer with manual safe area padding */}
+          {/* Footer */}
           {!isLoadingMembers && groupMembers.length > 0 && (
-            <View style={[styles.inviteModalFooterSafe, { paddingBottom: insets.bottom || 0 }]}>
+            <View style={styles.inviteModalFooterSafe}>
               <View style={styles.inviteFooter}>
                 <TouchableOpacity
                   style={[
@@ -1545,7 +1585,97 @@ export default function GroupLobbyScreen() {
               </View>
             </View>
           )}
-        </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Settings Modal - Initiator Only */}
+      <Modal
+        visible={isSettingsModalOpen}
+        animationType="slide"
+        transparent={false}
+        presentationStyle="fullScreen"
+        onRequestClose={() => setIsSettingsModalOpen(false)}
+      >
+        <SafeAreaView style={styles.chatModalContainer} edges={['top']}>
+          <StatusBar barStyle="dark-content" />
+
+          {/* Header */}
+          <View style={styles.chatModalHeaderSafe}>
+            <View style={styles.chatModalHeader}>
+              <Text style={styles.chatModalTitle}>Lobby Settings</Text>
+              <TouchableOpacity onPress={() => setIsSettingsModalOpen(false)}>
+                <Ionicons name="close" size={28} color={COLORS.SECONDARY[900]} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Settings Content */}
+          <ScrollView style={styles.settingsContent}>
+            <Text style={styles.settingsSectionTitle}>Member Management</Text>
+
+            {lobbyMembers
+              .filter(member => member.user_id !== parseInt(currentUser.id))
+              .map((member) => {
+                const isLobbyInitiator = member.user_id === currentLobby?.initiator_id;
+
+                return (
+                  <View key={member.user_id} style={styles.settingsMemberCard}>
+                    <View style={styles.settingsMemberInfo}>
+                      <View style={styles.memberAvatar}>
+                        <Ionicons name="person" size={24} color={COLORS.PRIMARY[600]} />
+                        {isLobbyInitiator && (
+                          <View style={styles.crownBadge}>
+                            <Ionicons name="star" size={14} color={COLORS.WARNING[500]} />
+                          </View>
+                        )}
+                      </View>
+                      <View>
+                        <Text style={styles.settingsMemberName}>{member.user_name}</Text>
+                        {member.fitness_level && (
+                          <Text style={styles.settingsMemberLevel}>
+                            {member.fitness_level.charAt(0).toUpperCase() + member.fitness_level.slice(1)}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={styles.settingsMemberActions}>
+                      {/* Transfer Role Button */}
+                      {!isLobbyInitiator && (
+                        <TouchableOpacity
+                          style={styles.settingsIconButton}
+                          onPress={() => {
+                            setIsSettingsModalOpen(false);
+                            handleTransferRole(member.user_id, member.user_name);
+                          }}
+                        >
+                          <Ionicons name="swap-horizontal" size={24} color={COLORS.PRIMARY[600]} />
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Remove Button */}
+                      <TouchableOpacity
+                        style={styles.settingsIconButton}
+                        onPress={() => {
+                          setIsSettingsModalOpen(false);
+                          handleKickMember(member.user_id, member.user_name);
+                        }}
+                      >
+                        <Ionicons name="close-circle" size={24} color={COLORS.ERROR[600]} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+
+            {lobbyMembers.length === 1 && (
+              <View style={styles.settingsEmptyState}>
+                <Ionicons name="people-outline" size={48} color={COLORS.SECONDARY[400]} />
+                <Text style={styles.settingsEmptyText}>No other members in lobby</Text>
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
 
     </SafeAreaView>
@@ -1633,12 +1763,25 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.SECONDARY[200],
     maxHeight: 320,
   },
+  membersSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
-    marginBottom: 12,
-    paddingHorizontal: 16,
+  },
+  inviteIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.PRIMARY[50],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   membersScrollView: {
     paddingHorizontal: 16,
@@ -1774,7 +1917,156 @@ const styles = StyleSheet.create({
   workoutSection: {
     flex: 1,
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.SECONDARY[200],
+  },
+  workoutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  workoutBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.PRIMARY[50],
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  workoutBadgeText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[600],
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  exercisesScrollView: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  workoutInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+  },
+  infoBannerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  infoBannerText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+  },
+  infoBannerDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: COLORS.SECONDARY[300],
+  },
+  exerciseCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+    shadowColor: COLORS.SECONDARY[900],
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  exerciseCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 10,
+  },
+  exerciseNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.PRIMARY[600],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exerciseNumberText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  exerciseHeaderRight: {
+    flex: 1,
+    gap: 6,
+  },
+  exerciseName: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    lineHeight: 20,
+  },
+  difficultyStars: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  exerciseCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+  },
+  exerciseDetailsLine: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    textTransform: 'capitalize',
+    flex: 1,
+    textAlign: 'center',
+  },
+  exerciseDetailDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: COLORS.SECONDARY[300],
+  },
+  generatingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  generatingText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[600],
+  },
+  emptyWorkoutContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyWorkoutText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[600],
+  },
+  emptyWorkoutSubtext: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
   },
   workoutInfo: {
     backgroundColor: COLORS.PRIMARY[50],
@@ -1820,12 +2112,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.SECONDARY[50],
     borderBottomWidth: 1,
     borderBottomColor: COLORS.SECONDARY[200],
+    paddingTop: 16,
   },
   chatModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   chatModalTitle: {
     fontSize: FONT_SIZES.LG,
@@ -1843,10 +2137,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.SECONDARY[200],
+    paddingTop: 16,
   },
   inviteModalHeader: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
   },
   inviteModalHeaderLeft: {
     flexDirection: 'row',
@@ -2039,129 +2334,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
-  generatingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    backgroundColor: COLORS.PRIMARY[50],
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.PRIMARY[200],
-  },
-  generatingText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[700],
-  },
-  // Exercise List (matches dashboard/workouts design)
-  exercisesSection: {
-    marginTop: 16,
-  },
-  exercisesScrollView: {
-    maxHeight: 300, // Limit height so footer is still visible
-  },
-  exercisesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  exercisesTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-    flex: 1,
-  },
-  exerciseCountBadge: {
-    backgroundColor: COLORS.PRIMARY[100],
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  exerciseCountText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[700],
-  },
-  exerciseLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 20,
-  },
-  exerciseLoadingText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-  },
-  exercisesList: {
-    gap: 8,
-  },
-  exerciseItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    gap: 12,
-  },
-  exerciseNumberBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.PRIMARY[600] + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exerciseNumberText: {
-    fontSize: 12,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[700],
-  },
-  exerciseContent: {
-    flex: 1,
-    gap: 4,
-  },
-  exerciseName: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  exerciseMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  exerciseMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  exerciseMetaText: {
-    fontSize: 11,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-  },
-  exerciseMetaDivider: {
-    width: 1,
-    height: 10,
-    backgroundColor: COLORS.SECONDARY[300],
-  },
-  difficultyBadge: {
-    flexDirection: 'row',
-    gap: 2,
-    paddingLeft: 8,
-  },
-  exercisesEmpty: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
   footer: {
     padding: 16,
     borderTopWidth: 1,
@@ -2212,23 +2384,74 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
-  helpTextContainer: {
+  // Settings Modal Styles
+  settingsContent: {
+    flex: 1,
+    backgroundColor: COLORS.SECONDARY[50],
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  settingsSectionTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  settingsMemberCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: COLORS.SECONDARY[50],
-    borderTopWidth: 1,
-    borderTopColor: COLORS.SECONDARY[200],
-    gap: 8,
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+    shadowColor: COLORS.SECONDARY[900],
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  helpText: {
+  settingsMemberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     flex: 1,
+  },
+  settingsMemberName: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  settingsMemberLevel: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[700],
-    textAlign: 'center',
-    lineHeight: 18,
+    color: COLORS.SECONDARY[600],
+    marginTop: 2,
+  },
+  settingsMemberActions: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  settingsIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.SECONDARY[100],
+  },
+  settingsEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  settingsEmptyText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[600],
   },
 });

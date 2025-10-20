@@ -1497,6 +1497,39 @@ export class SocialService {
     }
   }
 
+  public async transferInitiatorRoleV2(
+    sessionId: string,
+    newInitiatorId: number
+  ): Promise<{
+    status: string;
+    message: string;
+    data: {
+      lobby_state: any;
+      version: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Transferring initiator role:', {
+        sessionId,
+        newInitiatorId
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/social/v2/lobby/${sessionId}/transfer-initiator`,
+        {
+          new_initiator_id: newInitiatorId
+        }
+      );
+
+      console.log('✅ [SOCIAL V2] Initiator role transferred successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to transfer initiator role:', error);
+      throw new Error((error as any).message || 'Failed to transfer initiator role');
+    }
+  }
+
   public async forceLeaveAllLobbies(): Promise<{
     status: string;
     message: string;

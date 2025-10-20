@@ -192,55 +192,43 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
 
             {workoutSet.exercises.map((exercise, index) => (
               <View key={exercise.exercise_id} style={styles.exerciseCard}>
-                {/* Exercise Number Badge */}
-                <View style={styles.exerciseNumber}>
-                  <Text style={styles.exerciseNumberText}>{index + 1}</Text>
-                </View>
-
-                {/* Exercise Info */}
-                <View style={styles.exerciseInfo}>
-                  <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
-
-                  <View style={styles.exerciseMeta}>
-                    <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(exercise.difficulty_level) + '15' }]}>
-                      <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty_level) }]}>
-                        {getDifficultyText(exercise.difficulty_level)}
-                      </Text>
-                    </View>
-                    <View style={styles.muscleBadge}>
-                      <Ionicons name="body-outline" size={12} color="#6B7280" />
-                      <Text style={styles.muscleText}>{formatMuscleGroup(exercise.target_muscle_group)}</Text>
-                    </View>
+                <View style={styles.exerciseCardHeader}>
+                  <View style={styles.exerciseNumber}>
+                    <Text style={styles.exerciseNumberText}>{index + 1}</Text>
                   </View>
-
-                  <View style={styles.exerciseStats}>
-                    <View style={styles.stat}>
-                      <Ionicons name="time-outline" size={14} color="#6B7280" />
-                      <Text style={styles.statText}>4 min</Text>
+                  <View style={styles.exerciseHeaderRight}>
+                    <Text style={styles.exerciseName} numberOfLines={2}>
+                      {exercise.exercise_name}
+                    </Text>
+                    {/* Difficulty Stars */}
+                    <View style={styles.difficultyStars}>
+                      {[...Array(3)].map((_, i) => {
+                        const difficultyLevel = Number(exercise.difficulty_level || 2);
+                        return (
+                          <Ionicons
+                            key={`diff-${i}`}
+                            name={i < difficultyLevel ? "star" : "star-outline"}
+                            size={12}
+                            color={i < difficultyLevel ? COLORS.WARNING[500] : COLORS.SECONDARY[300]}
+                          />
+                        );
+                      })}
                     </View>
-                    <Text style={styles.statDivider}>|</Text>
-                    <View style={styles.stat}>
-                      <Ionicons name="flame-outline" size={14} color="#F59E0B" />
-                      <Text style={styles.statText}>~{exercise.estimated_calories_burned} cal</Text>
-                    </View>
-                    {exercise.equipment_needed && exercise.equipment_needed !== 'none' && (
-                      <>
-                        <Text style={styles.statDivider}>|</Text>
-                        <View style={styles.stat}>
-                          <Ionicons name="barbell-outline" size={14} color="#8B5CF6" />
-                          <Text style={styles.statText}>{exercise.equipment_needed}</Text>
-                        </View>
-                      </>
-                    )}
                   </View>
                 </View>
-
-                {/* Next Indicator */}
-                {index < workoutSet.exercises.length - 1 && (
-                  <View style={styles.nextIndicator}>
-                    <Ionicons name="chevron-down" size={16} color="#D1D5DB" />
-                  </View>
-                )}
+                <View style={styles.exerciseCardBody}>
+                  <Text style={styles.exerciseDetailsLine}>
+                    {formatMuscleGroup(exercise.target_muscle_group)}
+                  </Text>
+                  <View style={styles.exerciseDetailDivider} />
+                  <Text style={styles.exerciseDetailsLine}>
+                    20s work • 10s rest
+                  </Text>
+                  <View style={styles.exerciseDetailDivider} />
+                  <Text style={styles.exerciseDetailsLine}>
+                    8 rounds
+                  </Text>
+                </View>
               </View>
             ))}
           </ScrollView>
@@ -398,99 +386,69 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   exerciseCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 12,
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+    shadowColor: COLORS.SECONDARY[900],
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  exerciseCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 10,
   },
   exerciseNumber: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.PRIMARY[600] + '15',
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.PRIMARY[600],
     alignItems: 'center',
     justifyContent: 'center',
   },
   exerciseNumberText: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
+    color: COLORS.NEUTRAL.WHITE,
   },
-  exerciseInfo: {
-    paddingRight: 40,
+  exerciseHeaderRight: {
+    flex: 1,
+    gap: 6,
   },
   exerciseName: {
     fontSize: 16,
-    fontFamily: FONTS.SEMIBOLD,
-    color: '#111827',
-    marginBottom: 8,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    lineHeight: 20,
   },
-  exerciseMeta: {
+  difficultyStars: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  exerciseCardBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
+    justifyContent: 'space-between',
+    paddingTop: 8,
   },
-  difficultyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  difficultyText: {
-    fontSize: 11,
-    fontFamily: FONTS.SEMIBOLD,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  muscleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-  },
-  muscleText: {
-    fontSize: 11,
+  exerciseDetailsLine: {
+    fontSize: 14,
     fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
-  },
-  exerciseStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    color: COLORS.SECONDARY[600],
+    textTransform: 'capitalize',
     flex: 1,
-    justifyContent: 'center',
+    textAlign: 'center',
   },
-  statText: {
-    fontSize: 12,
-    fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
-  },
-  statDivider: {
-    fontSize: 12,
-    fontFamily: FONTS.REGULAR,
-    color: '#D1D5DB',
-    marginHorizontal: 8,
-  },
-  nextIndicator: {
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: -8,
+  exerciseDetailDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: COLORS.SECONDARY[300],
   },
   footer: {
     paddingHorizontal: 24,

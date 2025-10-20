@@ -578,19 +578,19 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.workoutSetCard}
                 onPress={handleViewWorkoutSet}
-                activeOpacity={0.95}
+                activeOpacity={0.92}
               >
                 {/* Header with Icon */}
                 <View style={styles.workoutSetHeader}>
-                  <View style={[styles.tabataIconLarge, { backgroundColor: COLORS.PRIMARY[600] + '15' }]}>
-                    <Ionicons name="flash" size={32} color={COLORS.PRIMARY[600]} />
+                  <View style={styles.tabataIconLarge}>
+                    <Ionicons name="flash" size={36} color={COLORS.NEUTRAL.WHITE} />
                   </View>
                   <View style={styles.workoutSetTitleContainer}>
                     <Text style={styles.workoutSetTitle}>
-                      {fitnessLevel ? `${fitnessLevel.charAt(0).toUpperCase() + fitnessLevel.slice(1)} Tabata Set` : 'Tabata Set'}
+                      {fitnessLevel ? `${fitnessLevel.charAt(0).toUpperCase() + fitnessLevel.slice(1)} Tabata` : 'Tabata Workout'}
                     </Text>
                     <Text style={styles.workoutSetSubtitle}>
-                      {fitnessLevel === 'beginner' ? '4' : fitnessLevel === 'intermediate' ? '5' : '6'} exercises
+                      {fitnessLevel === 'beginner' ? '4' : fitnessLevel === 'intermediate' ? '5' : '6'} exercises • Tabata protocol
                     </Text>
                   </View>
                 </View>
@@ -603,12 +603,12 @@ export default function HomeScreen() {
                         <Text style={styles.exercisePreviewNumberText}>{idx + 1}</Text>
                       </View>
                       <Text style={styles.exercisePreviewName} numberOfLines={1}>{ex.exercise_name}</Text>
-                      <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                      <Ionicons name="checkmark-circle" size={18} color="#10B981" />
                     </View>
                   ))}
                   {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) > 3 && (
                     <Text style={styles.moreExercises}>
-                      +{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) - 3} more exercises
+                      +{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) - 3} more
                     </Text>
                   )}
                 </View>
@@ -616,14 +616,14 @@ export default function HomeScreen() {
                 {/* Stats Row */}
                 <View style={styles.workoutSetStats}>
                   <View style={styles.workoutSetStat}>
-                    <Ionicons name="time-outline" size={18} color={COLORS.PRIMARY[600]} />
+                    <Ionicons name="time-outline" size={20} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.workoutSetStatText}>
                       {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min
                     </Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.workoutSetStat}>
-                    <Ionicons name="flame-outline" size={18} color="#F59E0B" />
+                    <Ionicons name="flame-outline" size={20} color="#F59E0B" />
                     <Text style={styles.workoutSetStatText}>
                       ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6)
                         .reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0)} cal
@@ -631,7 +631,7 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.workoutSetStat}>
-                    <Ionicons name="fitness-outline" size={18} color="#8B5CF6" />
+                    <Ionicons name="fitness-outline" size={20} color="#8B5CF6" />
                     <Text style={styles.workoutSetStatText}>
                       {(() => {
                         const workoutExercises = recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) || [];
@@ -642,7 +642,6 @@ export default function HomeScreen() {
                           }
                         });
                         const uniqueGroups = Array.from(muscleGroups);
-                        // If multiple muscle groups, show "Full Body", otherwise show the specific group
                         if (uniqueGroups.length >= 3) {
                           return 'Full Body';
                         } else if (uniqueGroups.length > 0) {
@@ -659,7 +658,7 @@ export default function HomeScreen() {
                 {/* View Details Button */}
                 <View style={styles.viewDetailsButton}>
                   <Text style={styles.viewDetailsText}>View Full Workout</Text>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.PRIMARY[600]} />
+                  <Ionicons name="chevron-forward" size={22} color={COLORS.PRIMARY[600]} />
                 </View>
               </TouchableOpacity>
             ) : (
@@ -1342,119 +1341,137 @@ const styles = StyleSheet.create({
   },
   // Workout Set Styles
   workoutSetCard: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[100],
+    shadowColor: COLORS.SECONDARY[900],
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   workoutSetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   tabataIconLarge: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.PRIMARY[600],
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   workoutSetTitleContainer: {
     flex: 1,
   },
   workoutSetTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: FONTS.BOLD,
-    color: '#111827',
+    color: COLORS.SECONDARY[900],
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   workoutSetSubtitle: {
     fontSize: 14,
-    fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[600],
   },
   exercisePreviewList: {
-    marginBottom: 20,
+    marginBottom: 18,
   },
   exercisePreviewItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[100],
   },
   exercisePreviewNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.PRIMARY[600] + '20',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.PRIMARY[600],
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   exercisePreviewNumberText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
+    color: COLORS.NEUTRAL.WHITE,
   },
   exercisePreviewName: {
     flex: 1,
     fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#111827',
-    marginRight: 8,
+    color: COLORS.SECONDARY[900],
+    marginRight: 10,
   },
   moreExercises: {
     fontSize: 13,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   workoutSetStats: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingVertical: 16,
+    paddingVertical: 18,
     paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[100],
   },
   workoutSetStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   workoutSetStatText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#374151',
+    color: COLORS.SECONDARY[900],
   },
   statDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: '#D1D5DB',
+    height: 28,
+    backgroundColor: COLORS.SECONDARY[200],
   },
   viewDetailsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    backgroundColor: COLORS.PRIMARY[600] + '10',
-    borderRadius: 12,
+    paddingVertical: 16,
+    backgroundColor: COLORS.PRIMARY[600],
+    borderRadius: 16,
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   viewDetailsText: {
-    fontSize: 15,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[600],
+    fontSize: 16,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
     marginRight: 6,
   },
 });

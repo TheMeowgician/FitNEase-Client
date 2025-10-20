@@ -557,6 +557,28 @@ class ReverbService {
 
     return channel;
   }
+
+  /**
+   * Subscribe to user's personal channel for personal notifications
+   * @param userId - User ID
+   * @param callbacks - Event callbacks
+   */
+  public subscribeToUserChannel(
+    userId: string | number,
+    callbacks: {
+      onMemberKicked?: (data: any) => void;
+    }
+  ) {
+    return this.subscribeToPrivateChannel(`user.${userId}`, {
+      onEvent: (event: string, data: any) => {
+        console.log(`📨 User channel event: ${event}`, data);
+
+        if (event === 'MemberKicked' && callbacks.onMemberKicked) {
+          callbacks.onMemberKicked(data);
+        }
+      },
+    });
+  }
 }
 
 export const reverbService = new ReverbService();

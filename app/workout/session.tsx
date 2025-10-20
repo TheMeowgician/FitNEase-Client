@@ -327,9 +327,8 @@ export default function WorkoutSessionScreen() {
           );
         } else if (eventName === 'WorkoutCompleted') {
           console.log(`✅ Workout finished by ${data.initiatorName}`);
-          // Complete the workout for this member
+          // Set status to completed - user must click COMPLETE button to save and exit
           setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
-          setTimeout(() => completeSession(), 100);
         }
       },
     });
@@ -676,6 +675,8 @@ export default function WorkoutSessionScreen() {
 
   const completeSession = async () => {
     try {
+      console.log('💾 [COMPLETE] Saving workout session...');
+
       if (sessionStartTime && user) {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
@@ -693,22 +694,17 @@ export default function WorkoutSessionScreen() {
             ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level)`
             : 'Tabata workout completed'
         });
+
+        console.log('✅ [COMPLETE] Workout session saved successfully');
       }
 
-      const sessionSummary = tabataSession
-        ? `${tabataSession.total_exercises} exercises • ${tabataSession.total_duration_minutes} min`
-        : 'Full workout';
+      // Navigate back immediately without showing modal
+      console.log('🔙 [COMPLETE] Navigating back to previous screen');
+      router.back();
 
-      Alert.alert(
-        'Workout Complete! 🎉',
-        `Great job! You burned approximately ${Math.floor(sessionState.caloriesBurned)} calories.\n\n${sessionSummary}`,
-        [
-          { text: 'Done', onPress: () => router.back() }
-        ]
-      );
     } catch (error) {
-      console.error('Error saving session:', error);
-      Alert.alert('Session saved locally', 'Your workout data will sync when connection is restored.');
+      console.error('❌ [COMPLETE] Error saving session:', error);
+      // Still navigate back even if save fails (data saved locally)
       router.back();
     }
   };
@@ -992,17 +988,15 @@ export default function WorkoutSessionScreen() {
                     console.log('🏁 [AUTO FINISH] Session ID:', tabataSession.session_id);
                     await socialService.finishWorkout(tabataSession.session_id);
                     console.log('✅ [AUTO FINISH] Finish broadcasted successfully');
-                    // Complete locally as well
+                    // Set status to completed - user must click COMPLETE button
                     setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
-                    setTimeout(() => completeSession(), 100);
                   } catch (error) {
                     console.error('❌ [AUTO FINISH] Failed to broadcast finish:', error);
                     Alert.alert('Error', 'Failed to finish workout for all members');
                   }
                 } else {
-                  // Solo workout - finish immediately
+                  // Solo workout - set status to completed, user must click COMPLETE
                   setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
-                  setTimeout(() => completeSession(), 100);
                 }
               }}
             >

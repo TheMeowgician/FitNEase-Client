@@ -216,6 +216,14 @@ export default function WorkoutLayout() {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen
+        name="lobby-workout-preview"
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+        }}
+      />
     </Stack>
   );
 }

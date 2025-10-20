@@ -432,18 +432,18 @@ export default function WorkoutsScreen() {
         <View style={[styles.quickActionIcon, { backgroundColor: '#10B981' }]}>
           <Ionicons name="refresh" size={24} color="white" />
         </View>
-        <Text style={styles.quickActionText}>Refresh ML</Text>
+        <Text style={styles.quickActionText}>Refresh</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.quickActionButton}
-        onPress={() => Alert.alert('ML Algorithms', 'FitNEase uses 4 advanced ML models:\n\n• Hybrid Recommender (Main)\n• Content-Based Filtering\n• Collaborative Filtering\n• Random Forest Classifier\n\nThese work together to provide you with personalized Tabata exercises!')}
+        onPress={() => Alert.alert('How It Works', 'FitNEase analyzes your:\n\n• Fitness level and goals\n• Workout history\n• Exercise preferences\n• Community patterns\n\nTo create personalized Tabata workouts that match your needs!')}
         activeOpacity={0.7}
       >
         <View style={[styles.quickActionIcon, { backgroundColor: '#3B82F6' }]}>
-          <Ionicons name="analytics" size={24} color="white" />
+          <Ionicons name="information-circle" size={24} color="white" />
         </View>
-        <Text style={styles.quickActionText}>ML Info</Text>
+        <Text style={styles.quickActionText}>How It Works</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -468,24 +468,24 @@ export default function WorkoutsScreen() {
     const collaborativeRecs = filteredRecommendations.filter((r: MLRecommendation) => r.algorithm_used === 'collaborative');
 
     const workoutSets = [
-      { name: 'Hybrid AI', recs: hybridRecs, icon: 'analytics', color: '#10B981' },
-      { name: 'Content ML', recs: contentRecs, icon: 'fitness', color: '#3B82F6' },
-      { name: 'Collaborative', recs: collaborativeRecs, icon: 'people', color: '#8B5CF6' },
+      { name: 'Recommended', recs: hybridRecs, icon: 'flash', color: '#10B981' },
+      { name: 'For You', recs: contentRecs, icon: 'fitness', color: '#3B82F6' },
+      { name: 'Popular', recs: collaborativeRecs, icon: 'trending-up', color: '#8B5CF6' },
     ].filter(set => set.recs.length > 0);
 
     return (
       <View>
-        {/* Main ML Recommendations */}
+        {/* Main Recommendations */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>AI-Recommended Workout Sets</Text>
+            <Text style={styles.sectionTitle}>Recommended Workout Sets</Text>
             <View style={styles.mlBadge}>
-              <Ionicons name="analytics" size={16} color="#10B981" />
-              <Text style={styles.mlBadgeText}>4 AI Models</Text>
+              <Ionicons name="sparkles" size={16} color="#10B981" />
+              <Text style={styles.mlBadgeText}>Personalized</Text>
             </View>
           </View>
           <Text style={styles.sectionSubtitle}>
-            Personalized Tabata workout sets from different ML algorithms
+            Personalized Tabata workout sets tailored to your fitness level
           </Text>
 
           {filteredRecommendations.length === 0 ? (
@@ -504,15 +504,15 @@ export default function WorkoutsScreen() {
                   key={index}
                   style={styles.workoutSetCard}
                   onPress={() => handleViewWorkoutSet(set.recs, set.recs[0].algorithm_used)}
-                  activeOpacity={0.95}
+                  activeOpacity={0.92}
                 >
                   {/* Header */}
                   <View style={styles.workoutSetHeader}>
-                    <View style={[styles.algorithmIconLarge, { backgroundColor: set.color + '15' }]}>
-                      <Ionicons name={set.icon as any} size={28} color={set.color} />
+                    <View style={[styles.algorithmIconLarge, { backgroundColor: set.color }]}>
+                      <Ionicons name={set.icon as any} size={36} color={COLORS.NEUTRAL.WHITE} />
                     </View>
                     <View style={styles.workoutSetTitleContainer}>
-                      <Text style={styles.workoutSetTitle}>{set.name} Workout</Text>
+                      <Text style={styles.workoutSetTitle}>{set.name} Tabata</Text>
                       <Text style={styles.workoutSetSubtitle}>
                         {Math.min(set.recs.length, user?.fitnessLevel === 'beginner' ? 4 : user?.fitnessLevel === 'intermediate' ? 5 : 6)} exercises • Tabata protocol
                       </Text>
@@ -529,29 +529,25 @@ export default function WorkoutsScreen() {
                         <Text style={styles.exercisePreviewName} numberOfLines={1}>
                           {ex.exercise_name}
                         </Text>
-                        <View style={[styles.miniDifficultyBadge, { backgroundColor: getAlgorithmColor(ex.algorithm_used || 'content_based') + '15' }]}>
-                          <Text style={[styles.miniDifficultyText, { color: getAlgorithmColor(ex.algorithm_used || 'content_based') }]}>
-                            {Math.round((ex.recommendation_score || 0) * 100)}%
-                          </Text>
-                        </View>
+                        <Ionicons name="checkmark-circle" size={18} color="#10B981" />
                       </View>
                     ))}
                     {set.recs.length > 3 && (
-                      <Text style={styles.moreExercises}>+{set.recs.length - 3} more exercises</Text>
+                      <Text style={styles.moreExercises}>+{set.recs.length - 3} more</Text>
                     )}
                   </View>
 
                   {/* Stats */}
                   <View style={styles.workoutSetStats}>
                     <View style={styles.workoutSetStat}>
-                      <Ionicons name="time-outline" size={16} color={set.color} />
+                      <Ionicons name="time-outline" size={20} color={COLORS.PRIMARY[600]} />
                       <Text style={styles.workoutSetStatText}>
                         {Math.min(set.recs.length, user?.fitnessLevel === 'beginner' ? 4 : user?.fitnessLevel === 'intermediate' ? 5 : 6) * 4} min
                       </Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.workoutSetStat}>
-                      <Ionicons name="flame-outline" size={16} color="#F59E0B" />
+                      <Ionicons name="flame-outline" size={20} color="#F59E0B" />
                       <Text style={styles.workoutSetStatText}>
                         ~{(set.recs || []).slice(0, user?.fitnessLevel === 'beginner' ? 4 : user?.fitnessLevel === 'intermediate' ? 5 : 6)
                           .reduce((sum: number, ex: MLRecommendation) => sum + (ex.estimated_calories_burned || 0), 0)} cal
@@ -559,7 +555,7 @@ export default function WorkoutsScreen() {
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.workoutSetStat}>
-                      <Ionicons name="fitness-outline" size={16} color="#8B5CF6" />
+                      <Ionicons name="fitness-outline" size={20} color="#8B5CF6" />
                       <Text style={styles.workoutSetStatText}>
                         {(() => {
                           const workoutExercises = (set.recs || []).slice(0, user?.fitnessLevel === 'beginner' ? 4 : user?.fitnessLevel === 'intermediate' ? 5 : 6);
@@ -570,7 +566,6 @@ export default function WorkoutsScreen() {
                             }
                           });
                           const uniqueGroups = Array.from(muscleGroups);
-                          // If multiple muscle groups, show "Full Body", otherwise show the specific group
                           if (uniqueGroups.length >= 3) {
                             return 'Full Body';
                           } else if (uniqueGroups.length > 0) {
@@ -586,8 +581,8 @@ export default function WorkoutsScreen() {
 
                   {/* View Button */}
                   <View style={styles.viewDetailsButton}>
-                    <Text style={[styles.viewDetailsText, { color: set.color }]}>View Workout Set</Text>
-                    <Ionicons name="chevron-forward" size={20} color={set.color} />
+                    <Text style={styles.viewDetailsText}>View Workout Set</Text>
+                    <Ionicons name="chevron-forward" size={22} color={COLORS.NEUTRAL.WHITE} />
                   </View>
                 </TouchableOpacity>
               ))}
@@ -1474,75 +1469,85 @@ const styles = StyleSheet.create({
   },
   // Workout Set Card Styles
   workoutSetCard: {
-    backgroundColor: 'white',
-    borderRadius: 20,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[100],
+    shadowColor: COLORS.SECONDARY[900],
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   workoutSetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   algorithmIconLarge: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+    shadowColor: COLORS.SECONDARY[900],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   workoutSetTitleContainer: {
     flex: 1,
   },
   workoutSetTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: FONTS.BOLD,
-    color: '#111827',
+    color: COLORS.SECONDARY[900],
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   workoutSetSubtitle: {
-    fontSize: 13,
-    fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
+    fontSize: 14,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[600],
   },
   exercisePreviewList: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   exercisePreviewItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    marginBottom: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[100],
   },
   exercisePreviewNumber: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: COLORS.PRIMARY[600] + '20',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.PRIMARY[600],
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   exercisePreviewNumberText: {
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
+    color: COLORS.NEUTRAL.WHITE,
   },
   exercisePreviewName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#111827',
-    marginRight: 8,
+    color: COLORS.SECONDARY[900],
+    marginRight: 10,
   },
   miniDifficultyBadge: {
     paddingHorizontal: 8,
@@ -1554,49 +1559,56 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
   },
   moreExercises: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
     textAlign: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
   workoutSetStats: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    marginBottom: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[100],
   },
   workoutSetStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 8,
   },
   workoutSetStatText: {
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#374151',
+    color: COLORS.SECONDARY[900],
   },
   statDivider: {
     width: 1,
-    height: 20,
-    backgroundColor: '#D1D5DB',
+    height: 28,
+    backgroundColor: COLORS.SECONDARY[200],
   },
   viewDetailsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: COLORS.PRIMARY[600] + '10',
-    borderRadius: 10,
+    paddingVertical: 16,
+    backgroundColor: COLORS.PRIMARY[600],
+    borderRadius: 16,
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   viewDetailsText: {
     fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[600],
+    color: COLORS.NEUTRAL.WHITE,
     marginRight: 5,
   },
   expandButton: {
