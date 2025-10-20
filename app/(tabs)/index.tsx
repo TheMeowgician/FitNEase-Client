@@ -1383,7 +1383,7 @@ const styles = StyleSheet.create({
   },
   workoutSetSubtitle: {
     fontSize: 14,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
   },
   exercisePreviewList: {
