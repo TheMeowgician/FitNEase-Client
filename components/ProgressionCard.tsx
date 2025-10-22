@@ -145,7 +145,7 @@ export default function ProgressionCard() {
         <View style={styles.expandedSection}>
           {/* Score Breakdown */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📊 Score Breakdown</Text>
+            <Text style={styles.sectionTitle}>Score Breakdown</Text>
             <View style={styles.scoreRow}>
               <Text style={styles.scoreLabel}>Current Score:</Text>
               <Text style={styles.scoreValue}>{Math.round(progress.current_score)}</Text>
@@ -195,7 +195,7 @@ export default function ProgressionCard() {
 
           {/* Requirements */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>✅ Requirements</Text>
+            <Text style={styles.sectionTitle}>Requirements</Text>
             <View style={styles.requirementRow}>
               <Ionicons
                 name={progress.requirements.meets_time_requirement ? 'checkmark-circle' : 'time'}

@@ -21,7 +21,7 @@ const ACTIVE_MEMBER = 'Gab'; // Options: 'Gab', 'Wimari', 'Nhiko', 'Chrystian'
 
 // Team Member IP Addresses (update your own IP here)
 const TEAM_IPS = {
-  Gab: '192.168.1.5',        // Gab: Update with your IP
+  Gab: '192.168.1.3',        // Gab: Update with your IP
   Wimari: 'CHANGE_THIS_TO_YOUR_IP',     // Wimari: Update with your IP
   Nhiko: 'CHANGE_THIS_TO_YOUR_IP',      // Nhiko: Update with your IP
   Chrystian: 'CHANGE_THIS_TO_YOUR_IP',  // Chrystian: Update with your IP
