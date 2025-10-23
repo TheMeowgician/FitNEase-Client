@@ -7,32 +7,31 @@
 // 🔧 STEP 1: CHOOSE ENVIRONMENT
 // - 'development': Local WiFi network (for Expo Go development)
 // - 'testing': ngrok tunnels (for APK testing with groupmates)
-type Environment = 'development' | 'testing';
-const ENVIRONMENT = 'testing' as Environment;
+// - 'production': AWS EC2 server (live deployment)
+type Environment = 'development' | 'testing' | 'production';
+const ENVIRONMENT = 'production' as Environment;  // ✅ CHANGE THIS TO 'production'
 
 // 🔧 STEP 2: SET ACTIVE MEMBER (for development mode)
 const ACTIVE_MEMBER = 'Gab'; // Options: 'Gab', 'Wimari', 'Nhiko', 'Chrystian'
 
 // 🔧 STEP 3: UPDATE YOUR IP ADDRESS (for development mode)
-// To find your computer's IP address:
-// - Windows: Run "ipconfig" in Command Prompt, look for "IPv4 Address"
-// - Mac: Run "ifconfig | grep 'inet '" in Terminal
-// - It usually looks like: 192.168.x.x or 172.20.x.x
-
-// Team Member IP Addresses (update your own IP here)
 const TEAM_IPS = {
-  Gab: '192.168.1.3',        // Gab: Update with your IP
-  Wimari: 'CHANGE_THIS_TO_YOUR_IP',     // Wimari: Update with your IP
-  Nhiko: 'CHANGE_THIS_TO_YOUR_IP',      // Nhiko: Update with your IP
-  Chrystian: 'CHANGE_THIS_TO_YOUR_IP',  // Chrystian: Update with your IP
+  Gab: '192.168.1.3',
+  Wimari: 'CHANGE_THIS_TO_YOUR_IP',
+  Nhiko: 'CHANGE_THIS_TO_YOUR_IP',
+  Chrystian: 'CHANGE_THIS_TO_YOUR_IP',
 };
 
 // 🔧 STEP 4: UPDATE NGROK URL (for testing mode)
-// After starting ngrok, you'll get ONLY 1 URL (Ultimate Simplicity = FREE TIER!)
-// Example:
-//   gateway  https://abc123.ngrok.io
 const NGROK_URLS = {
-  GATEWAY: 'https://malaysia-overextreme-noneffusively.ngrok-free.dev',  // ONE URL routes to EVERYTHING (including WebSocket)!
+  GATEWAY: 'https://malaysia-overextreme-noneffusively.ngrok-free.dev',
+};
+
+// 🔧 STEP 5: AWS PRODUCTION SERVER (NEW!)
+const PRODUCTION_CONFIG = {
+  SERVER_IP: '18.136.99.170',
+  GATEWAY_PORT: '8090',
+  WS_PORT: '8091',
 };
 
 // Auto-select configuration based on environment
@@ -55,15 +54,12 @@ const getDevelopmentConfig = () => ({
 });
 
 const getTestingConfig = () => {
-  // Extract host from gateway URL (remove https://)
   const gatewayHost = NGROK_URLS.GATEWAY.replace('https://', '');
-
   return {
-    // API Gateway Pattern: ONE URL routes to EVERYTHING!
     BASE_URL: NGROK_URLS.GATEWAY,
-    AUTH_SERVICE_URL: `${NGROK_URLS.GATEWAY}/auth`,         // Gateway routes to auth service
-    CONTENT_SERVICE_URL: `${NGROK_URLS.GATEWAY}/content`,   // Gateway routes to content service
-    TRACKING_SERVICE_URL: `${NGROK_URLS.GATEWAY}/tracking`, // Gateway routes to tracking service
+    AUTH_SERVICE_URL: `${NGROK_URLS.GATEWAY}/auth`,
+    CONTENT_SERVICE_URL: `${NGROK_URLS.GATEWAY}/content`,
+    TRACKING_SERVICE_URL: `${NGROK_URLS.GATEWAY}/tracking`,
     MEDIA_SERVICE_URL: `${NGROK_URLS.GATEWAY}/media`,
     PLANNING_SERVICE_URL: `${NGROK_URLS.GATEWAY}/planning`,
     SOCIAL_SERVICE_URL: `${NGROK_URLS.GATEWAY}/social`,
@@ -71,15 +67,37 @@ const getTestingConfig = () => {
     COMMS_SERVICE_URL: `${NGROK_URLS.GATEWAY}/comms`,
     OPERATIONS_SERVICE_URL: `${NGROK_URLS.GATEWAY}/ops`,
     ML_SERVICE_URL: `${NGROK_URLS.GATEWAY}/ml`,
-    REVERB_WS_HOST: gatewayHost,  // Same URL, gateway routes WebSocket too!
-    REVERB_WS_PORT: 443, // ngrok uses HTTPS port wa
+    REVERB_WS_HOST: gatewayHost,
+    REVERB_WS_PORT: 443,
+  };
+};
+
+// ✅ NEW: Production configuration for AWS EC2
+const getProductionConfig = () => {
+  const BASE = `http://${PRODUCTION_CONFIG.SERVER_IP}:${PRODUCTION_CONFIG.GATEWAY_PORT}`;
+  
+  return {
+    BASE_URL: BASE,
+    AUTH_SERVICE_URL: `${BASE}/auth`,
+    CONTENT_SERVICE_URL: `${BASE}/content`,
+    TRACKING_SERVICE_URL: `${BASE}/tracking`,
+    MEDIA_SERVICE_URL: `${BASE}/media`,
+    PLANNING_SERVICE_URL: `${BASE}/planning`,
+    SOCIAL_SERVICE_URL: `${BASE}/social`,
+    ENGAGEMENT_SERVICE_URL: `${BASE}/engagement`,
+    COMMS_SERVICE_URL: `${BASE}/comms`,
+    OPERATIONS_SERVICE_URL: `${BASE}/ops`,
+    ML_SERVICE_URL: `${BASE}/ml`,
+    REVERB_WS_HOST: PRODUCTION_CONFIG.SERVER_IP,
+    REVERB_WS_PORT: parseInt(PRODUCTION_CONFIG.WS_PORT),
   };
 };
 
 // Export the appropriate config based on environment
-export const API_CONFIG = ENVIRONMENT === 'testing'
-  ? getTestingConfig()       // ✅ Use ngrok URLs for testing (APK)
-  : getDevelopmentConfig();  // ✅ Use local IP for development (Expo Go)
+export const API_CONFIG = 
+  ENVIRONMENT === 'production' ? getProductionConfig() :   // ✅ AWS EC2 production
+  ENVIRONMENT === 'testing' ? getTestingConfig() :         // ngrok for testing
+  getDevelopmentConfig();                                   // local development
 
 // 💡 HOW TO USE:
 //
@@ -91,10 +109,12 @@ export const API_CONFIG = ENVIRONMENT === 'testing'
 //
 // FOR TESTING APK WITH GROUPMATES:
 // 1. Start ngrok: ngrok start --all --config ngrok.yml
-// 2. Copy all ngrok URLs from terminal
-// 3. Paste URLs into NGROK_URLS object above
-// 4. Set ENVIRONMENT = 'testing'
-// 5. Build APK: eas build -p android --profile preview
-// 6. Share APK with groupmates
+// 2. Copy ngrok URLs and update NGROK_URLS
+// 3. Set ENVIRONMENT = 'testing'
+// 4. Build APK: eas build -p android --profile preview
 //
-// IMPORTANT: Keep ngrok running while groupmates are testing!
+// FOR PRODUCTION (AWS EC2):
+// 1. Set ENVIRONMENT = 'production'
+// 2. Your app will connect to: http://18.136.99.170:8090
+// 3. All services work through the API Gateway
+// 4. Available 24/7 - no need to run anything locally!
