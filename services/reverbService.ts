@@ -52,7 +52,7 @@ class ReverbService {
     // For testing mode (ngrok), WebSocket goes through gateway /reverb/ path
     const wsPath = wsPort === 443 ? '/reverb' : '';
 
-    this.pusher = new Pusher('auqcet6tsq2wdjpmjp7v', {
+    this.pusher = new Pusher('local-key', {
       wsHost,
       wsPort,
       wsPath,
