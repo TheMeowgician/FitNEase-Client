@@ -38,11 +38,13 @@ interface InvitationData {
 interface ReverbContextType {
   isConnected: boolean;
   onlineUsers: Set<string>;
+  refreshGroupSubscriptions: () => Promise<void>;
 }
 
 const ReverbContext = createContext<ReverbContextType>({
   isConnected: false,
-  onlineUsers: new Set()
+  onlineUsers: new Set(),
+  refreshGroupSubscriptions: async () => {},
 });
 
 export function ReverbProvider({ children }: { children: React.ReactNode }) {
@@ -191,8 +193,60 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
     setInvitationData(null);
   };
 
+  /**
+   * Refresh group subscriptions
+   * Called after completing workouts or when group memberships change
+   */
+  const refreshGroupSubscriptions = async () => {
+    if (!user) {
+      console.log('⚠️ [REFRESH] No user logged in, skipping refresh');
+      return;
+    }
+
+    try {
+      console.log('🔄 [REFRESH] Refreshing group subscriptions...');
+
+      // Unsubscribe from existing group channels
+      userGroups.forEach((groupId) => {
+        console.log(`🔕 [REFRESH] Unsubscribing from group ${groupId}`);
+        reverbService.unsubscribe(`private-group.${groupId}`);
+      });
+
+      // Fetch updated list of groups
+      console.log('📋 [REFRESH] Fetching updated user groups...');
+      const groupsResponse = await socialService.getGroups({ user_id: Number(user.id) });
+      const groups = groupsResponse.groups || [];
+      const groupIds = groups.map((group: any) => group.id);
+
+      console.log('📋 [REFRESH] User is now a member of groups:', groupIds);
+      setUserGroups(groupIds);
+
+      // Subscribe to updated group list
+      groupIds.forEach((groupId: number) => {
+        console.log(`✅ [REFRESH] Subscribing to group ${groupId} for invitations`);
+        reverbService.subscribeToGroupWorkoutInvitations(groupId, (data) => {
+          console.log('📨 [REFRESH] Received group workout invitation:', data);
+
+          // Don't show invitation to the initiator
+          if (Number(data.initiator_id) === Number(user.id)) {
+            console.log('👤 Ignoring invitation from self');
+            return;
+          }
+
+          // Show the invitation modal
+          setInvitationData(data);
+          setShowInvitationModal(true);
+        });
+      });
+
+      console.log('✅ [REFRESH] Group subscriptions refreshed successfully');
+    } catch (error) {
+      console.error('❌ [REFRESH] Failed to refresh group subscriptions:', error);
+    }
+  };
+
   return (
-    <ReverbContext.Provider value={{ isConnected, onlineUsers }}>
+    <ReverbContext.Provider value={{ isConnected, onlineUsers, refreshGroupSubscriptions }}>
       {children}
       <GroupWorkoutInvitationModal
         visible={showInvitationModal}

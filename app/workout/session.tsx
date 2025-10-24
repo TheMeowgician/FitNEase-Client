@@ -20,6 +20,7 @@ import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useReverb } from '../../contexts/ReverbProvider';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { socialService } from '../../services/microservices/socialService';
@@ -44,6 +45,7 @@ interface SessionState {
 
 export default function WorkoutSessionScreen() {
   const { user } = useAuth();
+  const { refreshGroupSubscriptions } = useReverb();
   const params = useLocalSearchParams();
   const { workoutId, type, sessionData, initiatorId, groupId } = params;
 
@@ -63,6 +65,8 @@ export default function WorkoutSessionScreen() {
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastTickTimeRef = useRef<number>(Date.now());
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
 
@@ -91,7 +95,15 @@ export default function WorkoutSessionScreen() {
     return () => {
       backHandler.remove();
       appStateSubscription?.remove();
-      clearInterval(intervalRef.current!);
+
+      // Clear both interval and animation frame
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+
       if (sound) {
         sound.unloadAsync();
       }
@@ -130,10 +142,23 @@ export default function WorkoutSessionScreen() {
     if (sessionState.status === 'running') {
       startTimer();
     } else {
-      clearInterval(intervalRef.current!);
+      // Clear both interval and animation frame when not running
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     }
 
-    return () => clearInterval(intervalRef.current!);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
   }, [sessionState.status, type]);
 
   const loadWorkout = async () => {
@@ -390,24 +415,57 @@ export default function WorkoutSessionScreen() {
   };
 
   const startTimer = () => {
-    clearInterval(intervalRef.current!);
-    intervalRef.current = setInterval(() => {
-      setSessionState(prev => {
-        if (prev.timeRemaining <= 1) {
-          return handlePhaseComplete(prev);
-        }
-        // Calculate calories burned per second
-        const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300; // Default 300 if not set
-        const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32; // Default 32 mins
-        const caloriesPerSecond = totalCalories / totalMinutes / 60;
+    // Clear any existing timer
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
-        return {
-          ...prev,
-          timeRemaining: prev.timeRemaining - 1,
-          caloriesBurned: prev.caloriesBurned + caloriesPerSecond
-        };
-      });
-    }, 1000);
+    // Reset last tick time
+    lastTickTimeRef.current = Date.now();
+
+    // Use requestAnimationFrame for smooth, frame-synced timer
+    const tick = () => {
+      const now = Date.now();
+      const deltaTime = now - lastTickTimeRef.current;
+
+      // Only update every ~1000ms (with 50ms tolerance for smoothness)
+      if (deltaTime >= 950) {
+        lastTickTimeRef.current = now;
+
+        setSessionState(prev => {
+          if (prev.timeRemaining <= 1) {
+            // Cancel animation frame before phase transition
+            if (animationFrameRef.current) {
+              cancelAnimationFrame(animationFrameRef.current);
+              animationFrameRef.current = null;
+            }
+            return handlePhaseComplete(prev);
+          }
+
+          // Calculate calories burned per second
+          const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+          const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+          const caloriesPerSecond = totalCalories / totalMinutes / 60;
+
+          return {
+            ...prev,
+            timeRemaining: prev.timeRemaining - 1,
+            caloriesBurned: prev.caloriesBurned + caloriesPerSecond
+          };
+        });
+      }
+
+      // Continue animation loop
+      animationFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    // Start the animation loop
+    animationFrameRef.current = requestAnimationFrame(tick);
   };
 
   const handlePhaseComplete = (currentState: SessionState): SessionState => {
@@ -698,6 +756,12 @@ export default function WorkoutSessionScreen() {
         console.log('✅ [COMPLETE] Workout session saved successfully');
       }
 
+      // Refresh group subscriptions to receive new invitations
+      // This ensures invitations work after completing a workout
+      console.log('🔄 [COMPLETE] Refreshing group subscriptions...');
+      await refreshGroupSubscriptions();
+      console.log('✅ [COMPLETE] Group subscriptions refreshed');
+
       // Navigate back immediately without showing modal
       console.log('🔙 [COMPLETE] Navigating back to previous screen');
       router.back();
@@ -705,6 +769,12 @@ export default function WorkoutSessionScreen() {
     } catch (error) {
       console.error('❌ [COMPLETE] Error saving session:', error);
       // Still navigate back even if save fails (data saved locally)
+      // Also try to refresh subscriptions even on error
+      try {
+        await refreshGroupSubscriptions();
+      } catch (refreshError) {
+        console.error('❌ [COMPLETE] Failed to refresh subscriptions:', refreshError);
+      }
       router.back();
     }
   };
