@@ -65,8 +65,8 @@ export default function WorkoutSessionScreen() {
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | number | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const lastTickTimeRef = useRef<number>(Date.now());
+  const phaseStartTimeRef = useRef<number>(Date.now());
+  const phaseDurationRef = useRef<number>(10); // Default 10 seconds
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
 
@@ -96,12 +96,9 @@ export default function WorkoutSessionScreen() {
       backHandler.remove();
       appStateSubscription?.remove();
 
-      // Clear both interval and animation frame
+      // Clear timer
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
-      }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
       }
 
       if (sound) {
@@ -131,23 +128,14 @@ export default function WorkoutSessionScreen() {
   }, [tabataSession]);
 
   useEffect(() => {
-    // SERVER-AUTHORITATIVE: For group workouts, server controls timer
-    // Only start client-side timer for solo workouts
-    if (type === 'group_tabata') {
-      console.log('🎮 [SERVER-AUTH] Group workout - using server timer');
-      return; // Server sends ticks, no client timer needed
-    }
-
-    // Solo workout - use client-side timer
+    // ALL workouts (solo AND group) now use client-side prediction for smooth timer
+    // Group workouts will sync to server ticks to correct drift
     if (sessionState.status === 'running') {
       startTimer();
     } else {
-      // Clear both interval and animation frame when not running
+      // Clear timer when not running
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
-      }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
       }
     }
 
@@ -155,11 +143,8 @@ export default function WorkoutSessionScreen() {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
     };
-  }, [sessionState.status, type]);
+  }, [sessionState.status]);
 
   const loadWorkout = async () => {
     try {
@@ -222,20 +207,48 @@ export default function WorkoutSessionScreen() {
       onEvent: (eventName, data) => {
         console.log('📨 Session event received:', eventName, data);
 
-        // SERVER-AUTHORITATIVE TIMER: Listen to server ticks (single source of truth)
+        // SERVER SYNC: Server sends ticks for synchronization
+        // Use CLIENT-SIDE PREDICTION for smooth timer, server corrects drift
         if (eventName === 'SessionTick') {
-          // Server sends timer update every second
-          // NO client-side timer needed - server is truth!
-          setSessionState(prev => ({
-            ...prev,
-            timeRemaining: data.time_remaining,
-            phase: data.phase,
-            currentExercise: data.current_exercise,
-            currentSet: data.current_set,
-            currentRound: data.current_round,
-            caloriesBurned: data.calories_burned,
-            status: data.status, // Server controls status too
-          }));
+          setSessionState(prev => {
+            const serverTime = data.time_remaining;
+            const clientTime = prev.timeRemaining;
+            const drift = Math.abs(serverTime - clientTime);
+
+            // DRIFT CORRECTION STRATEGY:
+            // - Small drift (<= 1s): Ignore, client prediction is smooth
+            // - Medium drift (1-3s): Gradually adjust (not implemented yet, just sync)
+            // - Large drift (> 3s): Hard sync to server (phase change or significant lag)
+
+            const shouldSync = drift > 1 || data.phase !== prev.phase;
+
+            if (shouldSync) {
+              console.log('🔄 [SYNC] Syncing to server time', {
+                clientTime,
+                serverTime,
+                drift,
+                phase: data.phase
+              });
+
+              // Reset client timer when syncing
+              phaseStartTimeRef.current = Date.now();
+              phaseDurationRef.current = serverTime;
+
+              return {
+                ...prev,
+                timeRemaining: serverTime,
+                phase: data.phase,
+                currentExercise: data.current_exercise,
+                currentSet: data.current_set,
+                currentRound: data.current_round,
+                caloriesBurned: data.calories_burned,
+                status: data.status,
+              };
+            }
+
+            // No sync needed - client prediction is accurate, keep smooth countdown
+            return prev;
+          });
           return; // Don't process other events
         }
 
@@ -420,52 +433,51 @@ export default function WorkoutSessionScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
 
-    // Reset last tick time
-    lastTickTimeRef.current = Date.now();
+    // Record phase start time for drift correction
+    phaseStartTimeRef.current = Date.now();
 
-    // Use requestAnimationFrame for smooth, frame-synced timer
-    const tick = () => {
-      const now = Date.now();
-      const deltaTime = now - lastTickTimeRef.current;
-
-      // Only update every ~1000ms (with 50ms tolerance for smoothness)
-      if (deltaTime >= 950) {
-        lastTickTimeRef.current = now;
-
-        setSessionState(prev => {
-          if (prev.timeRemaining <= 1) {
-            // Cancel animation frame before phase transition
-            if (animationFrameRef.current) {
-              cancelAnimationFrame(animationFrameRef.current);
-              animationFrameRef.current = null;
-            }
-            return handlePhaseComplete(prev);
-          }
-
-          // Calculate calories burned per second
-          const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
-          const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
-          const caloriesPerSecond = totalCalories / totalMinutes / 60;
-
-          return {
-            ...prev,
-            timeRemaining: prev.timeRemaining - 1,
-            caloriesBurned: prev.caloriesBurned + caloriesPerSecond
-          };
-        });
+    // Set initial phase duration based on current phase
+    const getCurrentPhaseDuration = () => {
+      switch (sessionState.phase) {
+        case 'prepare': return 10;
+        case 'work': return 20;
+        case 'rest': return 10;
+        case 'roundRest': return 60;
+        default: return 10;
       }
-
-      // Continue animation loop
-      animationFrameRef.current = requestAnimationFrame(tick);
     };
+    phaseDurationRef.current = getCurrentPhaseDuration();
 
-    // Start the animation loop
-    animationFrameRef.current = requestAnimationFrame(tick);
+    // CLIENT-SIDE PREDICTION: Calculate time based on elapsed time since phase start
+    // This ensures smooth countdown even with network jitter
+    intervalRef.current = setInterval(() => {
+      const now = Date.now();
+      const elapsedMs = now - phaseStartTimeRef.current;
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      const predictedTimeRemaining = Math.max(0, phaseDurationRef.current - elapsedSeconds);
+
+      setSessionState(prev => {
+        // For group workouts, server ticks will correct drift if needed
+        // For solo workouts, this is the authoritative timer
+
+        if (predictedTimeRemaining <= 0) {
+          // Phase complete - handle transition
+          return handlePhaseComplete(prev);
+        }
+
+        // Calculate calories burned per second
+        const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+        const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+        const caloriesPerSecond = totalCalories / totalMinutes / 60;
+
+        return {
+          ...prev,
+          timeRemaining: predictedTimeRemaining,
+          caloriesBurned: prev.caloriesBurned + caloriesPerSecond
+        };
+      });
+    }, 100); // Update every 100ms for smooth display, but only change seconds
   };
 
   const handlePhaseComplete = (currentState: SessionState): SessionState => {
@@ -733,12 +745,13 @@ export default function WorkoutSessionScreen() {
 
   const completeSession = async () => {
     try {
-      console.log('💾 [COMPLETE] Saving workout session...');
+      console.log('💾 [COMPLETE] ========== Starting Workout Completion ==========');
 
       if (sessionStartTime && user) {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
+        console.log('💾 [COMPLETE] Saving workout session to tracking service...');
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
           userId: Number(user.id),
@@ -756,25 +769,34 @@ export default function WorkoutSessionScreen() {
         console.log('✅ [COMPLETE] Workout session saved successfully');
       }
 
-      // Refresh group subscriptions to receive new invitations
-      // This ensures invitations work after completing a workout
-      console.log('🔄 [COMPLETE] Refreshing group subscriptions...');
+      // CRITICAL: Refresh group subscriptions BEFORE navigating
+      // This ensures WebSocket channels are ready to receive new invitations
+      console.log('🔄 [COMPLETE] Refreshing group subscriptions (BLOCKING)...');
       await refreshGroupSubscriptions();
-      console.log('✅ [COMPLETE] Group subscriptions refreshed');
+      console.log('✅ [COMPLETE] Group subscriptions refreshed successfully');
 
-      // Navigate back immediately without showing modal
+      // Small delay to ensure subscriptions are fully established
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Navigate back
       console.log('🔙 [COMPLETE] Navigating back to previous screen');
+      console.log('💾 [COMPLETE] ========== Workout Completion Finished ==========');
       router.back();
 
     } catch (error) {
-      console.error('❌ [COMPLETE] Error saving session:', error);
-      // Still navigate back even if save fails (data saved locally)
-      // Also try to refresh subscriptions even on error
+      console.error('❌ [COMPLETE] ========== Error During Workout Completion ==========');
+      console.error('❌ [COMPLETE] Error:', error);
+
+      // Still try to refresh subscriptions even on error
       try {
+        console.log('🔄 [COMPLETE] Attempting to refresh subscriptions despite error...');
         await refreshGroupSubscriptions();
+        console.log('✅ [COMPLETE] Subscriptions refreshed despite error');
       } catch (refreshError) {
         console.error('❌ [COMPLETE] Failed to refresh subscriptions:', refreshError);
       }
+
+      // Navigate back anyway
       router.back();
     }
   };

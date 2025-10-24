@@ -204,44 +204,73 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      console.log('🔄 [REFRESH] Refreshing group subscriptions...');
+      console.log('🔄 [REFRESH] ========== Starting Group Subscription Refresh ==========');
+      console.log('🔄 [REFRESH] Current user ID:', user.id);
+      console.log('🔄 [REFRESH] Current userGroups:', userGroups);
 
       // Unsubscribe from existing group channels
+      console.log('🔕 [REFRESH] Unsubscribing from', userGroups.length, 'existing group channels...');
       userGroups.forEach((groupId) => {
-        console.log(`🔕 [REFRESH] Unsubscribing from group ${groupId}`);
-        reverbService.unsubscribe(`private-group.${groupId}`);
+        const channelName = `private-group.${groupId}`;
+        console.log(`🔕 [REFRESH] Unsubscribing from: ${channelName}`);
+        reverbService.unsubscribe(channelName);
       });
 
+      // Small delay to ensure unsubscribe completes
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Fetch updated list of groups
-      console.log('📋 [REFRESH] Fetching updated user groups...');
+      console.log('📋 [REFRESH] Fetching updated user groups from server...');
       const groupsResponse = await socialService.getGroups({ user_id: Number(user.id) });
+      console.log('📋 [REFRESH] Server response:', groupsResponse);
+
       const groups = groupsResponse.groups || [];
       const groupIds = groups.map((group: any) => group.id);
 
-      console.log('📋 [REFRESH] User is now a member of groups:', groupIds);
+      console.log('📋 [REFRESH] User is now a member of', groupIds.length, 'groups:', groupIds);
       setUserGroups(groupIds);
 
+      // Small delay before resubscribing
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       // Subscribe to updated group list
-      groupIds.forEach((groupId: number) => {
-        console.log(`✅ [REFRESH] Subscribing to group ${groupId} for invitations`);
-        reverbService.subscribeToGroupWorkoutInvitations(groupId, (data) => {
-          console.log('📨 [REFRESH] Received group workout invitation:', data);
+      console.log('✅ [REFRESH] Subscribing to', groupIds.length, 'group channels...');
+      for (const groupId of groupIds) {
+        const channelName = `private-group.${groupId}`;
+        console.log(`✅ [REFRESH] Subscribing to channel: ${channelName}`);
 
-          // Don't show invitation to the initiator
-          if (Number(data.initiator_id) === Number(user.id)) {
-            console.log('👤 Ignoring invitation from self');
-            return;
-          }
+        try {
+          await reverbService.subscribeToGroupWorkoutInvitations(groupId, (data) => {
+            console.log('📨 [INVITATION] ========== Received Group Workout Invitation ==========');
+            console.log('📨 [INVITATION] Group ID:', data.group_id);
+            console.log('📨 [INVITATION] Initiator ID:', data.initiator_id);
+            console.log('📨 [INVITATION] Initiator Name:', data.initiator_name);
+            console.log('📨 [INVITATION] Session ID:', data.session_id);
+            console.log('📨 [INVITATION] Current User ID:', user.id);
 
-          // Show the invitation modal
-          setInvitationData(data);
-          setShowInvitationModal(true);
-        });
-      });
+            // Don't show invitation to the initiator
+            if (Number(data.initiator_id) === Number(user.id)) {
+              console.log('👤 [INVITATION] Ignoring invitation from self');
+              return;
+            }
 
-      console.log('✅ [REFRESH] Group subscriptions refreshed successfully');
+            console.log('✅ [INVITATION] Showing invitation modal to user');
+            // Show the invitation modal
+            setInvitationData(data);
+            setShowInvitationModal(true);
+          });
+
+          console.log(`✅ [REFRESH] Successfully subscribed to group ${groupId}`);
+        } catch (error) {
+          console.error(`❌ [REFRESH] Failed to subscribe to group ${groupId}:`, error);
+        }
+      }
+
+      console.log('✅ [REFRESH] ========== Group Subscription Refresh Complete ==========');
     } catch (error) {
-      console.error('❌ [REFRESH] Failed to refresh group subscriptions:', error);
+      console.error('❌ [REFRESH] ========== Failed to Refresh Group Subscriptions ==========');
+      console.error('❌ [REFRESH] Error:', error);
+      console.error('❌ [REFRESH] Error details:', JSON.stringify(error, null, 2));
     }
   };
 
