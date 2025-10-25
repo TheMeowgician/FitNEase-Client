@@ -211,11 +211,18 @@ export default function WorkoutSessionScreen() {
         // Use CLIENT-SIDE PREDICTION for smooth timer, server corrects drift
         if (eventName === 'SessionTick') {
           setSessionState(prev => {
+            // CRITICAL: Ignore SessionTick when paused
+            // Pause/Resume events control the exact sync time
+            if (prev.status === 'paused') {
+              console.log('⏸️ [TICK IGNORED] Ignoring SessionTick while paused - pause event controls time');
+              return prev;
+            }
+
             const serverTime = data.time_remaining;
             const clientTime = prev.timeRemaining;
             const drift = Math.abs(serverTime - clientTime);
 
-            // DRIFT CORRECTION STRATEGY:
+            // DRIFT CORRECTION STRATEGY (only during running):
             // - Small drift (<= 1s): Ignore, client prediction is smooth
             // - Medium drift (1-3s): Gradually adjust (not implemented yet, just sync)
             // - Large drift (> 3s): Hard sync to server (phase change or significant lag)
@@ -255,39 +262,27 @@ export default function WorkoutSessionScreen() {
         if (eventName === 'WorkoutPaused') {
           console.log(`⏸️ Workout paused by ${data.paused_by_name}`);
 
-          // INSTANT PAUSE: Pause IMMEDIATELY for all clients (like in games)
-          // This prevents the "delay then jump" visual glitch
+          // CRITICAL: When pausing, ALL clients MUST show EXACT same time
+          // No drift tolerance - force sync to server authoritative time
           setSessionState(prev => {
-            // CLIENT-SIDE PREDICTION with LATENCY COMPENSATION
-            // The pause event took time to arrive, so we need to adjust the time
-            let adjustedTimeRemaining = prev.timeRemaining;
-
             if (data.session_state && data.session_state.time_remaining !== null) {
-              // Calculate how far off we are from the server state
               const serverTime = data.session_state.time_remaining;
               const localTime = prev.timeRemaining;
-              const timeDrift = localTime - serverTime;
+              const drift = Math.abs(serverTime - localTime);
 
-              console.log('🔄 [SYNC] Latency compensation:', {
+              console.log('⏸️ [PAUSE SYNC] Force syncing to server time (ALL clients must match):', {
                 serverTime,
                 localTime,
-                timeDrift,
-                willAdjust: Math.abs(timeDrift) > 2 // Only adjust if drift > 2 seconds
+                drift,
+                action: 'FORCE_SYNC_TO_SERVER'
               });
 
-              // If drift is significant (>2 seconds), use server time
-              // If drift is small (<2 seconds), use local time for smooth experience
-              if (Math.abs(timeDrift) > 2) {
-                adjustedTimeRemaining = serverTime;
-              } else {
-                // Small drift - use local time to avoid visual jump
-                adjustedTimeRemaining = localTime;
-              }
-
+              // ALWAYS use server time on pause - no drift tolerance
+              // This ensures all users see the exact same paused time
               return {
                 ...prev,
                 status: 'paused',
-                timeRemaining: adjustedTimeRemaining,
+                timeRemaining: serverTime, // FORCE server time
                 phase: data.session_state.phase || prev.phase,
                 currentExercise: data.session_state.current_exercise ?? prev.currentExercise,
                 currentSet: data.session_state.current_set ?? prev.currentSet,
@@ -297,30 +292,37 @@ export default function WorkoutSessionScreen() {
             }
 
             // Fallback: just pause at current time
+            console.log('⚠️ [PAUSE] No server state provided, pausing at current time');
             return { ...prev, status: 'paused' };
           });
         } else if (eventName === 'WorkoutResumed') {
           console.log(`▶️ Workout resumed by ${data.resumed_by_name}`);
 
-          // INSTANT RESUME: Resume IMMEDIATELY for all clients
-          // Sync to exact server state to ensure perfect synchronization
+          // CRITICAL: When resuming, ALL clients MUST start from EXACT same time
+          // Reset phase timer to ensure synchronized countdown
           setSessionState(prev => {
-            let adjustedTimeRemaining = prev.timeRemaining;
-
             if (data.session_state && data.session_state.time_remaining !== null) {
-              // Use server time for exact sync
-              adjustedTimeRemaining = data.session_state.time_remaining;
+              const serverTime = data.session_state.time_remaining;
+              const localTime = prev.timeRemaining;
+              const drift = Math.abs(serverTime - localTime);
 
-              console.log('▶️ [RESUME] Syncing and resuming from server state:', {
-                serverTime: data.session_state.time_remaining,
-                localTime: prev.timeRemaining,
-                willUseServerTime: true
+              console.log('▶️ [RESUME SYNC] Force syncing to server time and resetting phase timer:', {
+                serverTime,
+                localTime,
+                drift,
+                action: 'FORCE_SYNC_AND_RESET_TIMER'
               });
 
+              // CRITICAL: Reset phase timer so client-side prediction starts fresh
+              phaseStartTimeRef.current = Date.now();
+              phaseDurationRef.current = serverTime;
+
+              // ALWAYS use server time on resume - no drift tolerance
+              // This ensures all users resume from the exact same point
               return {
                 ...prev,
                 status: 'running',
-                timeRemaining: adjustedTimeRemaining,
+                timeRemaining: serverTime, // FORCE server time
                 phase: data.session_state.phase || prev.phase,
                 currentExercise: data.session_state.current_exercise ?? prev.currentExercise,
                 currentSet: data.session_state.current_set ?? prev.currentSet,
@@ -329,7 +331,7 @@ export default function WorkoutSessionScreen() {
               };
             }
 
-            console.log('▶️ [RESUME] Resuming from current position:', prev.timeRemaining);
+            console.log('⚠️ [RESUME] No server state provided, resuming from current position:', prev.timeRemaining);
             return { ...prev, status: 'running' };
           });
         } else if (eventName === 'WorkoutStopped') {
