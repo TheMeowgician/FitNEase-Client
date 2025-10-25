@@ -100,6 +100,7 @@ export default function GroupLobbyScreen() {
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null); // Track sessionId for cleanup
   const channelRef = useRef<any>(null);
   const presenceChannelRef = useRef<any>(null);
   const groupPresenceChannelRef = useRef<any>(null);
@@ -130,6 +131,11 @@ export default function GroupLobbyScreen() {
   /**
    * Initialize lobby on mount
    */
+  // Track sessionId in ref for cleanup
+  useEffect(() => {
+    sessionIdRef.current = sessionId || null;
+  }, [sessionId]);
+
   useEffect(() => {
     // Prevent double initialization
     if (hasInitializedRef.current) {
@@ -140,7 +146,24 @@ export default function GroupLobbyScreen() {
     initializeLobby();
 
     return () => {
-      cleanup();
+      // CRITICAL: Call leave API when component unmounts (back button, swipe, etc.)
+      // Without this, backend still thinks user is in lobby when they navigate away
+      const leaveOnUnmount = async () => {
+        const currentSessionId = sessionIdRef.current;
+        if (currentSessionId && !isCleaningUpRef.current) {
+          try {
+            console.log('🚪 [UNMOUNT] Component unmounting, calling leave API...');
+            await socialService.leaveLobbyV2(currentSessionId);
+            console.log('✅ [UNMOUNT] Successfully left lobby on backend');
+          } catch (error) {
+            console.error('❌ [UNMOUNT] Error leaving lobby:', error);
+            // Continue cleanup even if API fails
+          }
+        }
+        await cleanup();
+      };
+
+      leaveOnUnmount();
     };
   }, []);
 
