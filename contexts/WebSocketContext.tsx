@@ -288,9 +288,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       const success = await reverbService.manualReconnect();
       if (success) {
         console.log('✅ Manual reconnect successful');
-        // Resubscribe to channels
+        // Resubscribe to group channels only
+        // NOTE: User channel is handled by NotificationContext
         await subscribeToGroupChannels();
-        subscribeToUserChannel();
         fetchPendingInvitations();
       } else {
         console.error('❌ Manual reconnect failed');
