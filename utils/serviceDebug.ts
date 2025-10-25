@@ -20,7 +20,7 @@ export const checkServiceConnectivity = async (serviceName: string): Promise<Ser
       setTimeout(() => reject(new Error('Request timeout')), 5000);
     });
 
-    // Try health endpoint first (use /api/health for all services)
+    // Try /api/health first (Laravel services)
     const fetchPromise = fetch(`${serviceURL}/api/health`, {
       method: 'GET',
       headers: {
@@ -31,9 +31,9 @@ export const checkServiceConnectivity = async (serviceName: string): Promise<Ser
 
     let response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
 
-    // If health endpoint fails with 404, try root endpoint
+    // If /api/health fails with 404, try /health (for ML service - Flask/Python)
     if (response.status === 404) {
-      const rootFetchPromise = fetch(serviceURL, {
+      const healthFetchPromise = fetch(`${serviceURL}/health`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -41,11 +41,11 @@ export const checkServiceConnectivity = async (serviceName: string): Promise<Ser
         },
       });
 
-      const rootTimeoutPromise = new Promise((_, reject) => {
+      const healthTimeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Request timeout')), 5000);
       });
 
-      response = await Promise.race([rootFetchPromise, rootTimeoutPromise]) as Response;
+      response = await Promise.race([healthFetchPromise, healthTimeoutPromise]) as Response;
     }
 
     const responseTime = Date.now() - startTime;
