@@ -1170,15 +1170,95 @@ export default function WorkoutSessionScreen() {
                     console.log('🏁 [AUTO FINISH] Session ID:', tabataSession.session_id);
                     await socialService.finishWorkout(tabataSession.session_id);
                     console.log('✅ [AUTO FINISH] Finish broadcasted successfully');
-                    // Set status to completed - user must click COMPLETE button
-                    setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+
+                    // AUTO FINISH: Save FULL workout stats (complete duration & full calories)
+                    // This is for testing purposes - simulates completing the entire workout
+                    if (sessionStartTime && user) {
+                      const fullDurationMinutes = tabataSession.total_duration_minutes;
+                      const fullCalories = tabataSession.estimated_calories;
+
+                      console.log('💾 [AUTO FINISH] Saving FULL workout stats:', {
+                        fullDurationMinutes,
+                        fullCalories,
+                        note: 'Using complete workout stats for testing'
+                      });
+
+                      await trackingService.createWorkoutSession({
+                        workoutId: tabataSession.session_id,
+                        userId: Number(user.id),
+                        sessionType: 'group',
+                        startTime: sessionStartTime,
+                        endTime: new Date(),
+                        duration: fullDurationMinutes,
+                        caloriesBurned: fullCalories,
+                        completed: true,
+                        notes: `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${fullDurationMinutes}min [AUTO FINISH TEST]`
+                      });
+
+                      console.log('✅ [AUTO FINISH] Full workout stats saved successfully');
+                    }
+
+                    // Refresh group subscriptions before navigating
+                    console.log('🔄 [AUTO FINISH] Refreshing group subscriptions...');
+                    await refreshGroupSubscriptions();
+                    console.log('✅ [AUTO FINISH] Group subscriptions refreshed');
+
+                    // Small delay to ensure subscriptions are established
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // Navigate back
+                    console.log('🔙 [AUTO FINISH] Navigating back to previous screen');
+                    router.back();
+
                   } catch (error) {
-                    console.error('❌ [AUTO FINISH] Failed to broadcast finish:', error);
-                    Alert.alert('Error', 'Failed to finish workout for all members');
+                    console.error('❌ [AUTO FINISH] Failed to auto finish:', error);
+                    Alert.alert('Error', 'Failed to auto finish workout');
                   }
                 } else {
-                  // Solo workout - set status to completed, user must click COMPLETE
-                  setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+                  // Solo workout - save FULL workout stats and navigate back
+                  try {
+                    if (sessionStartTime && user) {
+                      const sessionId = workoutId as string;
+                      const fullDurationMinutes = workout?.total_duration_minutes || 32;
+                      const fullCalories = workout?.estimated_calories_burned || 300;
+
+                      console.log('💾 [AUTO FINISH] Saving FULL solo workout stats:', {
+                        fullDurationMinutes,
+                        fullCalories,
+                        note: 'Using complete workout stats for testing'
+                      });
+
+                      await trackingService.createWorkoutSession({
+                        workoutId: sessionId,
+                        userId: Number(user.id),
+                        sessionType: 'individual',
+                        startTime: sessionStartTime,
+                        endTime: new Date(),
+                        duration: fullDurationMinutes,
+                        caloriesBurned: fullCalories,
+                        completed: true,
+                        notes: `Tabata workout completed - ${fullDurationMinutes}min [AUTO FINISH TEST]`
+                      });
+
+                      console.log('✅ [AUTO FINISH] Full solo workout stats saved successfully');
+                    }
+
+                    // Refresh group subscriptions before navigating
+                    console.log('🔄 [AUTO FINISH] Refreshing group subscriptions...');
+                    await refreshGroupSubscriptions();
+                    console.log('✅ [AUTO FINISH] Group subscriptions refreshed');
+
+                    // Small delay to ensure subscriptions are established
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // Navigate back
+                    console.log('🔙 [AUTO FINISH] Navigating back to previous screen');
+                    router.back();
+
+                  } catch (error) {
+                    console.error('❌ [AUTO FINISH] Failed to auto finish solo workout:', error);
+                    Alert.alert('Error', 'Failed to auto finish workout');
+                  }
                 }
               }}
             >
