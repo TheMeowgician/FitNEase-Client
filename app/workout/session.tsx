@@ -429,18 +429,10 @@ export default function WorkoutSessionScreen() {
       intervalRef.current = null;
     }
 
-    // FOR GROUP WORKOUTS: DO NOT RUN LOCAL TIMER
-    // Server SessionTick events are the ONLY source of truth for perfect sync
-    if (type === 'group_tabata') {
-      console.log('🎯 [GROUP SESSION] Skipping local timer - server ticks are single source of truth');
-      return; // Server will send SessionTick events every second
-    }
-
-    // FOR SOLO WORKOUTS: Use local timer (no sync needed)
-    // Record phase start time for drift correction
+    // Record phase start time for drift correction (solo workouts)
     phaseStartTimeRef.current = Date.now();
 
-    // Set initial phase duration based on current phase
+    // Set initial phase duration based on current phase (for solo workouts)
     const getCurrentPhaseDuration = () => {
       switch (sessionState.phase) {
         case 'prepare': return 10;
@@ -452,20 +444,32 @@ export default function WorkoutSessionScreen() {
     };
     phaseDurationRef.current = getCurrentPhaseDuration();
 
-    // CLIENT-SIDE TIMER FOR SOLO WORKOUTS ONLY
+    // SMOOTH TIMER WITH SERVER SYNC FOR GROUP WORKOUTS
+    // CLIENT-ONLY TIMER FOR SOLO WORKOUTS
     intervalRef.current = setInterval(() => {
       const now = Date.now();
-      const elapsedMs = now - phaseStartTimeRef.current;
-      const elapsedSeconds = Math.floor(elapsedMs / 1000);
-      const predictedTimeRemaining = Math.max(0, phaseDurationRef.current - elapsedSeconds);
 
       setSessionState(prev => {
-        // For group workouts, server ticks will correct drift if needed
-        // For solo workouts, this is the authoritative timer
+        let newTimeRemaining: number;
 
-        if (predictedTimeRemaining <= 0) {
-          // Phase complete - handle transition
-          return handlePhaseComplete(prev);
+        if (type === 'group_tabata') {
+          // GROUP WORKOUTS: Interpolate between server ticks for smooth display
+          // Server is STILL the single source of truth - we just display smoothly
+          const elapsedSinceServerTick = Math.floor((now - lastServerTickRef.current) / 1000);
+          newTimeRemaining = Math.max(0, lastServerTimeRef.current - elapsedSinceServerTick);
+
+          // Don't handle phase transitions locally - server controls everything
+          // Just display the interpolated time
+        } else {
+          // SOLO WORKOUTS: Client is authoritative, use phase timer
+          const elapsedMs = now - phaseStartTimeRef.current;
+          const elapsedSeconds = Math.floor(elapsedMs / 1000);
+          newTimeRemaining = Math.max(0, phaseDurationRef.current - elapsedSeconds);
+
+          if (newTimeRemaining <= 0) {
+            // Phase complete - handle transition (solo workouts only)
+            return handlePhaseComplete(prev);
+          }
         }
 
         // Calculate calories burned per second
@@ -475,11 +479,11 @@ export default function WorkoutSessionScreen() {
 
         return {
           ...prev,
-          timeRemaining: predictedTimeRemaining,
+          timeRemaining: newTimeRemaining,
           caloriesBurned: prev.caloriesBurned + caloriesPerSecond
         };
       });
-    }, 100); // Update every 100ms for smooth display, but only change seconds
+    }, 100); // Update every 100ms for smooth display
   };
 
   const handlePhaseComplete = (currentState: SessionState): SessionState => {
