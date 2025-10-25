@@ -209,6 +209,16 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
       return { success: false, error: 'Invitation not found' };
     }
 
+    // Check if already expired - silently remove without API call
+    const now = Date.now();
+    const expiresAtMs = invitation.expires_at * 1000;
+    if (expiresAtMs <= now) {
+      console.log('🗑️ [INVITATION STORE] Removing expired invitation silently', { invitationId });
+      get().removeInvitation(invitationId);
+      setTimeout(() => get().showNextInvitation(), 100);
+      return { success: true }; // Treat as success - already expired
+    }
+
     set({ isLoading: true, error: null });
 
     try {
@@ -231,8 +241,19 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
         return { success: false, error: response.message };
       }
     } catch (error: any) {
-      console.error('❌ [INVITATION STORE] Decline invitation failed', error);
       const errorMessage = error.message || 'Failed to decline invitation';
+
+      // CRITICAL: If invitation is no longer valid, treat as success and remove it
+      // This prevents error loops from stale invitations
+      if (errorMessage.includes('no longer valid') || errorMessage.includes('not found')) {
+        console.log('🧹 [INVITATION STORE] Invitation no longer valid, removing silently', { invitationId });
+        get().removeInvitation(invitationId);
+        setTimeout(() => get().showNextInvitation(), 100);
+        set({ isLoading: false });
+        return { success: true }; // Treat as success - already handled on backend
+      }
+
+      console.error('❌ [INVITATION STORE] Decline invitation failed', error);
       set({ isLoading: false, error: errorMessage });
       return { success: false, error: errorMessage };
     }
@@ -368,25 +389,66 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
 
       if (storedData) {
         const parsed = JSON.parse(storedData);
+        const now = Date.now();
+
+        // CRITICAL: Filter out ALL expired/stale invitations BEFORE hydration
+        // This prevents auto-decline loops on app reload
+        const validInvitations: Record<string, WorkoutInvitation> = {};
+        let expiredCount = 0;
+        let totalCount = 0;
+
+        Object.entries(parsed.invitations || {}).forEach(([id, invitation]: [string, any]) => {
+          totalCount++;
+          const expiresAtMs = invitation.expires_at * 1000;
+
+          // Only hydrate invitations that are still valid
+          if (expiresAtMs > now) {
+            validInvitations[id] = invitation;
+          } else {
+            expiredCount++;
+            console.log('🗑️ [HYDRATE] Discarding expired invitation', {
+              invitationId: id,
+              expired: new Date(expiresAtMs).toISOString(),
+              now: new Date(now).toISOString()
+            });
+          }
+        });
+
+        // Only set state with VALID invitations
+        const validCurrentId = validInvitations[parsed.currentInvitationId || '']
+          ? parsed.currentInvitationId
+          : null;
 
         set({
-          invitations: parsed.invitations || {},
-          currentInvitationId: parsed.currentInvitationId || null,
+          invitations: validInvitations,
+          currentInvitationId: validCurrentId,
           isHydrated: true
         });
 
-        console.log('✅ [INVITATION STORE] Hydrated', {
-          count: Object.keys(parsed.invitations || {}).length
+        console.log('✅ [INVITATION STORE] Hydrated with cleanup', {
+          total: totalCount,
+          valid: Object.keys(validInvitations).length,
+          expired: expiredCount
         });
 
-        // Cleanup expired invitations after hydration
-        get().cleanupExpiredInvitations();
+        // If we filtered out expired invitations, persist the clean state
+        if (expiredCount > 0) {
+          console.log('💾 [HYDRATE] Persisting cleaned invitation data');
+          setTimeout(() => get().persistToStorage(), 0);
+        }
       } else {
         console.log('📭 [INVITATION STORE] No stored invitations found');
         set({ isHydrated: true });
       }
     } catch (error) {
       console.error('❌ [INVITATION STORE] Hydration failed', error);
+      // On error, clear AsyncStorage to prevent corrupt data loops
+      try {
+        await AsyncStorage.removeItem(INVITATION_STORAGE_KEY);
+        console.log('🧹 [HYDRATE] Cleared corrupt AsyncStorage data');
+      } catch (e) {
+        console.error('❌ [HYDRATE] Failed to clear AsyncStorage', e);
+      }
       set({ isHydrated: true }); // Mark as hydrated even on error
     }
   },
