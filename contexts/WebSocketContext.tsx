@@ -41,15 +41,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const pathname = usePathname();
   const [isConnected, setIsConnected] = useState(false);
   const [subscribedGroupIds, setSubscribedGroupIds] = useState<string[]>([]);
-  const [subscribedToUserChannel, setSubscribedToUserChannel] = useState(false);
   const [pendingInvitation, setPendingInvitation] = useState<WorkoutInvitation | null>(null);
   const [groupsCache, setGroupsCache] = useState<Map<string, string>>(new Map());
   const [connectionState, setConnectionState] = useState<string>('disconnected');
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
   const [maxRetriesReached, setMaxRetriesReached] = useState<boolean>(false);
 
-  // Access invitation store actions
-  const { addInvitation, hydrateFromStorage, fetchPendingInvitations, cleanupExpiredInvitations } = useInvitationStore();
+  // Access invitation store actions (user invitations now handled by NotificationContext)
+  const { hydrateFromStorage, fetchPendingInvitations, cleanupExpiredInvitations } = useInvitationStore();
 
   // Hydrate invitations from AsyncStorage on mount
   useEffect(() => {
@@ -82,9 +81,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       reverbService.onReconnect(() => {
         console.log('🔄 WebSocket reconnected, resubscribing to channels and fetching invitations');
 
-        // Resubscribe to all channels
+        // Resubscribe to group channels only
+        // NOTE: User channel is handled by NotificationContext to avoid duplicate subscriptions
         subscribeToGroupChannels();
-        subscribeToUserChannel();
 
         // Fetch any invitations that were sent while disconnected
         fetchPendingInvitations();
@@ -103,9 +102,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           await reverbService.connect(Number(user.id));
           console.log('✅ Reverb connected, now subscribing to channels...');
 
-          // Now subscribe to channels
+          // Now subscribe to group channels only
+          // NOTE: User channel is handled by NotificationContext to avoid duplicate subscriptions
           await subscribeToGroupChannels();
-          subscribeToUserChannel();
 
           // Fetch any pending invitations from backend
           fetchPendingInvitations();
@@ -122,17 +121,17 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           console.error('❌ Failed to setup WebSocket connection:', error);
         }
       } else {
-        console.log('🔌 WebSocketContext: User not authenticated, unsubscribing from all channels');
+        console.log('🔌 WebSocketContext: User not authenticated, unsubscribing from group channels');
         unsubscribeFromGroupChannels();
-        unsubscribeFromUserChannel();
       }
     };
 
     setupWebSocketConnection();
 
     return () => {
+      // Cleanup group channels only
+      // NOTE: User channel is handled by NotificationContext
       unsubscribeFromGroupChannels();
-      unsubscribeFromUserChannel();
     };
   }, [isAuthenticated, user?.id]);
 
@@ -204,34 +203,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     }
   };
 
-  const subscribeToUserChannel = () => {
-    if (!user) return;
-
-    const channelName = `user.${user.id}`;
-    console.log(`🔔 Subscribing to user channel: private-${channelName}`);
-
-    reverbService.subscribeToPrivateChannel(channelName, {
-      onEvent: (eventName, data) => {
-        console.log(`📨 User channel event received:`, { eventName, data });
-
-        if (eventName === 'UserWorkoutInvitation') {
-          handleUserWorkoutInvitation(data);
-        }
-      },
-    });
-
-    setSubscribedToUserChannel(true);
-    console.log('✅ Subscribed to user private channel');
-  };
-
-  const unsubscribeFromUserChannel = () => {
-    if (!user) return;
-
-    const channelName = `private-user.${user.id}`;
-    console.log(`🔌 Unsubscribing from user channel: ${channelName}`);
-    reverbService.unsubscribe(channelName);
-    setSubscribedToUserChannel(false);
-  };
+  // NOTE: User channel subscription removed - now handled by NotificationContext
+  // to avoid duplicate subscriptions and duplicate invitation modals
 
   const unsubscribeFromGroupChannels = () => {
     console.log('🔌 Unsubscribing from all group channels...');
@@ -245,35 +218,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     setIsConnected(false);
   };
 
-  const handleUserWorkoutInvitation = (data: any) => {
-    console.log('🏋️ User workout invitation received via private channel!', {
-      invitationId: data.invitation_id,
-      sessionId: data.session_id,
-      groupId: data.group_id,
-      initiatorId: data.initiator_id,
-      initiatorName: data.initiator_name,
-      expiresAt: data.expires_at,
-      currentUserId: user?.id
-    });
-
-    // Don't accept invitation from self (shouldn't happen with backend validation)
-    if (user && Number(data.initiator_id) === Number(user.id)) {
-      console.log('👤 Ignoring invitation from self');
-      return;
-    }
-
-    // Add invitation to persistent store
-    addInvitation({
-      invitation_id: data.invitation_id,
-      session_id: data.session_id,
-      group_id: data.group_id,
-      initiator_id: data.initiator_id,
-      initiator_name: data.initiator_name,
-      workout_data: data.workout_data,
-      expires_at: data.expires_at,
-      received_at: Date.now()
-    });
-  };
+  // NOTE: handleUserWorkoutInvitation removed - now handled by NotificationContext
+  // to avoid duplicate invitation processing
 
   const handleGroupWorkoutInvitation = (data: any, groupId: string, groupName: string) => {
     console.log('🏋️ Group workout invitation received!', {

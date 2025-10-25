@@ -5,6 +5,7 @@ import { reverbService } from '../services/reverbService';
 import { commsService } from '../services/microservices/commsService';
 import { router } from 'expo-router';
 import GroupWorkoutInvitationModal from '../components/groups/GroupWorkoutInvitationModal';
+import { useInvitationStore } from '../stores/invitationStore';
 
 interface Notification {
   notification_id: number;
@@ -51,9 +52,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const isSetupRef = useRef(false);
   const listenersRef = useRef<Set<NotificationEventListener>>(new Set());
 
-  // Invitation modal state
+  // Invitation modal state (legacy - kept for backward compatibility)
   const [showInvitationModal, setShowInvitationModal] = useState(false);
   const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
+
+  // Access invitation store for persistent queue-based invitations
+  const { addInvitation } = useInvitationStore();
 
   useEffect(() => {
     if (user) {
@@ -150,11 +154,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             console.log('💪 [NOTIFICATION CONTEXT] UserWorkoutInvitation received!');
             console.log('💪 [NOTIFICATION CONTEXT] Invitation data:', JSON.stringify(data, null, 2));
 
-            // Set invitation data and show modal
-            setInvitationData(data);
-            setShowInvitationModal(true);
+            // Don't process invitation from self
+            if (user && Number(data.initiator_id) === Number(user.id)) {
+              console.log('👤 [NOTIFICATION CONTEXT] Ignoring invitation from self');
+              return;
+            }
 
-            console.log('✅ [NOTIFICATION CONTEXT] Invitation modal state updated - should trigger modal');
+            // Add to persistent invitation store (queue-based system)
+            addInvitation({
+              invitation_id: data.invitation_id,
+              session_id: data.session_id,
+              group_id: data.group_id,
+              initiator_id: data.initiator_id,
+              initiator_name: data.initiator_name,
+              workout_data: data.workout_data,
+              expires_at: data.expires_at,
+              received_at: Date.now()
+            });
+
+            console.log('✅ [NOTIFICATION CONTEXT] Invitation added to store');
           }
           else {
             console.log(`⚠️ [NOTIFICATION CONTEXT] Event type "${eventName}" - ignoring`);
