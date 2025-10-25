@@ -465,8 +465,20 @@ export default function WorkoutSessionScreen() {
         if (type === 'group_tabata') {
           // GROUP WORKOUTS: Interpolate between server ticks for smooth display
           // Server is STILL the single source of truth - we just display smoothly
-          const elapsedSinceServerTick = Math.floor((now - lastServerTickRef.current) / 1000);
-          newTimeRemaining = Math.max(0, lastServerTimeRef.current - elapsedSinceServerTick);
+          const elapsedMs = now - lastServerTickRef.current;
+          const elapsedSeconds = Math.floor(elapsedMs / 1000);
+          newTimeRemaining = Math.max(0, lastServerTimeRef.current - elapsedSeconds);
+
+          // Log every 10th update to avoid spam (10 * 100ms = 1 second)
+          if (Math.random() < 0.1) {
+            console.log('⏱️ [INTERPOLATION]', {
+              lastServerTime: lastServerTimeRef.current,
+              elapsedMs,
+              elapsedSeconds,
+              interpolatedTime: newTimeRemaining,
+              prevTime: prev.timeRemaining
+            });
+          }
 
           // Don't handle phase transitions locally - server controls everything
           // Just display the interpolated time
@@ -715,14 +727,16 @@ export default function WorkoutSessionScreen() {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
-        // Calculate ACTUAL duration and calories for partial session
-        const actualDurationMinutes = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60);
+        // Calculate ACTUAL duration and calories for partial session (same logic as complete)
+        const actualDurationSeconds = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
+        const actualDurationMinutes = Math.max(1, Math.round(actualDurationSeconds / 60));
         const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
         const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
-        const caloriesPerMinute = estimatedTotalCalories / totalWorkoutMinutes;
-        const accurateCaloriesBurned = Math.floor(actualDurationMinutes * caloriesPerMinute);
+        const totalWorkoutSeconds = totalWorkoutMinutes * 60;
+        const accurateCaloriesBurned = Math.floor((actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories);
 
         console.log('❌ [EXIT] Partial session stats:', {
+          actualDurationSeconds,
           actualDurationMinutes,
           accurateCaloriesBurned,
           currentExercise: sessionState.currentExercise,
@@ -781,21 +795,25 @@ export default function WorkoutSessionScreen() {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
-        // Calculate ACTUAL duration in minutes
-        const actualDurationMinutes = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60);
+        // Calculate ACTUAL duration in SECONDS first for accuracy
+        const actualDurationSeconds = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
 
-        // Calculate ACCURATE calories based on actual time worked
-        // Formula: (actual_time / total_workout_time) * estimated_total_calories
+        // Convert to minutes, ensuring minimum of 1 minute for any started workout
+        const actualDurationMinutes = Math.max(1, Math.round(actualDurationSeconds / 60));
+
+        // Calculate ACCURATE calories based on ACTUAL SECONDS worked
+        // Formula: (actual_seconds / total_workout_seconds) * estimated_total_calories
         const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
         const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
-        const caloriesPerMinute = estimatedTotalCalories / totalWorkoutMinutes;
-        const accurateCaloriesBurned = Math.floor(actualDurationMinutes * caloriesPerMinute);
+        const totalWorkoutSeconds = totalWorkoutMinutes * 60;
+        const accurateCaloriesBurned = Math.floor((actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories);
 
         console.log('💾 [COMPLETE] Workout stats calculated:', {
+          actualDurationSeconds,
           actualDurationMinutes,
           estimatedTotalCalories,
           totalWorkoutMinutes,
-          caloriesPerMinute,
+          totalWorkoutSeconds,
           accurateCaloriesBurned,
           stateCalories: sessionState.caloriesBurned
         });
