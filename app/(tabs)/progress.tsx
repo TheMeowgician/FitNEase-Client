@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useProgressStore } from '../../stores/progressStore';
 import ProgressionCard from '../../components/ProgressionCard';
 import { progressionService } from '../../services/microservices/progressionService';
 import { trackingService } from '../../services/microservices/trackingService';
@@ -25,18 +26,17 @@ const { width } = Dimensions.get('window');
 export default function ProgressScreen() {
   const { user } = useAuth();
   const { getUserStats } = useEngagementService();
+
+  // Use centralized progress store
+  const {
+    overallStats,
+    isLoading,
+    isRefreshing,
+    fetchAllProgressData,
+  } = useProgressStore();
+
   const [refreshing, setRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalWorkouts: 0,
-    totalMinutes: 0,
-    totalCalories: 0,
-    activeDays: 0,
-    currentStreak: 0,
-    completedSessions: 0,
-    thisWeekWorkouts: 0,
-    thisMonthWorkouts: 0,
-  });
+  const [engagementStreak, setEngagementStreak] = useState(0);
 
   useEffect(() => {
     loadProgressData();
@@ -56,77 +56,18 @@ export default function ProgressScreen() {
     if (!user?.id) return;
 
     try {
-      setIsLoading(true);
-      console.log('📊 [PROGRESS] Loading progress data for user:', user.id);
+      console.log('📊 [PROGRESS] Loading progress data from store');
 
-      // Fetch data from services
-      const [workoutHistory, engagementStats] = await Promise.all([
-        trackingService.getWorkoutHistory(user.id).catch((err: Error) => {
-          console.warn('⚠️ [PROGRESS] Tracking service unavailable:', err);
-          return [];
-        }),
-        getUserStats(user.id).catch((err: Error) => {
-          console.warn('⚠️ [PROGRESS] Engagement service unavailable:', err);
-          return null;
-        }),
-      ]);
+      // Fetch from centralized store
+      await fetchAllProgressData(user.id);
 
-      console.log('📊 [PROGRESS] Workout history:', workoutHistory.length, 'sessions');
-      console.log('📊 [PROGRESS] Engagement stats:', engagementStats);
+      // Get engagement streak separately
+      const engagementStats = await getUserStats(user.id).catch(() => null);
+      setEngagementStreak(engagementStats?.current_streak_days || 0);
 
-      // Calculate stats from workout history
-      const totalWorkouts = workoutHistory.length;
-      const totalMinutes = workoutHistory.reduce((sum, w) => sum + (w.duration || 0), 0);
-      const totalCalories = workoutHistory.reduce((sum, w) => sum + (w.caloriesBurned || 0), 0);
-
-      // Calculate this week's workouts
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      const thisWeekWorkouts = workoutHistory.filter(w => {
-        const workoutDate = new Date(w.date);
-        return workoutDate >= startOfWeek;
-      }).length;
-
-      // Calculate this month's workouts
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const thisMonthWorkouts = workoutHistory.filter(w => {
-        const workoutDate = new Date(w.date);
-        return workoutDate >= startOfMonth;
-      }).length;
-
-      // Calculate active days (unique dates with workouts)
-      const uniqueDates = new Set(
-        workoutHistory.map(w => new Date(w.date).toDateString())
-      );
-      const activeDays = uniqueDates.size;
-
-      // Update stats with real data
-      setStats({
-        totalWorkouts,
-        totalMinutes,
-        totalCalories,
-        activeDays,
-        currentStreak: engagementStats?.current_streak_days || 0,
-        completedSessions: totalWorkouts,
-        thisWeekWorkouts,
-        thisMonthWorkouts,
-      });
-
-      console.log('✅ [PROGRESS] Stats updated successfully:', {
-        totalWorkouts,
-        totalMinutes,
-        totalCalories,
-        activeDays,
-        thisWeekWorkouts,
-        thisMonthWorkouts,
-      });
+      console.log('✅ [PROGRESS] Progress data loaded from store');
     } catch (error) {
       console.error('❌ [PROGRESS] Failed to load progress data:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -177,7 +118,7 @@ export default function ProgressScreen() {
   const levelInfo = getFitnessLevelInfo();
 
   // Show loading state on first load
-  if (isLoading && stats.totalWorkouts === 0) {
+  if (isLoading && !overallStats) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -236,19 +177,19 @@ export default function ProgressScreen() {
           <View style={styles.levelCardStats}>
             <View style={styles.levelCardStat}>
               <Ionicons name="trophy" size={20} color="rgba(255, 255, 255, 0.9)" />
-              <Text style={styles.levelCardStatValue}>{stats.totalWorkouts}</Text>
+              <Text style={styles.levelCardStatValue}>{overallStats?.totalWorkouts || 0}</Text>
               <Text style={styles.levelCardStatLabel}>Workouts</Text>
             </View>
             <View style={styles.levelCardStatDivider} />
             <View style={styles.levelCardStat}>
               <Ionicons name="calendar" size={20} color="rgba(255, 255, 255, 0.9)" />
-              <Text style={styles.levelCardStatValue}>{stats.activeDays}</Text>
+              <Text style={styles.levelCardStatValue}>{overallStats?.activeDays || 0}</Text>
               <Text style={styles.levelCardStatLabel}>Active Days</Text>
             </View>
             <View style={styles.levelCardStatDivider} />
             <View style={styles.levelCardStat}>
               <Ionicons name="flame" size={20} color="rgba(255, 255, 255, 0.9)" />
-              <Text style={styles.levelCardStatValue}>{stats.currentStreak}</Text>
+              <Text style={styles.levelCardStatValue}>{engagementStreak || 0}</Text>
               <Text style={styles.levelCardStatLabel}>Day Streak</Text>
             </View>
           </View>
@@ -269,7 +210,7 @@ export default function ProgressScreen() {
               <View style={[styles.quickStatIcon, { backgroundColor: COLORS.PRIMARY[100] }]}>
                 <Ionicons name="fitness" size={24} color={COLORS.PRIMARY[600]} />
               </View>
-              <Text style={styles.quickStatValue}>{stats.totalWorkouts}</Text>
+              <Text style={styles.quickStatValue}>{overallStats?.totalWorkouts || 0}</Text>
               <Text style={styles.quickStatLabel}>Total Workouts</Text>
             </View>
 
@@ -277,7 +218,7 @@ export default function ProgressScreen() {
               <View style={[styles.quickStatIcon, { backgroundColor: COLORS.WARNING[100] }]}>
                 <Ionicons name="time" size={24} color={COLORS.WARNING[600]} />
               </View>
-              <Text style={styles.quickStatValue}>{Math.floor(stats.totalMinutes / 60)}h {stats.totalMinutes % 60}m</Text>
+              <Text style={styles.quickStatValue}>{Math.floor((overallStats?.totalMinutes || 0) / 60)}h {(overallStats?.totalMinutes || 0) % 60}m</Text>
               <Text style={styles.quickStatLabel}>Total Time</Text>
             </View>
 
@@ -285,7 +226,7 @@ export default function ProgressScreen() {
               <View style={[styles.quickStatIcon, { backgroundColor: COLORS.SUCCESS[100] }]}>
                 <Ionicons name="calendar-outline" size={24} color={COLORS.SUCCESS[600]} />
               </View>
-              <Text style={styles.quickStatValue}>{stats.activeDays}</Text>
+              <Text style={styles.quickStatValue}>{overallStats?.activeDays || 0}</Text>
               <Text style={styles.quickStatLabel}>Active Days</Text>
             </View>
 
@@ -293,7 +234,7 @@ export default function ProgressScreen() {
               <View style={[styles.quickStatIcon, { backgroundColor: COLORS.ERROR[100] }]}>
                 <Ionicons name="flame" size={24} color={COLORS.ERROR[600]} />
               </View>
-              <Text style={styles.quickStatValue}>{stats.currentStreak}</Text>
+              <Text style={styles.quickStatValue}>{engagementStreak || 0}</Text>
               <Text style={styles.quickStatLabel}>Current Streak</Text>
             </View>
           </View>
@@ -308,71 +249,71 @@ export default function ProgressScreen() {
 
           <View style={styles.milestonesContainer}>
             {/* First Workout */}
-            <View style={[styles.milestoneCard, stats.totalWorkouts >= 1 && styles.milestoneCardCompleted]}>
+            <View style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 1 && styles.milestoneCardCompleted]}>
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  stats.totalWorkouts >= 1 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  (overallStats?.totalWorkouts || 0) >= 1 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
                 ]}>
-                  <Ionicons name={stats.totalWorkouts >= 1 ? "checkmark" : "flash"} size={20} color="white" />
+                  <Ionicons name={(overallStats?.totalWorkouts || 0) >= 1 ? "checkmark" : "flash"} size={20} color="white" />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>First Workout</Text>
                   <Text style={styles.milestoneDescription}>Complete 1 workout</Text>
                 </View>
               </View>
-              {stats.totalWorkouts >= 1 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
+              {(overallStats?.totalWorkouts || 0) >= 1 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
             </View>
 
             {/* 10 Workouts */}
-            <View style={[styles.milestoneCard, stats.totalWorkouts >= 10 && styles.milestoneCardCompleted]}>
+            <View style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 10 && styles.milestoneCardCompleted]}>
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  stats.totalWorkouts >= 10 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  (overallStats?.totalWorkouts || 0) >= 10 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
                 ]}>
-                  <Ionicons name={stats.totalWorkouts >= 10 ? "checkmark" : "rocket"} size={20} color="white" />
+                  <Ionicons name={(overallStats?.totalWorkouts || 0) >= 10 ? "checkmark" : "rocket"} size={20} color="white" />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>Getting Started</Text>
                   <Text style={styles.milestoneDescription}>Complete 10 workouts</Text>
                 </View>
               </View>
-              {stats.totalWorkouts >= 10 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
+              {(overallStats?.totalWorkouts || 0) >= 10 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
             </View>
 
             {/* 7 Day Streak */}
-            <View style={[styles.milestoneCard, stats.currentStreak >= 7 && styles.milestoneCardCompleted]}>
+            <View style={[styles.milestoneCard, engagementStreak >= 7 && styles.milestoneCardCompleted]}>
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  stats.currentStreak >= 7 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  engagementStreak >= 7 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
                 ]}>
-                  <Ionicons name={stats.currentStreak >= 7 ? "checkmark" : "flame"} size={20} color="white" />
+                  <Ionicons name={engagementStreak >= 7 ? "checkmark" : "flame"} size={20} color="white" />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>On Fire</Text>
                   <Text style={styles.milestoneDescription}>Maintain 7-day streak</Text>
                 </View>
               </View>
-              {stats.currentStreak >= 7 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
+              {engagementStreak >= 7 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
             </View>
 
             {/* 28 Active Days */}
-            <View style={[styles.milestoneCard, stats.activeDays >= 28 && styles.milestoneCardCompleted]}>
+            <View style={[styles.milestoneCard, (overallStats?.activeDays || 0) >= 28 && styles.milestoneCardCompleted]}>
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  stats.activeDays >= 28 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  (overallStats?.activeDays || 0) >= 28 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
                 ]}>
-                  <Ionicons name={stats.activeDays >= 28 ? "checkmark" : "calendar"} size={20} color="white" />
+                  <Ionicons name={(overallStats?.activeDays || 0) >= 28 ? "checkmark" : "calendar"} size={20} color="white" />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>Dedicated</Text>
                   <Text style={styles.milestoneDescription}>Active for 28 days</Text>
                 </View>
               </View>
-              {stats.activeDays >= 28 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
+              {(overallStats?.activeDays || 0) >= 28 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
             </View>
           </View>
         </View>

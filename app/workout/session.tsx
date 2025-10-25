@@ -24,10 +24,13 @@ import { useReverb } from '../../contexts/ReverbProvider';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { socialService } from '../../services/microservices/socialService';
+import { progressionService } from '../../services/microservices/progressionService';
 import { reverbService } from '../../services/reverbService';
 import { TabataWorkoutSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useLobbyStore } from '../../stores/lobbyStore';
+import { useProgressStore } from '../../stores/progressStore';
+import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
 type SessionStatus = 'ready' | 'running' | 'paused' | 'completed';
@@ -46,6 +49,7 @@ interface SessionState {
 export default function WorkoutSessionScreen() {
   const { user } = useAuth();
   const { refreshGroupSubscriptions } = useReverb();
+  const { refreshAfterWorkout } = useProgressStore();
   const params = useLocalSearchParams();
   const { workoutId, type, sessionData, initiatorId, groupId } = params;
 
@@ -71,8 +75,15 @@ export default function WorkoutSessionScreen() {
   const lastServerTimeRef = useRef<number>(0); // Track last server time_remaining value
   const serverTickTimeoutRef = useRef<NodeJS.Timeout | number | null>(null); // Debounce server ticks
   const lastDisplayedTimeRef = useRef<number>(-1); // Track last displayed time to avoid redundant updates
+  const wasAutoFinished = useRef<boolean>(false); // Track if AUTO FINISH button was used
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
+
+  // Progress modal state
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressBeforeStats, setProgressBeforeStats] = useState<any>(null);
+  const [progressAfterStats, setProgressAfterStats] = useState<any>(null);
+  const [completedWorkoutData, setCompletedWorkoutData] = useState<any>(null);
 
   // Debug logging for button visibility
   console.log('🎮 [SESSION] Button visibility check:', {
@@ -812,80 +823,163 @@ export default function WorkoutSessionScreen() {
     try {
       console.log('💾 [COMPLETE] ========== Starting Workout Completion ==========');
 
-      if (sessionStartTime && user) {
-        // Use session_id for new Tabata sessions, or workoutId for old format
-        const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
-
-        // Calculate ACTUAL duration in SECONDS first for accuracy
-        const actualDurationSeconds = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
-
-        // Convert to minutes, ensuring minimum of 1 minute for any started workout
-        const actualDurationMinutes = Math.max(1, Math.round(actualDurationSeconds / 60));
-
-        // Calculate ACCURATE calories based on ACTUAL SECONDS worked
-        // Formula: (actual_seconds / total_workout_seconds) * estimated_total_calories
-        const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
-        const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
-        const totalWorkoutSeconds = totalWorkoutMinutes * 60;
-        const calculatedCalories = (actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories;
-        // CRITICAL: Ensure minimum 1 calorie for any completed workout (use Math.ceil to round up)
-        const accurateCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
-
-        console.log('💾 [COMPLETE] Workout stats calculated:', {
-          actualDurationSeconds,
-          actualDurationMinutes,
-          estimatedTotalCalories,
-          totalWorkoutMinutes,
-          totalWorkoutSeconds,
-          accurateCaloriesBurned,
-          stateCalories: sessionState.caloriesBurned
-        });
-
-        console.log('💾 [COMPLETE] Saving workout session to tracking service...');
-        await trackingService.createWorkoutSession({
-          workoutId: sessionId,
-          userId: Number(user.id),
-          sessionType: type === 'group_tabata' ? 'group' : 'individual',
-          startTime: sessionStartTime,
-          endTime: new Date(),
-          duration: actualDurationMinutes,
-          caloriesBurned: accurateCaloriesBurned,
-          completed: true,
-          notes: tabataSession
-            ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${actualDurationMinutes}min`
-            : 'Tabata workout completed'
-        });
-
-        console.log('✅ [COMPLETE] Workout session saved successfully');
+      if (!sessionStartTime || !user) {
+        console.error('❌ [COMPLETE] Missing session start time or user');
+        router.back();
+        return;
       }
 
-      // CRITICAL: Refresh group subscriptions BEFORE navigating
-      // This ensures WebSocket channels are ready to receive new invitations
-      console.log('🔄 [COMPLETE] Refreshing group subscriptions (BLOCKING)...');
-      await refreshGroupSubscriptions();
-      console.log('✅ [COMPLETE] Group subscriptions refreshed successfully');
+      // STEP 1: Fetch BEFORE stats
+      console.log('📊 [COMPLETE] Fetching progression data BEFORE saving...');
+      const [beforeProgress, beforeHistory] = await Promise.all([
+        progressionService.getProgress(parseInt(user.id)).catch(() => null),
+        trackingService.getWorkoutHistory(user.id).catch(() => []),
+      ]);
 
-      // Small delay to ensure subscriptions are fully established
+      const beforeStats = {
+        workouts: beforeHistory.length,
+        calories: beforeHistory.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
+        minutes: beforeHistory.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
+        activeDays: new Set(beforeHistory.map((w: any) => new Date(w.date).toDateString())).size,
+        currentStreak: 0, // We'll get this from engagement service later if needed
+        scoreProgress: beforeProgress?.progress_percentage || 0,
+        nextLevel: progressionService.getFitnessLevelName(beforeProgress?.next_level || 'intermediate'),
+      };
+
+      console.log('📊 [COMPLETE] Before stats:', beforeStats);
+
+      // STEP 2: Calculate workout stats
+      const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
+      const actualDurationSeconds = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
+      const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+      const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+      const totalWorkoutSeconds = totalWorkoutMinutes * 60;
+
+      // Determine if using FULL stats or ACTUAL stats
+      // GROUP WORKOUTS: Always use FULL stats (all participants get same credit)
+      // SOLO WORKOUTS: Use ACTUAL stats (based on time actually spent)
+      let finalDurationMinutes: number;
+      let finalCaloriesBurned: number;
+
+      const isGroupWorkout = type === 'group_tabata';
+      const shouldUseFullStats = isGroupWorkout || wasAutoFinished.current;
+
+      if (shouldUseFullStats) {
+        // GROUP WORKOUT or AUTO FINISH: Use FULL workout stats
+        finalDurationMinutes = totalWorkoutMinutes;
+        finalCaloriesBurned = estimatedTotalCalories;
+        console.log('🏁 [COMPLETE] Using FULL stats:', {
+          reason: isGroupWorkout ? 'GROUP_WORKOUT' : 'AUTO_FINISH',
+          duration: finalDurationMinutes,
+          calories: finalCaloriesBurned,
+        });
+      } else {
+        // SOLO WORKOUT (natural completion): Use ACTUAL stats
+        finalDurationMinutes = Math.max(1, Math.round(actualDurationSeconds / 60));
+        const calculatedCalories = (actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories;
+        finalCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
+        console.log('✅ [COMPLETE] Using ACTUAL stats (solo workout):', {
+          actualSeconds: actualDurationSeconds,
+          duration: finalDurationMinutes,
+          calories: finalCaloriesBurned,
+        });
+      }
+
+      // STEP 3: Save workout session
+      console.log('💾 [COMPLETE] Saving workout session to tracking service...');
+      await trackingService.createWorkoutSession({
+        workoutId: sessionId,
+        userId: Number(user.id),
+        sessionType: type === 'group_tabata' ? 'group' : 'individual',
+        startTime: sessionStartTime,
+        endTime: new Date(),
+        duration: finalDurationMinutes,
+        caloriesBurned: finalCaloriesBurned,
+        completed: true,
+        notes: tabataSession
+          ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`
+          : `Tabata workout completed - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`
+      });
+
+      console.log('✅ [COMPLETE] Workout session saved successfully');
+
+      // STEP 4: Fetch AFTER stats
+      console.log('📊 [COMPLETE] Fetching progression data AFTER saving...');
+      // Small delay to let backend process the new workout
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Navigate back
-      console.log('🔙 [COMPLETE] Navigating back to previous screen');
+      const [afterProgress, afterHistory] = await Promise.all([
+        progressionService.getProgress(parseInt(user.id)).catch(() => null),
+        trackingService.getWorkoutHistory(user.id).catch(() => []),
+      ]);
+
+      const afterStats = {
+        workouts: afterHistory.length,
+        calories: afterHistory.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
+        minutes: afterHistory.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
+        activeDays: new Set(afterHistory.map((w: any) => new Date(w.date).toDateString())).size,
+        currentStreak: 0,
+        scoreProgress: afterProgress?.progress_percentage || 0,
+        nextLevel: progressionService.getFitnessLevelName(afterProgress?.next_level || 'intermediate'),
+      };
+
+      console.log('📊 [COMPLETE] After stats:', afterStats);
+
+      // STEP 5: Store data for modal and show it
+      setProgressBeforeStats(beforeStats);
+      setProgressAfterStats(afterStats);
+      setCompletedWorkoutData({
+        duration: finalDurationMinutes,
+        calories: finalCaloriesBurned,
+      });
+      setShowProgressModal(true);
+
+      console.log('✅ [COMPLETE] Progress modal will be shown');
       console.log('💾 [COMPLETE] ========== Workout Completion Finished ==========');
-      router.back();
 
     } catch (error) {
       console.error('❌ [COMPLETE] ========== Error During Workout Completion ==========');
       console.error('❌ [COMPLETE] Error:', error);
 
-      // Still try to refresh subscriptions even on error
+      // On error, still try to navigate back
+      Alert.alert('Error', 'Failed to save workout. Please try again.');
+
+      // Refresh subscriptions and navigate
       try {
-        console.log('🔄 [COMPLETE] Attempting to refresh subscriptions despite error...');
         await refreshGroupSubscriptions();
-        console.log('✅ [COMPLETE] Subscriptions refreshed despite error');
       } catch (refreshError) {
         console.error('❌ [COMPLETE] Failed to refresh subscriptions:', refreshError);
       }
 
+      router.back();
+    }
+  };
+
+  // Handler for when progress modal closes
+  const handleProgressModalClose = async () => {
+    setShowProgressModal(false);
+
+    try {
+      // Refresh progress store for dashboard and progress page
+      if (user?.id) {
+        console.log('🔄 [MODAL CLOSE] Refreshing progress store...');
+        await refreshAfterWorkout(user.id);
+        console.log('✅ [MODAL CLOSE] Progress store refreshed');
+      }
+
+      // Refresh group subscriptions
+      console.log('🔄 [MODAL CLOSE] Refreshing group subscriptions...');
+      await refreshGroupSubscriptions();
+      console.log('✅ [MODAL CLOSE] Group subscriptions refreshed');
+
+      // Small delay to ensure subscriptions are established
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Navigate back
+      console.log('🔙 [MODAL CLOSE] Navigating back to previous screen');
+      router.back();
+    } catch (error) {
+      console.error('❌ [MODAL CLOSE] Error:', error);
       // Navigate back anyway
       router.back();
     }
@@ -1163,6 +1257,9 @@ export default function WorkoutSessionScreen() {
                 maxWidth: '100%',
               }]}
               onPress={async () => {
+                // Mark that auto finish was used (for saving full stats later)
+                wasAutoFinished.current = true;
+
                 if (type === 'group_tabata' && tabataSession) {
                   // For group workouts, broadcast finish to all members
                   try {
@@ -1171,94 +1268,15 @@ export default function WorkoutSessionScreen() {
                     await socialService.finishWorkout(tabataSession.session_id);
                     console.log('✅ [AUTO FINISH] Finish broadcasted successfully');
 
-                    // AUTO FINISH: Save FULL workout stats (complete duration & full calories)
-                    // This is for testing purposes - simulates completing the entire workout
-                    if (sessionStartTime && user) {
-                      const fullDurationMinutes = tabataSession.total_duration_minutes;
-                      const fullCalories = tabataSession.estimated_calories;
-
-                      console.log('💾 [AUTO FINISH] Saving FULL workout stats:', {
-                        fullDurationMinutes,
-                        fullCalories,
-                        note: 'Using complete workout stats for testing'
-                      });
-
-                      await trackingService.createWorkoutSession({
-                        workoutId: tabataSession.session_id,
-                        userId: Number(user.id),
-                        sessionType: 'group',
-                        startTime: sessionStartTime,
-                        endTime: new Date(),
-                        duration: fullDurationMinutes,
-                        caloriesBurned: fullCalories,
-                        completed: true,
-                        notes: `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${fullDurationMinutes}min [AUTO FINISH TEST]`
-                      });
-
-                      console.log('✅ [AUTO FINISH] Full workout stats saved successfully');
-                    }
-
-                    // Refresh group subscriptions before navigating
-                    console.log('🔄 [AUTO FINISH] Refreshing group subscriptions...');
-                    await refreshGroupSubscriptions();
-                    console.log('✅ [AUTO FINISH] Group subscriptions refreshed');
-
-                    // Small delay to ensure subscriptions are established
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    // Navigate back
-                    console.log('🔙 [AUTO FINISH] Navigating back to previous screen');
-                    router.back();
-
+                    // Set status to completed - user must click COMPLETE button to see progress update
+                    setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
                   } catch (error) {
-                    console.error('❌ [AUTO FINISH] Failed to auto finish:', error);
-                    Alert.alert('Error', 'Failed to auto finish workout');
+                    console.error('❌ [AUTO FINISH] Failed to broadcast finish:', error);
+                    Alert.alert('Error', 'Failed to finish workout for all members');
                   }
                 } else {
-                  // Solo workout - save FULL workout stats and navigate back
-                  try {
-                    if (sessionStartTime && user) {
-                      const sessionId = workoutId as string;
-                      const fullDurationMinutes = workout?.total_duration_minutes || 32;
-                      const fullCalories = workout?.estimated_calories_burned || 300;
-
-                      console.log('💾 [AUTO FINISH] Saving FULL solo workout stats:', {
-                        fullDurationMinutes,
-                        fullCalories,
-                        note: 'Using complete workout stats for testing'
-                      });
-
-                      await trackingService.createWorkoutSession({
-                        workoutId: sessionId,
-                        userId: Number(user.id),
-                        sessionType: 'individual',
-                        startTime: sessionStartTime,
-                        endTime: new Date(),
-                        duration: fullDurationMinutes,
-                        caloriesBurned: fullCalories,
-                        completed: true,
-                        notes: `Tabata workout completed - ${fullDurationMinutes}min [AUTO FINISH TEST]`
-                      });
-
-                      console.log('✅ [AUTO FINISH] Full solo workout stats saved successfully');
-                    }
-
-                    // Refresh group subscriptions before navigating
-                    console.log('🔄 [AUTO FINISH] Refreshing group subscriptions...');
-                    await refreshGroupSubscriptions();
-                    console.log('✅ [AUTO FINISH] Group subscriptions refreshed');
-
-                    // Small delay to ensure subscriptions are established
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    // Navigate back
-                    console.log('🔙 [AUTO FINISH] Navigating back to previous screen');
-                    router.back();
-
-                  } catch (error) {
-                    console.error('❌ [AUTO FINISH] Failed to auto finish solo workout:', error);
-                    Alert.alert('Error', 'Failed to auto finish workout');
-                  }
+                  // Solo workout - set status to completed, user must click COMPLETE
+                  setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
                 }
               }}
             >
@@ -1292,6 +1310,17 @@ export default function WorkoutSessionScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Progress Update Modal */}
+      {showProgressModal && progressBeforeStats && progressAfterStats && completedWorkoutData && (
+        <ProgressUpdateModal
+          visible={showProgressModal}
+          onClose={handleProgressModalClose}
+          beforeStats={progressBeforeStats}
+          afterStats={progressAfterStats}
+          workoutData={completedWorkoutData}
+        />
+      )}
     </SafeAreaView>
   );
 }

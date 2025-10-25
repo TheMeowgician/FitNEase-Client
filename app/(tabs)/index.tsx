@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useMLService } from '../../hooks/api/useMLService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { useProgressStore } from '../../stores/progressStore';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
@@ -26,11 +27,17 @@ export default function HomeScreen() {
   const { getUserStats, getUserAchievements } = useEngagementService();
   const { unreadCount } = useNotifications();
 
+  // Use centralized progress store
+  const {
+    weeklyStats,
+    recentWorkouts,
+    isLoading: isLoadingProgress,
+    fetchAllProgressData,
+  } = useProgressStore();
+
   const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
-  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,56 +51,16 @@ export default function HomeScreen() {
     loadDashboardData();
   }, []);
 
-  // Refresh recent workouts when screen comes into focus (e.g., after completing a workout)
-  // This is lightweight and only updates the recent activity section
+  // Refresh progress data when screen comes into focus (e.g., after completing a workout)
+  // Uses centralized progress store - lightweight and cached
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        console.log('🔄 [DASHBOARD] Screen focused - refreshing recent workouts');
-        loadRecentWorkouts();
+        console.log('🔄 [DASHBOARD] Screen focused - refreshing progress from store');
+        fetchAllProgressData(user.id);
       }
-    }, [user])
+    }, [user, fetchAllProgressData])
   );
-
-  const loadRecentWorkouts = async () => {
-    if (!user) return;
-
-    try {
-      // Get all completed workouts to calculate this week's stats
-      const allWorkouts = await trackingService.getWorkoutHistory(user.id);
-
-      // Calculate this week's stats
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      const thisWeekWorkouts = allWorkouts.filter((w: any) => {
-        const workoutDate = new Date(w.date);
-        return workoutDate >= startOfWeek;
-      });
-
-      const weeklyStats = {
-        this_week_sessions: thisWeekWorkouts.length,
-        total_calories_burned: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
-        total_exercise_time: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
-      };
-
-      console.log('🔄 [DASHBOARD] This week stats:', weeklyStats);
-      setStats(weeklyStats);
-
-      // Get recent 5 workouts for activity section
-      const workoutSessions = await trackingService.getSessions({
-        status: 'completed',
-        limit: 5,
-        userId: String(user.id)
-      });
-      console.log('🔄 [DASHBOARD] Refreshed recent workouts:', workoutSessions.sessions.length);
-      setRecentWorkouts(workoutSessions?.sessions || []);
-    } catch (error) {
-      console.warn('Recent workouts refresh failed:', error);
-    }
-  };
 
   const loadDashboardData = async () => {
     if (!user) {
@@ -135,11 +102,7 @@ export default function HomeScreen() {
         }
       }
 
-      const [workoutHistory, achievementsResponse, engagementResponse, fitnessAssessment, workoutSessions] = await Promise.all([
-        trackingService.getWorkoutHistory(user.id).catch((err: Error) => {
-          console.warn('Workout history unavailable:', err);
-          return [];
-        }),
+      const [achievementsResponse, engagementResponse, fitnessAssessment] = await Promise.all([
         getUserAchievements(user.id).catch(err => {
           console.warn('Achievements service unavailable:', err);
           return [];
@@ -152,36 +115,16 @@ export default function HomeScreen() {
           console.warn('Fitness assessment unavailable:', err);
           return null;
         }),
-        trackingService.getSessions({ status: 'completed', limit: 5, userId: String(user.id) }).catch(err => {
-          console.warn('Recent workouts unavailable:', err);
-          return { sessions: [], total: 0, page: 1, limit: 5 };
-        }),
       ]);
 
-      // Calculate this week's stats from workout history
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      const thisWeekWorkouts = workoutHistory.filter((w: any) => {
-        const workoutDate = new Date(w.date);
-        return workoutDate >= startOfWeek;
-      });
-
-      const weeklyStats = {
-        this_week_sessions: thisWeekWorkouts.length,
-        total_calories_burned: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
-        total_exercise_time: thisWeekWorkouts.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
-      };
+      // Fetch progress data from centralized store
+      await fetchAllProgressData(user.id);
 
       console.log(`📊 [DASHBOARD] Loaded ${recsResponse?.length || 0} recommendations for dashboard`);
-      console.log('📊 [DASHBOARD] This week stats:', weeklyStats);
+      console.log('📊 [DASHBOARD] Weekly stats from store:', weeklyStats);
       setRecommendations(recsResponse || []);
-      setStats(weeklyStats);
       setAchievements(achievementsResponse || []);
       setEngagementStats(engagementResponse);
-      setRecentWorkouts(workoutSessions?.sessions || []);
 
       // Set fitness level from assessment data (more accurate than user profile)
       if (fitnessAssessment && fitnessAssessment.length > 0) {
@@ -523,7 +466,7 @@ export default function HomeScreen() {
               </View>
               <View style={styles.statContent}>
                 <Text style={styles.statLabel}>Workouts</Text>
-                <Text style={styles.statValue}>{stats?.this_week_sessions || 0} sessions</Text>
+                <Text style={styles.statValue}>{weeklyStats?.this_week_sessions || 0} sessions</Text>
               </View>
             </View>
             <View style={styles.statDividerHorizontal} />
@@ -533,7 +476,7 @@ export default function HomeScreen() {
               </View>
               <View style={styles.statContent}>
                 <Text style={styles.statLabel}>Calories Burned</Text>
-                <Text style={styles.statValue}>{Math.round(stats?.total_calories_burned || 0).toLocaleString()} cal</Text>
+                <Text style={styles.statValue}>{Math.round(weeklyStats?.total_calories_burned || 0).toLocaleString()} cal</Text>
               </View>
             </View>
             <View style={styles.statDividerHorizontal} />
@@ -544,7 +487,7 @@ export default function HomeScreen() {
               <View style={styles.statContent}>
                 <Text style={styles.statLabel}>Exercise Time</Text>
                 <Text style={styles.statValue}>
-                  {Math.floor((stats?.total_exercise_time || 0) / 60)}h {(stats?.total_exercise_time || 0) % 60}m
+                  {Math.floor((weeklyStats?.total_exercise_time || 0) / 60)}h {(weeklyStats?.total_exercise_time || 0) % 60}m
                 </Text>
               </View>
             </View>

@@ -3,12 +3,19 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { progressionService, ProgressionProgress } from '../services/microservices/progressionService';
 import { useAuth } from '../contexts/AuthContext';
+import { useProgressStore } from '../stores/progressStore';
 import { COLORS, FONTS, FONT_SIZES } from '../constants/colors';
 
 export default function ProgressionCard() {
   const { user } = useAuth();
-  const [progress, setProgress] = useState<ProgressionProgress | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // Use centralized progress store
+  const {
+    progressionData: progress,
+    isLoading: loading,
+    fetchProgressionData,
+  } = useProgressStore();
+
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -18,24 +25,17 @@ export default function ProgressionCard() {
 
   const loadProgress = async () => {
     if (!user?.id) {
-      setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
       setError(null);
-      console.log('🏃 Loading progression data for user:', user.id);
-
-      const data = await progressionService.getProgress(parseInt(user.id));
-      console.log('✅ Progression data loaded:', data);
-      console.log('🔍 Next level value:', data.next_level, 'Type:', typeof data.next_level);
-      setProgress(data);
+      console.log('🏃 [PROGRESSION CARD] Loading progression data from store');
+      await fetchProgressionData(user.id);
+      console.log('✅ [PROGRESSION CARD] Progression data loaded from store');
     } catch (error: any) {
-      console.error('❌ Failed to load progression:', error);
+      console.error('❌ [PROGRESSION CARD] Failed to load progression:', error);
       setError(error?.message || 'Failed to load progression data');
-    } finally {
-      setLoading(false);
     }
   };
 
