@@ -193,18 +193,28 @@ export default function GroupLobbyScreen() {
 
   /**
    * Fetch full exercise details when exercises are generated
+   * Uses useMemo to create stable exercise IDs string for dependency
    */
+  const exerciseIdsString = React.useMemo(() => {
+    if (!currentLobby?.workout_data?.exercises || currentLobby.workout_data.exercises.length === 0) {
+      return '';
+    }
+    const ids = currentLobby.workout_data.exercises.map((ex: any) => ex.exercise_id || ex.id);
+    return ids.sort((a, b) => a - b).join(','); // Sort for stability
+  }, [currentLobby?.workout_data?.exercises]);
+
   useEffect(() => {
     const fetchExerciseDetails = async () => {
-      if (!currentLobby?.workout_data?.exercises || currentLobby.workout_data.exercises.length === 0) {
+      // If no exercise IDs, clear details
+      if (!exerciseIdsString) {
         setExerciseDetails([]);
         return;
       }
 
       setIsLoadingExercises(true);
       try {
-        const exerciseIds = currentLobby.workout_data.exercises.map((ex: any) => ex.exercise_id || ex.id);
-        console.log('📥 Fetching details for', exerciseIds.length, 'exercises');
+        const exerciseIds = exerciseIdsString.split(',').map(Number);
+        console.log('📥 [FETCH EXERCISES] Fetching details for', exerciseIds.length, 'exercises:', exerciseIds);
 
         const detailsPromises = exerciseIds.map((id: number) => contentService.getExercise(String(id)));
         const details = await Promise.all(detailsPromises);
@@ -213,9 +223,9 @@ export default function GroupLobbyScreen() {
         const validDetails = details.filter((d): d is Exercise => d !== null);
         setExerciseDetails(validDetails);
 
-        console.log('✅ Loaded', validDetails.length, 'exercise details');
+        console.log('✅ [FETCH EXERCISES] Loaded', validDetails.length, 'exercise details');
       } catch (error) {
-        console.error('❌ Error fetching exercise details:', error);
+        console.error('❌ [FETCH EXERCISES] Error fetching exercise details:', error);
         setExerciseDetails([]);
       } finally {
         setIsLoadingExercises(false);
@@ -223,7 +233,7 @@ export default function GroupLobbyScreen() {
     };
 
     fetchExerciseDetails();
-  }, [currentLobby?.workout_data?.exercises]);
+  }, [exerciseIdsString]); // STABLE DEPENDENCY - only changes when IDs actually change
 
   const initializeLobby = async () => {
     if (!sessionId || !currentUser) {
