@@ -67,6 +67,8 @@ export default function WorkoutSessionScreen() {
   const intervalRef = useRef<NodeJS.Timeout | number | null>(null);
   const phaseStartTimeRef = useRef<number>(Date.now());
   const phaseDurationRef = useRef<number>(10); // Default 10 seconds
+  const lastServerTickRef = useRef<number>(Date.now()); // Track last server tick time
+  const lastServerTimeRef = useRef<number>(0); // Track last server time_remaining value
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
 
@@ -208,7 +210,8 @@ export default function WorkoutSessionScreen() {
         console.log('📨 Session event received:', eventName, data);
 
         // SERVER SYNC: Server sends ticks for synchronization
-        // Use CLIENT-SIDE PREDICTION for smooth timer, server corrects drift
+        // For GROUP workouts: Server is SINGLE SOURCE OF TRUTH (no local timer)
+        // For SOLO workouts: Local timer with server correction (if implemented)
         if (eventName === 'SessionTick') {
           setSessionState(prev => {
             // CRITICAL: Ignore SessionTick when paused
@@ -219,42 +222,28 @@ export default function WorkoutSessionScreen() {
             }
 
             const serverTime = data.time_remaining;
-            const clientTime = prev.timeRemaining;
-            const drift = Math.abs(serverTime - clientTime);
 
-            // DRIFT CORRECTION STRATEGY (only during running):
-            // - Small drift (<= 1s): Ignore, client prediction is smooth
-            // - Medium drift (1-3s): Gradually adjust (not implemented yet, just sync)
-            // - Large drift (> 3s): Hard sync to server (phase change or significant lag)
+            // ALWAYS use server time for group workouts - this is the ONLY source of truth
+            // No drift tolerance, no prediction, perfect sync across all devices
+            console.log('🔄 [SERVER TICK] Using server time as single source of truth', {
+              serverTime,
+              phase: data.phase
+            });
 
-            const shouldSync = drift > 1 || data.phase !== prev.phase;
+            // Record server tick time for smooth interpolation
+            lastServerTickRef.current = Date.now();
+            lastServerTimeRef.current = serverTime;
 
-            if (shouldSync) {
-              console.log('🔄 [SYNC] Syncing to server time', {
-                clientTime,
-                serverTime,
-                drift,
-                phase: data.phase
-              });
-
-              // Reset client timer when syncing
-              phaseStartTimeRef.current = Date.now();
-              phaseDurationRef.current = serverTime;
-
-              return {
-                ...prev,
-                timeRemaining: serverTime,
-                phase: data.phase,
-                currentExercise: data.current_exercise,
-                currentSet: data.current_set,
-                currentRound: data.current_round,
-                caloriesBurned: data.calories_burned,
-                status: data.status,
-              };
-            }
-
-            // No sync needed - client prediction is accurate, keep smooth countdown
-            return prev;
+            return {
+              ...prev,
+              timeRemaining: serverTime,
+              phase: data.phase,
+              currentExercise: data.current_exercise,
+              currentSet: data.current_set,
+              currentRound: data.current_round,
+              caloriesBurned: data.calories_burned,
+              status: data.status,
+            };
           });
           return; // Don't process other events
         }
@@ -276,6 +265,10 @@ export default function WorkoutSessionScreen() {
                 drift,
                 action: 'FORCE_SYNC_TO_SERVER'
               });
+
+              // Record server tick time for interpolation
+              lastServerTickRef.current = Date.now();
+              lastServerTimeRef.current = serverTime;
 
               // ALWAYS use server time on pause - no drift tolerance
               // This ensures all users see the exact same paused time
@@ -306,16 +299,16 @@ export default function WorkoutSessionScreen() {
               const localTime = prev.timeRemaining;
               const drift = Math.abs(serverTime - localTime);
 
-              console.log('▶️ [RESUME SYNC] Force syncing to server time and resetting phase timer:', {
+              console.log('▶️ [RESUME SYNC] Force syncing to server time:', {
                 serverTime,
                 localTime,
                 drift,
-                action: 'FORCE_SYNC_AND_RESET_TIMER'
+                action: 'FORCE_SYNC_TO_SERVER'
               });
 
-              // CRITICAL: Reset phase timer so client-side prediction starts fresh
-              phaseStartTimeRef.current = Date.now();
-              phaseDurationRef.current = serverTime;
+              // Record server tick time for interpolation (group workouts don't use phase timer)
+              lastServerTickRef.current = Date.now();
+              lastServerTimeRef.current = serverTime;
 
               // ALWAYS use server time on resume - no drift tolerance
               // This ensures all users resume from the exact same point
@@ -436,6 +429,14 @@ export default function WorkoutSessionScreen() {
       intervalRef.current = null;
     }
 
+    // FOR GROUP WORKOUTS: DO NOT RUN LOCAL TIMER
+    // Server SessionTick events are the ONLY source of truth for perfect sync
+    if (type === 'group_tabata') {
+      console.log('🎯 [GROUP SESSION] Skipping local timer - server ticks are single source of truth');
+      return; // Server will send SessionTick events every second
+    }
+
+    // FOR SOLO WORKOUTS: Use local timer (no sync needed)
     // Record phase start time for drift correction
     phaseStartTimeRef.current = Date.now();
 
@@ -451,8 +452,7 @@ export default function WorkoutSessionScreen() {
     };
     phaseDurationRef.current = getCurrentPhaseDuration();
 
-    // CLIENT-SIDE PREDICTION: Calculate time based on elapsed time since phase start
-    // This ensures smooth countdown even with network jitter
+    // CLIENT-SIDE TIMER FOR SOLO WORKOUTS ONLY
     intervalRef.current = setInterval(() => {
       const now = Date.now();
       const elapsedMs = now - phaseStartTimeRef.current;
