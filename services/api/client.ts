@@ -371,6 +371,14 @@ export class APIClient {
                            (errorMessage.includes('null') && errorMessage.includes('token'))) &&
                            isLogoutRequest;
 
+      // Check if this is a "graceful" error that will be handled by the calling service
+      // These errors are expected and don't indicate a real problem
+      const isGracefulError = errorMessage.includes('You are not in this lobby') ||
+                             errorMessage.includes('not in this lobby') ||
+                             errorMessage.includes('already left') ||
+                             errorMessage.includes('no longer valid') ||
+                             errorMessage.includes('Invitation is no longer valid');
+
       // For non-critical services (ML, tracking, engagement, planning), log as warning instead of error
       const isNonCriticalService = service === 'ml' || service === 'tracking' || service === 'engagement' || service === 'planning';
 
@@ -386,6 +394,14 @@ export class APIClient {
           success: true,
           status: 200
         } as ApiResponse<T>;
+      } else if (isGracefulError) {
+        // Log graceful errors as info instead of errors to avoid confusion
+        // These will be handled appropriately by the calling service
+        console.log(`ℹ️ [${service}] Expected error (will be handled gracefully):`, {
+          message: errorMessage,
+          url: config.url
+        });
+        throw error;
       } else if (isNonCriticalService && isServiceUnavailable) {
         // Only log brief warning for expected non-critical service failures
         console.warn(`⚠️ Non-critical service ${service} unavailable (expected):`, {
