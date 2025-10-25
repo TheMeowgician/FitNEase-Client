@@ -3,6 +3,8 @@ import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { reverbService } from '../services/reverbService';
 import { commsService } from '../services/microservices/commsService';
+import { router } from 'expo-router';
+import GroupWorkoutInvitationModal from '../components/groups/GroupWorkoutInvitationModal';
 
 interface Notification {
   notification_id: number;
@@ -18,12 +20,27 @@ interface Notification {
 
 type NotificationEventListener = (notification: Notification) => void;
 
+interface InvitationData {
+  invitation_id: string;
+  session_id: string;
+  group_id: number;
+  initiator_id: number;
+  initiator_name: string;
+  invited_user_id: number;
+  workout_data: any;
+  expires_at: number;
+}
+
 interface NotificationContextType {
   unreadCount: number;
   refreshUnreadCount: () => Promise<void>;
   markAsRead: (notificationId: number) => Promise<void>;
   setupRealtimeNotifications: () => Promise<void>;
   addNotificationListener: (listener: NotificationEventListener) => () => void;
+  // Invitation modal state
+  showInvitationModal: boolean;
+  invitationData: InvitationData | null;
+  setShowInvitationModal: (show: boolean) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -33,6 +50,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [unreadCount, setUnreadCount] = useState(0);
   const isSetupRef = useRef(false);
   const listenersRef = useRef<Set<NotificationEventListener>>(new Set());
+
+  // Invitation modal state
+  const [showInvitationModal, setShowInvitationModal] = useState(false);
+  const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -123,7 +144,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             });
 
             console.log('✅ [NOTIFICATION CONTEXT] Badge count updated and listeners notified successfully');
-          } else {
+          }
+          // Handle UserWorkoutInvitation events
+          else if (eventName === 'UserWorkoutInvitation' || eventName === '.UserWorkoutInvitation') {
+            console.log('💪 [NOTIFICATION CONTEXT] UserWorkoutInvitation received!');
+            console.log('💪 [NOTIFICATION CONTEXT] Invitation data:', JSON.stringify(data, null, 2));
+
+            // Set invitation data and show modal
+            setInvitationData(data);
+            setShowInvitationModal(true);
+
+            console.log('✅ [NOTIFICATION CONTEXT] Invitation modal state updated - should trigger modal');
+          }
+          else {
             console.log(`⚠️ [NOTIFICATION CONTEXT] Event type "${eventName}" - ignoring`);
           }
         },
@@ -165,6 +198,32 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
+  const handleAcceptInvitation = () => {
+    if (!invitationData) return;
+
+    console.log('✅ [NOTIFICATION CONTEXT] User accepted invitation');
+    setShowInvitationModal(false);
+
+    // Navigate to group workout lobby
+    router.push({
+      pathname: '/workout/group-lobby',
+      params: {
+        sessionId: invitationData.session_id,
+        groupId: invitationData.group_id.toString(),
+        workoutData: JSON.stringify(invitationData.workout_data),
+        initiatorId: invitationData.initiator_id.toString(),
+      },
+    });
+
+    setInvitationData(null);
+  };
+
+  const handleDeclineInvitation = () => {
+    console.log('❌ [NOTIFICATION CONTEXT] User declined invitation');
+    setShowInvitationModal(false);
+    setInvitationData(null);
+  };
+
   return (
     <NotificationContext.Provider
       value={{
@@ -173,9 +232,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         markAsRead,
         setupRealtimeNotifications,
         addNotificationListener,
+        // Invitation modal state
+        showInvitationModal,
+        invitationData,
+        setShowInvitationModal,
       }}
     >
       {children}
+      <GroupWorkoutInvitationModal
+        visible={showInvitationModal}
+        invitationData={invitationData}
+        onAccept={handleAcceptInvitation}
+        onDecline={handleDeclineInvitation}
+        countdown={30}
+      />
     </NotificationContext.Provider>
   );
 }
