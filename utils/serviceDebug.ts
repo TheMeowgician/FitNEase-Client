@@ -20,8 +20,8 @@ export const checkServiceConnectivity = async (serviceName: string): Promise<Ser
       setTimeout(() => reject(new Error('Request timeout')), 5000);
     });
 
-    // Try health endpoint first
-    const fetchPromise = fetch(`${serviceURL}/health`, {
+    // Try health endpoint first (use /api/health for all services)
+    const fetchPromise = fetch(`${serviceURL}/api/health`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -85,7 +85,7 @@ export const getServiceURL = (serviceName: string): string => {
     engagement: API_CONFIG.ENGAGEMENT_SERVICE_URL,
     communications: API_CONFIG.COMMS_SERVICE_URL,
     media: API_CONFIG.MEDIA_SERVICE_URL,
-    operations: API_CONFIG.OPS_SERVICE_URL,
+    operations: API_CONFIG.OPERATIONS_SERVICE_URL,
   };
 
   return urls[serviceName] || API_CONFIG.BASE_URL;
