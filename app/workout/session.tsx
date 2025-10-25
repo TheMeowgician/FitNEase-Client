@@ -214,10 +214,14 @@ export default function WorkoutSessionScreen() {
         // For SOLO workouts: Local timer with server correction (if implemented)
         if (eventName === 'SessionTick') {
           setSessionState(prev => {
-            // CRITICAL: Ignore SessionTick when paused
+            // CRITICAL: Ignore SessionTick when paused or completed
             // Pause/Resume events control the exact sync time
-            if (prev.status === 'paused') {
-              console.log('⏸️ [TICK IGNORED] Ignoring SessionTick while paused - pause event controls time');
+            // Completed status prevents stale ticks from restarting countdown
+            if (prev.status === 'paused' || prev.status === 'completed') {
+              console.log('⏸️ [TICK IGNORED] Ignoring SessionTick - workout not running', {
+                status: prev.status,
+                serverTime: data.time_remaining
+              });
               return prev;
             }
 
@@ -234,6 +238,12 @@ export default function WorkoutSessionScreen() {
             lastServerTickRef.current = Date.now();
             lastServerTimeRef.current = serverTime;
 
+            // Calculate calories client-side for accuracy (server may send 0)
+            // Don't overwrite with server value if it's less than current
+            const serverCalories = data.calories_burned || 0;
+            const clientCalories = prev.caloriesBurned;
+            const caloriesBurned = serverCalories > 0 ? serverCalories : clientCalories;
+
             return {
               ...prev,
               timeRemaining: serverTime,
@@ -241,7 +251,7 @@ export default function WorkoutSessionScreen() {
               currentExercise: data.current_exercise,
               currentSet: data.current_set,
               currentRound: data.current_round,
-              caloriesBurned: data.calories_burned,
+              caloriesBurned: caloriesBurned,
               status: data.status,
             };
           });
@@ -705,6 +715,20 @@ export default function WorkoutSessionScreen() {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
+        // Calculate ACTUAL duration and calories for partial session
+        const actualDurationMinutes = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60);
+        const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+        const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+        const caloriesPerMinute = estimatedTotalCalories / totalWorkoutMinutes;
+        const accurateCaloriesBurned = Math.floor(actualDurationMinutes * caloriesPerMinute);
+
+        console.log('❌ [EXIT] Partial session stats:', {
+          actualDurationMinutes,
+          accurateCaloriesBurned,
+          currentExercise: sessionState.currentExercise,
+          totalExercises: tabataSession?.exercises.length
+        });
+
         // Save partial session data
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
@@ -712,10 +736,10 @@ export default function WorkoutSessionScreen() {
           sessionType: type === 'group_tabata' ? 'group' : 'individual',
           startTime: sessionStartTime,
           endTime: new Date(),
-          duration: Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60), // minutes
-          caloriesBurned: Math.floor(sessionState.caloriesBurned),
+          duration: actualDurationMinutes,
+          caloriesBurned: accurateCaloriesBurned,
           completed: false,
-          notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises completed` : 'Partial workout'}`
+          notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises completed` : 'Partial workout'} (${actualDurationMinutes}min)`
         });
       }
 
@@ -757,6 +781,25 @@ export default function WorkoutSessionScreen() {
         // Use session_id for new Tabata sessions, or workoutId for old format
         const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
 
+        // Calculate ACTUAL duration in minutes
+        const actualDurationMinutes = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60);
+
+        // Calculate ACCURATE calories based on actual time worked
+        // Formula: (actual_time / total_workout_time) * estimated_total_calories
+        const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+        const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+        const caloriesPerMinute = estimatedTotalCalories / totalWorkoutMinutes;
+        const accurateCaloriesBurned = Math.floor(actualDurationMinutes * caloriesPerMinute);
+
+        console.log('💾 [COMPLETE] Workout stats calculated:', {
+          actualDurationMinutes,
+          estimatedTotalCalories,
+          totalWorkoutMinutes,
+          caloriesPerMinute,
+          accurateCaloriesBurned,
+          stateCalories: sessionState.caloriesBurned
+        });
+
         console.log('💾 [COMPLETE] Saving workout session to tracking service...');
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
@@ -764,11 +807,11 @@ export default function WorkoutSessionScreen() {
           sessionType: type === 'group_tabata' ? 'group' : 'individual',
           startTime: sessionStartTime,
           endTime: new Date(),
-          duration: Math.floor((Date.now() - sessionStartTime.getTime()) / 1000 / 60),
-          caloriesBurned: Math.floor(sessionState.caloriesBurned),
+          duration: actualDurationMinutes,
+          caloriesBurned: accurateCaloriesBurned,
           completed: true,
           notes: tabataSession
-            ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level)`
+            ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${actualDurationMinutes}min`
             : 'Tabata workout completed'
         });
 
