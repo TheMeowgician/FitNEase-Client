@@ -82,15 +82,29 @@ export const parseISODate = (dateString: string): Date | null => {
  * Validate age range for registration
  * @param age - Age in years
  * @returns object - Validation result with isValid boolean and error message
+ *
+ * RESEARCH REQUIREMENT: Age must be between 18-54 years
+ * This restriction is implemented to minimize the risk of exercise-related
+ * injuries during high-intensity Tabata training workouts.
  */
 export const validateAge = (age: number): { isValid: boolean; error?: string } => {
-  if (age < 13) {
+  // Minimum age validation (18 years)
+  if (age < 18) {
     return {
       isValid: false,
-      error: 'You must be at least 13 years old to register',
+      error: 'You must be at least 18 years old to register. This app is designed for adults aged 18-54.',
     };
   }
 
+  // Maximum age validation (54 years)
+  if (age > 54) {
+    return {
+      isValid: false,
+      error: 'Registration is limited to users aged 18-54 years for safety during high-intensity training.',
+    };
+  }
+
+  // Upper bound sanity check (prevent invalid birthdates)
   if (age > 120) {
     return {
       isValid: false,
@@ -104,21 +118,24 @@ export const validateAge = (age: number): { isValid: boolean; error?: string } =
 /**
  * Get minimum and maximum dates for date picker
  * @returns object - Min and max dates for registration
+ *
+ * RESEARCH REQUIREMENT: Age must be between 18-54 years
+ * - minDate: 54 years ago (maximum age allowed)
+ * - maxDate: 18 years ago (minimum age allowed)
  */
 export const getDateLimits = () => {
   const today = new Date();
-  const maxDate = new Date(); // Today
+
+  // Minimum date: 54 years ago (maximum age allowed: 54)
   const minDate = new Date();
+  minDate.setFullYear(today.getFullYear() - 54);
 
-  // Minimum date: 120 years ago
-  minDate.setFullYear(today.getFullYear() - 120);
-
-  // Maximum date: 13 years ago (minimum age requirement)
-  const maxAgeDate = new Date();
-  maxAgeDate.setFullYear(today.getFullYear() - 13);
+  // Maximum date: 18 years ago (minimum age allowed: 18)
+  const maxDate = new Date();
+  maxDate.setFullYear(today.getFullYear() - 18);
 
   return {
     minDate,
-    maxDate: maxAgeDate,
+    maxDate,
   };
 };

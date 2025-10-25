@@ -81,17 +81,23 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       today.setHours(0, 0, 0, 0);
       selectedDate.setHours(0, 0, 0, 0);
 
+      // Prevent future dates
       if (selectedDate >= today) {
         newErrors.dateOfBirth = 'Please select a date from the past';
       }
 
-      // Age range validation
-      const age = today.getFullYear() - selectedDate.getFullYear();
-      if (age > 120) {
+      // Age range validation: 18-54 years (RESEARCH REQUIREMENT)
+      // This restriction minimizes the risk of exercise-related injuries
+      // during high-intensity Tabata training workouts.
+      const age = calculateAge(selectedDate);
+
+      if (age < 18) {
+        newErrors.dateOfBirth = 'You must be at least 18 years old to register. This app is designed for adults aged 18-54.';
+      } else if (age > 54) {
+        newErrors.dateOfBirth = 'Registration is limited to users aged 18-54 years for safety during high-intensity training.';
+      } else if (age > 120) {
+        // Sanity check for invalid birthdates
         newErrors.dateOfBirth = 'Please enter a valid birthdate';
-      }
-      if (age < 13) {
-        newErrors.dateOfBirth = 'You must be at least 13 years old to register';
       }
     }
 
