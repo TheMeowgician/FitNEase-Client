@@ -69,6 +69,8 @@ export default function WorkoutSessionScreen() {
   const phaseDurationRef = useRef<number>(10); // Default 10 seconds
   const lastServerTickRef = useRef<number>(Date.now()); // Track last server tick time
   const lastServerTimeRef = useRef<number>(0); // Track last server time_remaining value
+  const serverTickTimeoutRef = useRef<NodeJS.Timeout | number | null>(null); // Debounce server ticks
+  const lastDisplayedTimeRef = useRef<number>(-1); // Track last displayed time to avoid redundant updates
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
 
@@ -213,48 +215,60 @@ export default function WorkoutSessionScreen() {
         // For GROUP workouts: Server is SINGLE SOURCE OF TRUTH (no local timer)
         // For SOLO workouts: Local timer with server correction (if implemented)
         if (eventName === 'SessionTick') {
-          setSessionState(prev => {
-            // CRITICAL: Ignore SessionTick when paused or completed
-            // Pause/Resume events control the exact sync time
-            // Completed status prevents stale ticks from restarting countdown
-            if (prev.status === 'paused' || prev.status === 'completed') {
-              console.log('⏸️ [TICK IGNORED] Ignoring SessionTick - workout not running', {
-                status: prev.status,
-                serverTime: data.time_remaining
+          // DEBOUNCE: When multiple ticks arrive in a burst, only process the LATEST one
+          // Clear any pending tick updates
+          if (serverTickTimeoutRef.current) {
+            clearTimeout(serverTickTimeoutRef.current);
+          }
+
+          // Schedule tick processing after a small delay (50ms)
+          // If another tick arrives within 50ms, this will be cancelled and the new one processed instead
+          serverTickTimeoutRef.current = setTimeout(() => {
+            setSessionState(prev => {
+              // CRITICAL: Ignore SessionTick when paused or completed
+              // Pause/Resume events control the exact sync time
+              // Completed status prevents stale ticks from restarting countdown
+              if (prev.status === 'paused' || prev.status === 'completed') {
+                console.log('⏸️ [TICK IGNORED] Ignoring SessionTick - workout not running', {
+                  status: prev.status,
+                  serverTime: data.time_remaining
+                });
+                return prev;
+              }
+
+              const serverTime = data.time_remaining;
+
+              // ALWAYS use server time for group workouts - this is the ONLY source of truth
+              // No drift tolerance, no prediction, perfect sync across all devices
+              console.log('🔄 [SERVER TICK] Using server time as single source of truth', {
+                serverTime,
+                phase: data.phase
               });
-              return prev;
-            }
 
-            const serverTime = data.time_remaining;
+              // Record server tick time for smooth interpolation
+              lastServerTickRef.current = Date.now();
+              lastServerTimeRef.current = serverTime;
+              lastDisplayedTimeRef.current = serverTime; // Reset displayed time
 
-            // ALWAYS use server time for group workouts - this is the ONLY source of truth
-            // No drift tolerance, no prediction, perfect sync across all devices
-            console.log('🔄 [SERVER TICK] Using server time as single source of truth', {
-              serverTime,
-              phase: data.phase
+              // Calculate calories client-side for accuracy (server may send 0)
+              // Don't overwrite with server value if it's less than current
+              const serverCalories = data.calories_burned || 0;
+              const clientCalories = prev.caloriesBurned;
+              const caloriesBurned = serverCalories > 0 ? serverCalories : clientCalories;
+
+              return {
+                ...prev,
+                timeRemaining: serverTime,
+                phase: data.phase,
+                currentExercise: data.current_exercise,
+                currentSet: data.current_set,
+                currentRound: data.current_round,
+                caloriesBurned: caloriesBurned,
+                status: data.status,
+              };
             });
+          }, 50); // 50ms debounce window
 
-            // Record server tick time for smooth interpolation
-            lastServerTickRef.current = Date.now();
-            lastServerTimeRef.current = serverTime;
-
-            // Calculate calories client-side for accuracy (server may send 0)
-            // Don't overwrite with server value if it's less than current
-            const serverCalories = data.calories_burned || 0;
-            const clientCalories = prev.caloriesBurned;
-            const caloriesBurned = serverCalories > 0 ? serverCalories : clientCalories;
-
-            return {
-              ...prev,
-              timeRemaining: serverTime,
-              phase: data.phase,
-              currentExercise: data.current_exercise,
-              currentSet: data.current_set,
-              currentRound: data.current_round,
-              caloriesBurned: caloriesBurned,
-              status: data.status,
-            };
-          });
           return; // Don't process other events
         }
 
@@ -469,16 +483,21 @@ export default function WorkoutSessionScreen() {
           const elapsedSeconds = Math.floor(elapsedMs / 1000);
           newTimeRemaining = Math.max(0, lastServerTimeRef.current - elapsedSeconds);
 
-          // Log every 10th update to avoid spam (10 * 100ms = 1 second)
-          if (Math.random() < 0.1) {
-            console.log('⏱️ [INTERPOLATION]', {
-              lastServerTime: lastServerTimeRef.current,
-              elapsedMs,
-              elapsedSeconds,
-              interpolatedTime: newTimeRemaining,
-              prevTime: prev.timeRemaining
-            });
+          // OPTIMIZATION: Only update state if the displayed second has actually changed
+          // This prevents redundant re-renders and ensures smooth countdown
+          if (newTimeRemaining === lastDisplayedTimeRef.current) {
+            return prev; // No change, don't update state
           }
+
+          // Log when we actually update the display
+          console.log('⏱️ [INTERPOLATION UPDATE]', {
+            from: lastDisplayedTimeRef.current,
+            to: newTimeRemaining,
+            elapsedMs,
+            serverTime: lastServerTimeRef.current
+          });
+
+          lastDisplayedTimeRef.current = newTimeRemaining;
 
           // Don't handle phase transitions locally - server controls everything
           // Just display the interpolated time
@@ -733,7 +752,9 @@ export default function WorkoutSessionScreen() {
         const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
         const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
         const totalWorkoutSeconds = totalWorkoutMinutes * 60;
-        const accurateCaloriesBurned = Math.floor((actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories);
+        const calculatedCalories = (actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories;
+        // CRITICAL: Ensure minimum 1 calorie for any workout (use Math.ceil to round up)
+        const accurateCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
 
         console.log('❌ [EXIT] Partial session stats:', {
           actualDurationSeconds,
@@ -806,7 +827,9 @@ export default function WorkoutSessionScreen() {
         const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
         const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
         const totalWorkoutSeconds = totalWorkoutMinutes * 60;
-        const accurateCaloriesBurned = Math.floor((actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories);
+        const calculatedCalories = (actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories;
+        // CRITICAL: Ensure minimum 1 calorie for any completed workout (use Math.ceil to round up)
+        const accurateCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
 
         console.log('💾 [COMPLETE] Workout stats calculated:', {
           actualDurationSeconds,
