@@ -68,7 +68,7 @@ export default function GroupLobbyScreen() {
   const connectionState = useConnectionStore(selectConnectionState);
 
   // Global online users from Reverb context
-  const { onlineUsers } = useReverb();
+  const { onlineUsers, refreshGroupSubscriptions } = useReverb();
   const setLobbyState = useLobbyStore((state) => state.setLobbyState);
   const updateMemberStatus = useLobbyStore((state) => state.updateMemberStatus);
   const addMember = useLobbyStore((state) => state.addMember);
@@ -200,7 +200,7 @@ export default function GroupLobbyScreen() {
       return '';
     }
     const ids = currentLobby.workout_data.exercises.map((ex: any) => ex.exercise_id || ex.id);
-    return ids.sort((a, b) => a - b).join(','); // Sort for stability
+    return ids.sort((a: number, b: number) => a - b).join(','); // Sort for stability
   }, [currentLobby?.workout_data?.exercises]);
 
   useEffect(() => {
@@ -1103,7 +1103,13 @@ export default function GroupLobbyScreen() {
       clearLobby();
       console.log('🧹 [CLEANUP] Cleared lobby store');
 
-      // 7. Reset all refs
+      // 7. Refresh group subscriptions to receive new invitations
+      // CRITICAL: After leaving lobby, user should be able to receive new invitations
+      console.log('🔄 [CLEANUP] Refreshing group subscriptions...');
+      await refreshGroupSubscriptions();
+      console.log('✅ [CLEANUP] Group subscriptions refreshed');
+
+      // 8. Reset all refs
       hasJoinedRef.current = false;
       hasInitializedRef.current = false;
       console.log('🧹 [CLEANUP] Reset refs');
