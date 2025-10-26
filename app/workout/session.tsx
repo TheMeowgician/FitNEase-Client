@@ -71,6 +71,7 @@ export default function WorkoutSessionScreen() {
   const intervalRef = useRef<NodeJS.Timeout | number | null>(null);
   const phaseStartTimeRef = useRef<number>(Date.now());
   const phaseDurationRef = useRef<number>(10); // Default 10 seconds
+  const currentPhaseRef = useRef<SessionPhase>('prepare'); // Track current phase for solo workouts
   const lastServerTickRef = useRef<number>(Date.now()); // Track last server tick time
   const lastServerTimeRef = useRef<number>(0); // Track last server time_remaining value
   const serverTickTimeoutRef = useRef<NodeJS.Timeout | number | null>(null); // Debounce server ticks
@@ -402,20 +403,58 @@ export default function WorkoutSessionScreen() {
     });
   };
 
-  const playSound = async (type: 'start' | 'rest' | 'complete') => {
+  /**
+   * Play workout sound alert
+   * RESEARCH REQUIREMENT: Sound alerts for workout transitions (Chapter 1, line 117)
+   * @param type - Type of sound alert to play
+   */
+  const playSound = async (type: 'start' | 'rest' | 'complete' | 'next' | 'round') => {
     try {
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        // You would add actual sound files here
-        type === 'start' ? require('../../assets/sounds/start.mp3') :
-        type === 'rest' ? require('../../assets/sounds/rest.mp3') :
-        require('../../assets/sounds/complete.mp3')
-      );
+      // Load appropriate sound file based on type
+      let soundFile;
+      switch (type) {
+        case 'start':
+          soundFile = require('../../assets/sounds/start.mp3');
+          break;
+        case 'rest':
+          soundFile = require('../../assets/sounds/rest.mp3');
+          break;
+        case 'complete':
+          soundFile = require('../../assets/sounds/complete.mp3');
+          break;
+        case 'next':
+          soundFile = require('../../assets/sounds/next.mp3');
+          break;
+        case 'round':
+          soundFile = require('../../assets/sounds/round.mp3');
+          break;
+        default:
+          soundFile = require('../../assets/sounds/start.mp3');
+      }
+
+      const { sound: newSound } = await Audio.Sound.createAsync(soundFile);
+
+      // Set volume (future: get from settings)
+      await newSound.setVolumeAsync(1.0);
+
       setSound(newSound);
       await newSound.playAsync();
+
+      console.log(`🔊 [SOUND] Played ${type} alert`);
     } catch (error) {
-      console.log('Sound play error:', error);
-      // Fallback to vibration
-      Vibration.vibrate(type === 'complete' ? [0, 500, 200, 500] : 200);
+      console.log(`❌ [SOUND] Error playing ${type} sound:`, error);
+
+      // Fallback to vibration with different patterns for each type
+      const vibrationPatterns: Record<typeof type, number | number[]> = {
+        start: [0, 100],                    // Single short beep
+        rest: [0, 200],                     // Single medium beep
+        complete: [0, 500, 200, 500],       // Double long beeps
+        next: [0, 100, 100, 100],           // Two quick beeps
+        round: [0, 300, 100, 300],          // Two medium beeps
+      };
+
+      Vibration.vibrate(vibrationPatterns[type] || 200);
+      console.log(`📳 [VIBRATION] Fallback vibration for ${type}`);
     }
   };
 
@@ -479,6 +518,9 @@ export default function WorkoutSessionScreen() {
     };
     phaseDurationRef.current = getCurrentPhaseDuration();
 
+    // Initialize current phase ref for solo workouts
+    currentPhaseRef.current = sessionState.phase;
+
     // SMOOTH TIMER WITH SERVER SYNC FOR GROUP WORKOUTS
     // CLIENT-ONLY TIMER FOR SOLO WORKOUTS
     intervalRef.current = setInterval(() => {
@@ -514,13 +556,43 @@ export default function WorkoutSessionScreen() {
           // Just display the interpolated time
         } else {
           // SOLO WORKOUTS: Client is authoritative, use phase timer
-          const elapsedMs = now - phaseStartTimeRef.current;
-          const elapsedSeconds = Math.floor(elapsedMs / 1000);
-          newTimeRemaining = Math.max(0, phaseDurationRef.current - elapsedSeconds);
 
-          if (newTimeRemaining <= 0) {
-            // Phase complete - handle transition (solo workouts only)
-            return handlePhaseComplete(prev);
+          // CRITICAL FIX: Detect if phase changed (from handlePhaseComplete)
+          // If phase changed, reset timer refs to prevent rapid transitions
+          if (prev.phase !== currentPhaseRef.current) {
+            console.log('🔄 [PHASE CHANGE DETECTED]', {
+              from: currentPhaseRef.current,
+              to: prev.phase,
+              resetingTimer: true
+            });
+
+            // Update current phase ref
+            currentPhaseRef.current = prev.phase;
+
+            // Reset phase start time to NOW
+            phaseStartTimeRef.current = now;
+
+            // Update phase duration for new phase
+            const newPhaseDuration =
+              prev.phase === 'prepare' ? 10 :
+              prev.phase === 'work' ? 20 :
+              prev.phase === 'rest' ? 10 :
+              prev.phase === 'roundRest' ? 60 :
+              10;
+            phaseDurationRef.current = newPhaseDuration;
+
+            // Use the timeRemaining from the new phase state
+            newTimeRemaining = prev.timeRemaining;
+          } else {
+            // Normal timer countdown - phase hasn't changed
+            const elapsedMs = now - phaseStartTimeRef.current;
+            const elapsedSeconds = Math.floor(elapsedMs / 1000);
+            newTimeRemaining = Math.max(0, phaseDurationRef.current - elapsedSeconds);
+
+            if (newTimeRemaining <= 0) {
+              // Phase complete - handle transition (solo workouts only)
+              return handlePhaseComplete(prev);
+            }
           }
         }
 
@@ -551,13 +623,12 @@ export default function WorkoutSessionScreen() {
         };
 
       case 'work':
-        playSound('rest');
         if (currentSet >= 7) { // 8 sets completed (0-7)
           // Determine total exercises (new Tabata session or old workout format)
           const totalExercises = tabataSession ? tabataSession.exercises.length : (workout?.rounds.length || 1);
 
           if (currentExercise >= totalExercises - 1) {
-            // Workout complete
+            // Workout complete - play completion sound
             playSound('complete');
             return {
               ...currentState,
@@ -566,6 +637,8 @@ export default function WorkoutSessionScreen() {
               timeRemaining: 0,
             };
           } else {
+            // Round complete (8 sets done) - play round complete sound
+            playSound('round');
             // Move to next exercise with round rest (60 seconds between exercises)
             return {
               ...currentState,
@@ -576,7 +649,8 @@ export default function WorkoutSessionScreen() {
             };
           }
         } else {
-          // Regular rest between sets
+          // Regular rest between sets - play rest sound
+          playSound('rest');
           return {
             ...currentState,
             phase: 'rest',
@@ -594,7 +668,8 @@ export default function WorkoutSessionScreen() {
         };
 
       case 'roundRest':
-        playSound('start');
+        // Play "next exercise" sound to indicate new exercise starting
+        playSound('next');
         return {
           ...currentState,
           phase: 'work',
