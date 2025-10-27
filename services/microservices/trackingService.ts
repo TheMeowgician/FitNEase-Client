@@ -393,7 +393,7 @@ export class TrackingService {
   }): Promise<WorkoutSession> {
     try {
       // Backend expects specific field names
-      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/tracking/workout-session', {
+      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/workout-session', {
         user_id: sessionData.userId,
         workout_id: 1, // Temporary: We don't have real workout IDs yet for Tabata sessions
         session_type: sessionData.sessionType || 'individual',
@@ -504,7 +504,7 @@ export class TrackingService {
     limit: number;
   }> {
     try {
-      // Backend expects /api/tracking/workout-sessions/{userId}
+      // Backend expects /api/workout-sessions/{userId}
       if (!filters?.userId) {
         console.warn('getSessions requires userId parameter');
         return {
@@ -522,7 +522,7 @@ export class TrackingService {
       }
 
       const queryString = queryParams.toString();
-      const url = `/api/tracking/workout-sessions/${filters.userId}${queryString ? `?${queryString}` : ''}`;
+      const url = `/api/workout-sessions/${filters.userId}${queryString ? `?${queryString}` : ''}`;
 
       const response = await apiClient.get<{
         success: boolean;
@@ -931,7 +931,7 @@ export class TrackingService {
       averageRating: number;
     };
   }> {
-    // TODO: Backend endpoint /api/tracking/dashboard not implemented yet
+    // TODO: Backend endpoint /api/dashboard not implemented yet
     // Return empty data immediately without making API call to avoid errors
     return {
       recentWorkouts: [],

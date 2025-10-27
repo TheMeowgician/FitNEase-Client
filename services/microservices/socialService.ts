@@ -342,7 +342,7 @@ export class SocialService {
   // Group Management
   public async createGroup(request: CreateGroupRequest | any): Promise<Group> {
     try {
-      const response = await apiClient.post<Group>('social', '/api/social/groups', request);
+      const response = await apiClient.post<Group>('social', '/api/groups', request);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to create group');
@@ -360,7 +360,7 @@ export class SocialService {
   }): Promise<{ groups: Group[]; total: number; page: number; limit: number }> {
     try {
       const params = new URLSearchParams(filters as any).toString();
-      const response = await apiClient.get('social', `/api/social/groups?${params}`);
+      const response = await apiClient.get('social', `/api/groups?${params}`);
 
       // Laravel returns data in response.data.data format
       const rawData = response.data.data || response.data;
@@ -406,7 +406,7 @@ export class SocialService {
 
   public async getGroup(groupId: string): Promise<Group> {
     try {
-      const response = await apiClient.get('social', `/api/social/groups/${groupId}`);
+      const response = await apiClient.get('social', `/api/groups/${groupId}`);
 
       // Transform Laravel response to frontend format
       const rawGroup = response.data.data || response.data;
@@ -453,7 +453,7 @@ export class SocialService {
 
   public async updateGroup(groupId: string, updates: UpdateGroupRequest): Promise<Group> {
     try {
-      const response = await apiClient.put<Group>('social', `/api/social/groups/${groupId}`, updates);
+      const response = await apiClient.put<Group>('social', `/api/groups/${groupId}`, updates);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to update group');
@@ -462,7 +462,7 @@ export class SocialService {
 
   public async deleteGroup(groupId: string): Promise<{ message: string }> {
     try {
-      const response = await apiClient.delete<{ message: string }>('social', `/api/social/groups/${groupId}`);
+      const response = await apiClient.delete<{ message: string }>('social', `/api/groups/${groupId}`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to delete group');
@@ -472,7 +472,7 @@ export class SocialService {
   public async joinGroup(request: JoinGroupRequest): Promise<{ message: string }> {
     try {
       // Join public group by ID
-      const response = await apiClient.post<{ message: string }>('social', `/api/social/groups/${request.groupId}/join`, {
+      const response = await apiClient.post<{ message: string }>('social', `/api/groups/${request.groupId}/join`, {
         message: request.message
       });
       return response.data;
@@ -484,7 +484,7 @@ export class SocialService {
   public async joinGroupWithCode(groupCode: string, message?: string): Promise<{ message: string }> {
     try {
       // Join group using 8-character code
-      const response = await apiClient.post<{ message: string }>('social', '/api/social/groups/join-with-code', {
+      const response = await apiClient.post<{ message: string }>('social', '/api/groups/join-with-code', {
         group_code: groupCode,
         message: message
       });
@@ -496,7 +496,7 @@ export class SocialService {
 
   public async leaveGroup(groupId: string): Promise<{ message: string }> {
     try {
-      const response = await apiClient.delete<{ message: string }>('social', `/api/social/groups/${groupId}/leave`);
+      const response = await apiClient.delete<{ message: string }>('social', `/api/groups/${groupId}/leave`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to leave group');
@@ -510,7 +510,7 @@ export class SocialService {
     limit: number;
   }> {
     try {
-      const response = await apiClient.get('social', `/api/social/groups/${groupId}/members?page=${page}&limit=${limit}`);
+      const response = await apiClient.get('social', `/api/groups/${groupId}/members?page=${page}&limit=${limit}`);
 
       // Transform Laravel response
       const rawData = response.data.data || response.data;
@@ -554,7 +554,7 @@ export class SocialService {
 
   public async updateMemberRole(groupId: string, userId: string, role: string): Promise<{ message: string }> {
     try {
-      const response = await apiClient.put<{ message: string }>('social', `/api/social/groups/${groupId}/members/${userId}`, { role });
+      const response = await apiClient.put<{ message: string }>('social', `/api/groups/${groupId}/members/${userId}`, { role });
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to update member role');
@@ -563,7 +563,7 @@ export class SocialService {
 
   public async removeGroupMember(groupId: string, userId: string): Promise<{ message: string }> {
     try {
-      const response = await apiClient.delete<{ message: string }>('social', `/api/social/groups/${groupId}/members/${userId}`);
+      const response = await apiClient.delete<{ message: string }>('social', `/api/groups/${groupId}/members/${userId}`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to remove group member');
@@ -578,7 +578,7 @@ export class SocialService {
         ? { user_id: parseInt(userIdOrUsername) }
         : { username: userIdOrUsername };
 
-      const response = await apiClient.post<{ message: string }>('social', `/api/social/groups/${groupId}/invite`, payload);
+      const response = await apiClient.post<{ message: string }>('social', `/api/groups/${groupId}/invite`, payload);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to invite user to group');
@@ -666,7 +666,7 @@ export class SocialService {
           sharedInterests: string[];
           location?: string;
         }>;
-      }>('social', `/api/social/users/search?${params}`);
+      }>('social', `/api/users/search?${params}`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to search users');
@@ -958,7 +958,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/groups/${groupId}/initiate-workout`,
+        `/api/groups/${groupId}/initiate-workout`,
         { workout_data: workoutData }
       );
 
@@ -1004,7 +1004,7 @@ export class SocialService {
     try {
       const response = await apiClient.post(
         'social',
-        `/api/social/lobby/${sessionId}/start`,
+        `/api/lobby/${sessionId}/start`,
         {}
       );
       return response.data.data;
@@ -1025,7 +1025,7 @@ export class SocialService {
 
       await apiClient.post(
         'social',
-        `/api/social/lobby/${sessionId}/broadcast-exercises`,
+        `/api/lobby/${sessionId}/broadcast-exercises`,
         {
           workout_data: workoutData
         }
@@ -1051,7 +1051,7 @@ export class SocialService {
     try {
       const response = await apiClient.post(
         'social',
-        `/api/social/session/${sessionId}/pause`,
+        `/api/session/${sessionId}/pause`,
         {}
       );
       return response.data.data;
@@ -1067,7 +1067,7 @@ export class SocialService {
     try {
       const response = await apiClient.post(
         'social',
-        `/api/social/session/${sessionId}/resume`,
+        `/api/session/${sessionId}/resume`,
         {}
       );
       return response.data.data;
@@ -1083,7 +1083,7 @@ export class SocialService {
     try {
       const response = await apiClient.post(
         'social',
-        `/api/social/session/${sessionId}/stop`,
+        `/api/session/${sessionId}/stop`,
         {}
       );
       return response.data.data;
@@ -1100,7 +1100,7 @@ export class SocialService {
       console.log('📤 [SOCIAL] Finishing workout for all members:', { sessionId });
       const response = await apiClient.post(
         'social',
-        `/api/social/session/${sessionId}/finish`,
+        `/api/session/${sessionId}/finish`,
         {}
       );
       console.log('✅ [SOCIAL] Workout finished successfully');
@@ -1130,7 +1130,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Creating lobby:', { groupId, workoutData });
       const response = await apiClient.post(
         'social',
-        '/api/social/v2/lobby/create',
+        '/api/v2/lobby/create',
         {
           group_id: groupId,
           workout_data: workoutData
@@ -1157,7 +1157,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Fetching lobby state:', { sessionId });
       const response = await apiClient.get(
         'social',
-        `/api/social/v2/lobby/${sessionId}`
+        `/api/v2/lobby/${sessionId}`
       );
       console.log('✅ [SOCIAL V2] Lobby state fetched successfully');
       return response.data;
@@ -1180,7 +1180,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Joining lobby:', { sessionId });
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/join`,
+        `/api/v2/lobby/${sessionId}/join`,
         {}
       );
       console.log('✅ [SOCIAL V2] Joined lobby successfully');
@@ -1205,7 +1205,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Updating lobby status:', { sessionId, status });
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/status`,
+        `/api/v2/lobby/${sessionId}/status`,
         { status }
       );
       console.log('✅ [SOCIAL V2] Lobby status updated successfully');
@@ -1229,7 +1229,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Leaving lobby:', { sessionId });
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/leave`,
+        `/api/v2/lobby/${sessionId}/leave`,
         {}
       );
       console.log('✅ [SOCIAL V2] Left lobby successfully');
@@ -1273,7 +1273,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Updating workout data:', { sessionId });
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/workout-data`,
+        `/api/v2/lobby/${sessionId}/workout-data`,
         { workout_data: workoutData }
       );
       console.log('✅ [SOCIAL V2] Workout data updated successfully');
@@ -1294,7 +1294,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Deleting lobby:', { sessionId });
       const response = await apiClient.delete(
         'social',
-        `/api/social/v2/lobby/${sessionId}`
+        `/api/v2/lobby/${sessionId}`
       );
       console.log('✅ [SOCIAL V2] Lobby deleted successfully');
       return response.data;
@@ -1318,7 +1318,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Passing initiator role:', { sessionId, newInitiatorId });
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/pass-initiator`,
+        `/api/v2/lobby/${sessionId}/pass-initiator`,
         { new_initiator_id: newInitiatorId }
       );
       console.log('✅ [SOCIAL V2] Initiator role passed successfully');
@@ -1344,7 +1344,7 @@ export class SocialService {
       console.log('📤 [SOCIAL V2] Starting workout:', { sessionId });
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/start`,
+        `/api/v2/lobby/${sessionId}/start`,
         {}
       );
       console.log('✅ [SOCIAL V2] Workout started successfully');
@@ -1375,7 +1375,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/message`,
+        `/api/v2/lobby/${sessionId}/message`,
         {
           message,
           is_system_message: isSystemMessage
@@ -1417,7 +1417,7 @@ export class SocialService {
       if (options?.before) params.append('before', options.before);
 
       const queryString = params.toString();
-      const url = `/api/social/v2/lobby/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+      const url = `/api/v2/lobby/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
 
       console.log('📤 [SOCIAL V2] Fetching chat messages:', { sessionId, options });
 
@@ -1449,7 +1449,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/invite`,
+        `/api/v2/lobby/${sessionId}/invite`,
         {
           invited_user_id: invitedUserId,
           group_id: groupId,
@@ -1483,7 +1483,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/kick`,
+        `/api/v2/lobby/${sessionId}/kick`,
         {
           kicked_user_id: kickedUserId
         }
@@ -1516,7 +1516,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/lobby/${sessionId}/transfer-initiator`,
+        `/api/v2/lobby/${sessionId}/transfer-initiator`,
         {
           new_initiator_id: newInitiatorId
         }
@@ -1543,7 +1543,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        '/api/social/v2/lobby/force-leave-all',
+        '/api/v2/lobby/force-leave-all',
         {}
       );
 
@@ -1574,7 +1574,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/invitations/${invitationId}/accept`,
+        `/api/v2/invitations/${invitationId}/accept`,
         {}
       );
 
@@ -1597,7 +1597,7 @@ export class SocialService {
 
       const response = await apiClient.post(
         'social',
-        `/api/social/v2/invitations/${invitationId}/decline`,
+        `/api/v2/invitations/${invitationId}/decline`,
         {}
       );
 
@@ -1631,7 +1631,7 @@ export class SocialService {
 
       const response = await apiClient.get(
         'social',
-        '/api/social/v2/invitations/pending'
+        '/api/v2/invitations/pending'
       );
 
       console.log('✅ [SOCIAL V2] Pending invitations fetched successfully');
