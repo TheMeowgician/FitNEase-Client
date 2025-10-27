@@ -9,7 +9,7 @@
 // - 'testing': ngrok tunnels (for APK testing with groupmates)
 // - 'production': AWS EC2 server (live deployment)
 type Environment = 'development' | 'testing' | 'production';
-const ENVIRONMENT = 'production' as Environment;  // ✅ CHANGE THIS TO 'production'
+const ENVIRONMENT = 'development' as Environment;  // ⚠️ DEVELOPMENT MODE - Testing Weekly Plans Feature #4
 
 // 🔧 STEP 2: SET ACTIVE MEMBER (for development mode)
 const ACTIVE_MEMBER = 'Gab'; // Options: 'Gab', 'Wimari', 'Nhiko', 'Chrystian'

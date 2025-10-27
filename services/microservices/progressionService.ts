@@ -61,7 +61,7 @@ class ProgressionService {
     try {
       const response = await apiClient.get<{ success: boolean; data: ProgressionEligibility }>(
         'tracking',
-        `/api/progression/check/${userId}`
+        `/api/tracking/progression/check/${userId}`
       );
       return response.data.data;
     } catch (error: any) {
@@ -77,7 +77,7 @@ class ProgressionService {
     try {
       const response = await apiClient.get<{ success: boolean; data: ProgressionProgress }>(
         'tracking',
-        `/api/progression/progress/${userId}`
+        `/api/tracking/progression/progress/${userId}`
       );
       return response.data.data;
     } catch (error: any) {
@@ -95,7 +95,7 @@ class ProgressionService {
         success: boolean;
         message: string;
         new_level: string;
-      }>('tracking', '/api/progression/promote', {
+      }>('tracking', '/api/tracking/progression/promote', {
         user_id: userId,
       });
       return {
