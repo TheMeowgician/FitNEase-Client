@@ -298,7 +298,7 @@ export class TrackingService {
   // Workout Management
   public async createWorkout(request: CreateWorkoutRequest): Promise<Workout> {
     try {
-      const response = await apiClient.post<Workout>('tracking', '/tracking/workouts', request);
+      const response = await apiClient.post<Workout>('tracking', '/workouts', request);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to create workout');
@@ -327,7 +327,7 @@ export class TrackingService {
         total: number;
         page: number;
         limit: number;
-      }>('tracking', `/tracking/workouts?${params}`);
+      }>('tracking', `/workouts?${params}`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to get workouts');
@@ -336,7 +336,7 @@ export class TrackingService {
 
   public async getWorkout(workoutId: string): Promise<Workout> {
     try {
-      const response = await apiClient.get<Workout>('tracking', `/tracking/workouts/${workoutId}`);
+      const response = await apiClient.get<Workout>('tracking', `/workouts/${workoutId}`);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to get workout');
@@ -393,7 +393,7 @@ export class TrackingService {
   }): Promise<WorkoutSession> {
     try {
       // Backend expects specific field names
-      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/tracking/workout-session', {
+      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/workout-session', {
         user_id: sessionData.userId,
         workout_id: 1, // Temporary: We don't have real workout IDs yet for Tabata sessions
         session_type: sessionData.sessionType || 'individual',
@@ -429,7 +429,7 @@ export class TrackingService {
 
   public async startWorkout(request: StartWorkoutRequest): Promise<WorkoutSession> {
     try {
-      const response = await apiClient.post<WorkoutSession>('tracking', '/tracking/sessions/start', request);
+      const response = await apiClient.post<WorkoutSession>('tracking', '/sessions/start', request);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to start workout');
@@ -522,7 +522,7 @@ export class TrackingService {
       }
 
       const queryString = queryParams.toString();
-      const url = `/api/tracking/workout-sessions/${filters.userId}${queryString ? `?${queryString}` : ''}`;
+      const url = `/api/workout-sessions/${filters.userId}${queryString ? `?${queryString}` : ''}`;
 
       const response = await apiClient.get<{
         success: boolean;
@@ -630,7 +630,7 @@ export class TrackingService {
   // Progress Tracking
   public async logProgress(request: LogProgressRequest): Promise<ProgressEntry> {
     try {
-      const response = await apiClient.post<ProgressEntry>('tracking', '/tracking/progress', request);
+      const response = await apiClient.post<ProgressEntry>('tracking', '/progress', request);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to log progress');
@@ -684,7 +684,7 @@ export class TrackingService {
   // BMI Tracking
   public async logBMI(height: number, weight: number, notes?: string): Promise<BMIEntry> {
     try {
-      const response = await apiClient.post<BMIEntry>('tracking', '/tracking/bmi', { height, weight, notes });
+      const response = await apiClient.post<BMIEntry>('tracking', '/bmi', { height, weight, notes });
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to log BMI');
@@ -712,7 +712,7 @@ export class TrackingService {
 
   public async getLatestBMI(): Promise<BMIEntry | null> {
     try {
-      const response = await apiClient.get<BMIEntry>('tracking', '/tracking/bmi/latest');
+      const response = await apiClient.get<BMIEntry>('tracking', '/bmi/latest');
       return response.data;
     } catch (error) {
       if ((error as any).message?.includes('404')) {
@@ -743,7 +743,7 @@ export class TrackingService {
   // Goals Management
   public async createGoal(request: CreateGoalRequest): Promise<Goal> {
     try {
-      const response = await apiClient.post<Goal>('tracking', '/tracking/goals', request);
+      const response = await apiClient.post<Goal>('tracking', '/goals', request);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to create goal');
@@ -851,7 +851,7 @@ export class TrackingService {
   // Streaks
   public async getWorkoutStreak(): Promise<WorkoutStreak> {
     try {
-      const response = await apiClient.get<WorkoutStreak>('tracking', '/tracking/streak');
+      const response = await apiClient.get<WorkoutStreak>('tracking', '/streak');
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to get workout streak');
@@ -860,7 +860,7 @@ export class TrackingService {
 
   public async updateStreak(): Promise<WorkoutStreak> {
     try {
-      const response = await apiClient.post<WorkoutStreak>('tracking', '/tracking/streak/update');
+      const response = await apiClient.post<WorkoutStreak>('tracking', '/streak/update');
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to update streak');
@@ -899,7 +899,7 @@ export class TrackingService {
     try {
       const url = exerciseId
         ? `/tracking/personal-bests?exerciseId=${exerciseId}`
-        : '/tracking/personal-bests';
+        : '/personal-bests';
       const response = await apiClient.get<{
         bests: Array<{
           exercise: string;
@@ -952,7 +952,7 @@ export class TrackingService {
   // Export Data
   public async exportData(format: 'json' | 'csv' = 'json', dataTypes: string[] = []): Promise<{ downloadUrl: string }> {
     try {
-      const response = await apiClient.post<{ downloadUrl: string }>('tracking', '/tracking/export', {
+      const response = await apiClient.post<{ downloadUrl: string }>('tracking', '/export', {
         format,
         dataTypes
       });
