@@ -9,6 +9,7 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { WorkoutDayStatus } from '../../components/dashboard/WorkoutDayStatus';
 import ProgressionCard from '../../components/ProgressionCard';
+import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMLService } from '../../hooks/api/useMLService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
@@ -541,13 +542,12 @@ export default function HomeScreen() {
                 {/* Preview of first 3 exercises */}
                 <View style={styles.exercisePreviewList}>
                   {recommendations?.slice(0, 3).map((ex, idx) => (
-                    <View key={ex.exercise_id} style={styles.exercisePreviewItem}>
-                      <View style={styles.exercisePreviewNumber}>
-                        <Text style={styles.exercisePreviewNumberText}>{idx + 1}</Text>
-                      </View>
-                      <Text style={styles.exercisePreviewName} numberOfLines={1}>{ex.exercise_name}</Text>
-                      <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-                    </View>
+                    <ExerciseCard
+                      key={ex.exercise_id}
+                      exercise={ex}
+                      index={idx}
+                      showCompletionIcon={true}
+                    />
                   ))}
                   {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) > 3 && (
                     <Text style={styles.moreExercises}>
@@ -1331,38 +1331,6 @@ const styles = StyleSheet.create({
   },
   exercisePreviewList: {
     marginBottom: 18,
-  },
-  exercisePreviewItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.SECONDARY[50],
-    borderRadius: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: COLORS.SECONDARY[100],
-  },
-  exercisePreviewNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.PRIMARY[600],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  exercisePreviewNumberText: {
-    fontSize: 13,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.NEUTRAL.WHITE,
-  },
-  exercisePreviewName: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
-    marginRight: 10,
   },
   moreExercises: {
     fontSize: 13,

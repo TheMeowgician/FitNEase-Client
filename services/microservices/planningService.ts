@@ -56,6 +56,52 @@ export interface CustomizePlanRequest {
   schedule_updates?: Partial<WorkoutScheduleRequest>;
 }
 
+// Weekly Workout Plans (Feature #4)
+export interface WeeklyWorkoutPlan {
+  plan_id: number;
+  user_id: number;
+  week_start_date: string;
+  week_end_date: string;
+  monday_workouts: Exercise[];
+  tuesday_workouts: Exercise[];
+  wednesday_workouts: Exercise[];
+  thursday_workouts: Exercise[];
+  friday_workouts: Exercise[];
+  saturday_workouts: Exercise[];
+  sunday_workouts: Exercise[];
+  monday_completed: boolean;
+  tuesday_completed: boolean;
+  wednesday_completed: boolean;
+  thursday_completed: boolean;
+  friday_completed: boolean;
+  saturday_completed: boolean;
+  sunday_completed: boolean;
+  total_workouts: number;
+  completed_workouts: number;
+  completion_percentage: number;
+  generated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Exercise {
+  workout_id: number;
+  exercise_id: number;
+  exercise_name: string;
+  target_muscle_group: string;
+  difficulty_level: number;
+  equipment_needed: string;
+  estimated_calories_burned: number;
+  default_duration_seconds: number;
+  exercise_category: string;
+}
+
+export interface GenerateWeeklyPlanRequest {
+  user_id: number;
+  regenerate?: boolean;
+  week_start_date?: string; // Format: YYYY-MM-DD
+}
+
 export class PlanningService {
   // Get user's current workout plan
   public async getWorkoutPlan(userId: string): Promise<WorkoutPlan | null> {
@@ -209,6 +255,102 @@ export class PlanningService {
     } catch (error) {
       console.warn('Planning service unavailable for plan stats:', error);
       return null;
+    }
+  }
+
+  // ============================================================================
+  // WEEKLY WORKOUT PLANS (Feature #4)
+  // ============================================================================
+
+  /**
+   * Generate a new weekly workout plan for the user
+   * If a plan exists for the current week, it will be returned unless regenerate=true
+   */
+  public async generateWeeklyPlan(request: GenerateWeeklyPlanRequest): Promise<{
+    success: boolean;
+    message: string;
+    data: WeeklyWorkoutPlan;
+    regenerated: boolean;
+  }> {
+    try {
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+        data: WeeklyWorkoutPlan;
+        regenerated: boolean;
+      }>('planning', '/api/planning/weekly-plans/generate', request);
+      return response.data;
+    } catch (error: any) {
+      console.error('[Planning Service] Failed to generate weekly plan:', error);
+      throw new Error(error.message || 'Failed to generate weekly workout plan');
+    }
+  }
+
+  /**
+   * Get the current week's workout plan for the user
+   */
+  public async getCurrentWeekPlan(userId: number): Promise<{
+    success: boolean;
+    message: string;
+    data: WeeklyWorkoutPlan | null;
+  }> {
+    try {
+      const response = await apiClient.get<{
+        success: boolean;
+        message: string;
+        data: WeeklyWorkoutPlan | null;
+      }>('planning', `/api/planning/weekly-plans/current?user_id=${userId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('[Planning Service] Failed to get current week plan:', error);
+      throw new Error(error.message || 'Failed to get current week plan');
+    }
+  }
+
+  /**
+   * Get workout plan for a specific week
+   * @param date - Date string in format YYYY-MM-DD (any date within the desired week)
+   */
+  public async getWeekPlan(date: string, userId: number): Promise<{
+    success: boolean;
+    message: string;
+    data: WeeklyWorkoutPlan | null;
+  }> {
+    try {
+      const response = await apiClient.get<{
+        success: boolean;
+        message: string;
+        data: WeeklyWorkoutPlan | null;
+      }>('planning', `/api/planning/weekly-plans/week/${date}?user_id=${userId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('[Planning Service] Failed to get week plan:', error);
+      throw new Error(error.message || 'Failed to get week plan');
+    }
+  }
+
+  /**
+   * Mark a day's workouts as completed
+   * @param planId - The weekly plan ID
+   * @param day - Day of the week (monday, tuesday, etc.)
+   */
+  public async completeDayWorkout(planId: number, day: string): Promise<{
+    success: boolean;
+    message: string;
+    data: WeeklyWorkoutPlan;
+  }> {
+    try {
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+        data: WeeklyWorkoutPlan;
+      }>('planning', `/api/planning/weekly-plans/${planId}/complete-day`, {
+        day
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('[Planning Service] Failed to complete day workout:', error);
+      throw new Error(error.message || 'Failed to mark day as completed');
     }
   }
 }
