@@ -26,7 +26,8 @@
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "VIBRATE"
-      ]
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "output": "static",
