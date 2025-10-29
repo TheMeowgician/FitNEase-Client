@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { MLRecommendation, useMLService } from '../../services/microservices/mlService';
+import { useMLService } from '../../hooks/api/useMLService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { COLORS, FONTS } from '../../constants/colors';
@@ -24,17 +24,14 @@ type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
 
 export default function WorkoutsScreen() {
   const { user } = useAuth();
-  const { getRecommendations, getContentBasedRecommendations, getCollaborativeRecommendations, predictDifficulty, predictCompletion, predictSuitability } = useMLService();
+  const { getRecommendations } = useMLService();
 
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // ML Recommendation data
-  const [mlRecommendations, setMlRecommendations] = useState<MLRecommendation[]>([]);
-  const [contentBasedRecommendations, setContentBasedRecommendations] = useState<MLRecommendation[]>([]);
-  const [collaborativeRecommendations, setCollaborativeRecommendations] = useState<MLRecommendation[]>([]);
-  const [randomForestPredictions, setRandomForestPredictions] = useState<Record<number, any>>({});
+  // ML Recommendation data - unified like Dashboard
+  const [mlRecommendations, setMlRecommendations] = useState<any[]>([]);
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
 
@@ -58,91 +55,18 @@ export default function WorkoutsScreen() {
 
     try {
       setIsLoading(true);
-      console.log('💪 [WORKOUTS] Loading ALL ML model recommendations...');
+      console.log('💪 [WORKOUTS] Loading ML recommendations (unified with Dashboard)...');
 
-      // Load all 4 ML models for comparison
-      console.log('💪 [WORKOUTS] Testing ALL ML MODELS...');
+      // 🔥 CRITICAL: Use same approach as Dashboard for consistency
+      const userId = String(user.id);
+      const recommendations = await getRecommendations(userId, 8);
 
-      // Ensure user ID is a number
-      const userId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
+      console.log(`💪 [WORKOUTS] Loaded ${recommendations?.length || 0} recommendations (same as Dashboard)`);
+      setMlRecommendations(recommendations || []);
 
-      // Get hybrid recommendations (main model)
-      console.log('💪 [WORKOUTS] 1. Calling HYBRID MODEL...');
-      const hybridResponse = await getRecommendations(userId, {
-        num_recommendations: 5,
-        content_weight: 0.7,
-        collaborative_weight: 0.3
-      });
-
-      const hybridRecs = hybridResponse || [];
-      const isHybridFallback = hybridRecs.length > 0 && hybridRecs[0]?.algorithm_used === 'content_based';
-
-      // Get content-based recommendations (ALWAYS call as fallback safety)
-      let contentRecs: any[] = [];
-      if (!isHybridFallback) {
-        console.log('💪 [WORKOUTS] 2. Calling CONTENT-BASED MODEL...');
-        contentRecs = await getContentBasedRecommendations(userId, 5) || [];
-      } else {
-        console.log('💪 [WORKOUTS] 2. SKIPPING Content-Based (hybrid already using content-based fallback)');
-      }
-
-      // SAFETY CHECK: If hybrid failed and content-based also failed, force retry content-based
-      if (hybridRecs.length === 0 && contentRecs.length === 0) {
-        console.warn('⚠️ [WORKOUTS] Both hybrid and content-based returned 0 - retrying content-based...');
-        contentRecs = await getContentBasedRecommendations(userId, 10) || [];
-      }
-
-      // Get collaborative recommendations
-      console.log('💪 [WORKOUTS] 3. Calling COLLABORATIVE MODEL...');
-      const collaborativeRecs = await getCollaborativeRecommendations(userId, 5);
-
-      // Combine all recommendations with proper model labeling
-      let allRecommendations: MLRecommendation[] = [];
-
-      // Add hybrid recommendations (respect API's algorithm_used field)
-      if (hybridRecs && hybridRecs.length > 0) {
-        const labeledHybrid = hybridRecs.map(rec => ({
-          ...rec,
-          // Keep API's algorithm_used (may be 'content_based' if fallback occurred)
-          algorithm_used: rec.algorithm_used || 'hybrid' as const,
-          recommendation_reason: rec.recommendation_reason || 'Hybrid recommendation'
-        }));
-        allRecommendations.push(...labeledHybrid);
-        console.log(`💪 [WORKOUTS] Got ${hybridRecs.length} HYBRID recommendations (algorithm: ${hybridRecs[0]?.algorithm_used || 'hybrid'})`);
-      }
-
-      // Add content-based recommendations
-      if (contentRecs && contentRecs.length > 0) {
-        const labeledContent = contentRecs.map(rec => ({
-          ...rec,
-          algorithm_used: 'content_based' as const,
-          recommendation_reason: `Content: ${rec.recommendation_reason || 'Based on exercise characteristics'}`
-        }));
-        allRecommendations.push(...labeledContent);
-        console.log(`💪 [WORKOUTS] Got ${contentRecs.length} CONTENT-BASED recommendations`);
-      }
-
-      // Add collaborative recommendations (now using real database data)
-      if (collaborativeRecs && collaborativeRecs.length > 0) {
-        const labeledCollaborative = collaborativeRecs.map(rec => ({
-          ...rec,
-          algorithm_used: 'collaborative' as const,
-          recommendation_reason: rec.recommendation_reason || `Social: Based on users with similar preferences`
-        }));
-        allRecommendations.push(...labeledCollaborative);
-        console.log(`💪 [WORKOUTS] Got ${collaborativeRecs.length} COLLABORATIVE recommendations with real database data`);
-      }
-
-      // Set all recommendations for display
-      setMlRecommendations(allRecommendations);
-      setContentBasedRecommendations(contentRecs || []);
-      setCollaborativeRecommendations(collaborativeRecs || []);
-
-      console.log(`💪 [WORKOUTS] TOTAL: ${allRecommendations.length} recommendations from all models`);
-
-      // FINAL SAFETY: Alert user if no recommendations were loaded
-      if (allRecommendations.length === 0) {
-        console.error('❌ [WORKOUTS] CRITICAL: No recommendations from any model!');
+      // Alert user if no recommendations were loaded
+      if (!recommendations || recommendations.length === 0) {
+        console.error('❌ [WORKOUTS] No recommendations loaded!');
         Alert.alert(
           'No Recommendations',
           'Unable to load exercise recommendations. Please check your internet connection and try again.',
@@ -207,8 +131,8 @@ export default function WorkoutsScreen() {
     setRefreshing(false);
   };
 
-  const handleViewWorkoutSet = (recommendations: MLRecommendation[], algorithmType: string) => {
-    if (recommendations.length === 0) {
+  const handleViewWorkoutSet = () => {
+    if (!mlRecommendations || mlRecommendations.length === 0) {
       Alert.alert(
         'No Recommendations',
         'Please wait while we load your workout recommendations.'
@@ -216,12 +140,12 @@ export default function WorkoutsScreen() {
       return;
     }
 
-    // Get user's fitness level from first recommendation or default to beginner
+    // Get user's fitness level
     const fitnessLevel = user?.fitnessLevel || 'beginner';
 
-    // Determine number of exercises based on fitness level
+    // Determine number of exercises based on fitness level (same as Dashboard)
     const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
-    const exercises = (recommendations || []).slice(0, Math.min(exerciseCount, (recommendations || []).length));
+    const exercises = mlRecommendations.slice(0, Math.min(exerciseCount, mlRecommendations.length));
 
     // Calculate total duration and calories
     const totalDuration = exercises.length * 4; // 4 minutes per exercise (Tabata protocol)
@@ -232,7 +156,6 @@ export default function WorkoutsScreen() {
       total_duration: totalDuration,
       total_calories: totalCalories,
       difficulty: fitnessLevel,
-      algorithm: algorithmType,
     };
 
     setCurrentWorkoutSet(workoutSet);
@@ -464,15 +387,10 @@ export default function WorkoutsScreen() {
     const filteredRecommendations = getFilteredRecommendations();
 
     // Group recommendations by algorithm for workout sets
-    const hybridRecs = filteredRecommendations.filter((r: MLRecommendation) => r.algorithm_used === 'hybrid');
-    const contentRecs = filteredRecommendations.filter((r: MLRecommendation) => r.algorithm_used === 'content_based');
-    const collaborativeRecs = filteredRecommendations.filter((r: MLRecommendation) => r.algorithm_used === 'collaborative');
-
-    const workoutSets = [
-      { name: 'Recommended', recs: hybridRecs, icon: 'flash', color: '#10B981' },
-      { name: 'For You', recs: contentRecs, icon: 'fitness', color: '#3B82F6' },
-      { name: 'Popular', recs: collaborativeRecs, icon: 'trending-up', color: '#8B5CF6' },
-    ].filter(set => set.recs.length > 0);
+    // 🔥 UNIFIED: Single workout set from ML service (same as Dashboard)
+    const workoutSets = filteredRecommendations.length > 0 ? [
+      { name: 'AI Recommended', recs: filteredRecommendations, icon: 'flash', color: '#10B981' },
+    ] : [];
 
     return (
       <View>
@@ -504,7 +422,7 @@ export default function WorkoutsScreen() {
                 <TouchableOpacity
                   key={index}
                   style={styles.workoutSetCard}
-                  onPress={() => handleViewWorkoutSet(set.recs, set.recs[0].algorithm_used)}
+                  onPress={() => handleViewWorkoutSet()}
                   activeOpacity={0.92}
                 >
                   {/* Header */}

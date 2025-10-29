@@ -112,28 +112,22 @@ export default function WeeklyPlanScreen() {
     }, [user, recentWorkouts, weeklyPlan, userWorkoutDays, fetchAllProgressData])
   );
 
-  // Load ML recommendations for TODAY's workout (to match Dashboard)
+  // 🔥 NEW: Load ML recommendations for ALL workout days (to match Dashboard and Workouts)
   useEffect(() => {
-    loadTodayRecommendations();
+    loadMLRecommendations();
   }, [user]);
 
-  const loadTodayRecommendations = async () => {
+  const loadMLRecommendations = async () => {
     if (!user) return;
-
-    const today = getTodayDay();
-    if (!today || !userWorkoutDays.includes(today)) {
-      // Today is not a workout day, no need to load recommendations
-      return;
-    }
 
     try {
       setLoadingRecommendations(true);
-      console.log('💪 [WEEKLY_PLAN] Loading ML recommendations for TODAY to match Dashboard');
+      console.log('💪 [WEEKLY_PLAN] Loading ML recommendations for ALL WORKOUT DAYS (unified with Dashboard)');
 
       const userId = String(user.id);
       const fitnessLevel = user.fitnessLevel || 'beginner';
 
-      // 🔥 CRITICAL: Fetch 8 recommendations EXACTLY like Dashboard does
+      // 🔥 CRITICAL: Fetch 8 recommendations EXACTLY like Dashboard and Workouts
       // Then slice to fitness level amount (4/5/6) to ensure consistency
       const recommendations = await getRecommendations(userId, 8);
 
@@ -142,7 +136,7 @@ export default function WeeklyPlanScreen() {
         const exercisesCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
         const selectedExercises = recommendations.slice(0, exercisesCount);
 
-        console.log(`✅ [WEEKLY_PLAN] Loaded ${recommendations.length} ML recommendations, using first ${selectedExercises.length} for TODAY`);
+        console.log(`✅ [WEEKLY_PLAN] Loaded ${recommendations.length} ML recommendations, using first ${selectedExercises.length} for ALL WORKOUT DAYS`);
         setTodayRecommendations(selectedExercises);
       }
     } catch (error) {
@@ -275,14 +269,14 @@ export default function WeeklyPlanScreen() {
     const rawExercises = dayData.exercises || [];
     const completed = dayData.completed || false;
 
-    // 🔥 KEY CHANGE: Use ML recommendations for TODAY's workout to match Dashboard and Workouts page
+    // 🔥 KEY CHANGE: Use ML recommendations for ALL WORKOUT DAYS (unified with Dashboard and Workouts)
     let workouts: Exercise[];
-    if (isTodayDay && isScheduledWorkoutDay && todayRecommendations.length > 0) {
-      // Use ML recommendations for TODAY (same as Dashboard and Workouts)
+    if (isScheduledWorkoutDay && todayRecommendations.length > 0) {
+      // Use ML recommendations for ALL workout days (same as Dashboard and Workouts)
       workouts = todayRecommendations.map(normalizeExercise);
-      console.log(`💪 [WEEKLY_PLAN] Using ML recommendations for TODAY: ${workouts.length} exercises`);
+      console.log(`💪 [WEEKLY_PLAN] Using ML recommendations for ${day.toUpperCase()}: ${workouts.length} exercises`);
     } else {
-      // Use pre-planned exercises for other days
+      // Fallback to pre-planned exercises if ML recommendations not available
       workouts = rawExercises.map(normalizeExercise);
     }
 
