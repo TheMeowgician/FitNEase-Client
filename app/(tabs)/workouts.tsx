@@ -76,38 +76,6 @@ export default function WorkoutsScreen() {
           ]
         );
       }
-
-      // Test Random Forest predictions for the first few recommendations (IN PARALLEL)
-      console.log('💪 [WORKOUTS] 4. Testing RANDOM FOREST predictions (parallel)...');
-      const rfPredictions: Record<number, any> = {};
-
-      // Get RF predictions for top 5 recommendations IN PARALLEL for speed
-      const predictionPromises = (allRecommendations || []).slice(0, 5).map(async (rec) => {
-        try {
-          const suitability = await predictSuitability(userId, rec.workout_id);
-          if (suitability) {
-            console.log(`💪 [RF] Exercise ${rec.workout_id}: ${suitability.suitability_prediction?.success_category || 'N/A'} (${(suitability.suitability_prediction?.overall_success_score * 100).toFixed(0)}% success)`);
-            return { workoutId: rec.workout_id, prediction: suitability.suitability_prediction };
-          }
-        } catch (error) {
-          console.error(`Error getting RF prediction for workout ${rec.workout_id}:`, error);
-        }
-        return null;
-      });
-
-      // Wait for all predictions to complete in parallel
-      const results = await Promise.all(predictionPromises);
-
-      // Store successful predictions
-      results.forEach(result => {
-        if (result) {
-          rfPredictions[result.workoutId] = result.prediction;
-        }
-      });
-
-      setRandomForestPredictions(rfPredictions);
-      console.log(`💪 [WORKOUTS] Got ${Object.keys(rfPredictions).length} Random Forest predictions (parallel execution)`);
-
     } catch (error) {
       console.error('❌ [WORKOUTS] Fatal error loading workout data:', error);
 
@@ -190,7 +158,7 @@ export default function WorkoutsScreen() {
     });
   };
 
-  const handleStartTabataExercise = (recommendation: MLRecommendation) => {
+  const handleStartTabataExercise = (recommendation: any) => {
     const difficultyText = getDifficultyText(recommendation.difficulty_level);
     Alert.alert(
       'Start Tabata Exercise',
@@ -240,23 +208,13 @@ export default function WorkoutsScreen() {
   const myGroups: any[] = [];
   const publicGroups: any[] = [];
 
-  const handleViewDetails = (recommendation: MLRecommendation) => {
+  const handleViewDetails = (recommendation: any) => {
     const duration = recommendation.default_duration_seconds || 0;
     const durationText = duration >= 60 ? `${Math.floor(duration / 60)} minutes` : `${duration} seconds`;
 
-    // Get Random Forest prediction if available
-    const rfPrediction = randomForestPredictions[recommendation.workout_id];
-    let rfInfo = '';
-    if (rfPrediction) {
-      const successScore = (rfPrediction.overall_success_score * 100).toFixed(0);
-      const diffScore = (rfPrediction.difficulty_prediction?.appropriateness_score * 100).toFixed(0);
-      const completionProb = (rfPrediction.completion_prediction?.completion_probability * 100).toFixed(0);
-      rfInfo = `\n\n🤖 Random Forest AI:\n• Success: ${successScore}% (${rfPrediction.success_category})\n• Difficulty Match: ${diffScore}%\n• Completion: ${completionProb}%`;
-    }
-
     Alert.alert(
       recommendation.exercise_name || 'Exercise',
-      `Algorithm: ${(recommendation.algorithm_used || 'unknown').toUpperCase()}\nConfidence: ${Math.round((recommendation.recommendation_score || 0) * 100)}%\nTarget: ${formatMuscleGroup(recommendation.target_muscle_group || 'N/A')}\nDuration: ${durationText}\nCalories: ~${recommendation.estimated_calories_burned || 0}\nEquipment: ${recommendation.equipment_needed || 'Not specified'}\n\n${recommendation.recommendation_reason || 'ML recommended'}${rfInfo}`,
+      `Confidence: ${Math.round((recommendation.recommendation_score || 0) * 100)}%\nTarget: ${formatMuscleGroup(recommendation.target_muscle_group || 'N/A')}\nDuration: ${durationText}\nCalories: ~${recommendation.estimated_calories_burned || 0}\nEquipment: ${recommendation.equipment_needed || 'Not specified'}\n\n${recommendation.recommendation_reason || 'ML recommended'}`,
       [{ text: 'Close' }]
     );
   };
@@ -440,7 +398,7 @@ export default function WorkoutsScreen() {
 
                   {/* Exercise Preview */}
                   <View style={styles.exercisePreviewList}>
-                    {(set.recs || []).slice(0, 3).map((ex: MLRecommendation, idx: number) => (
+                    {(set.recs || []).slice(0, 3).map((ex: any, idx: number) => (
                       <ExerciseCard
                         key={ex.exercise_id}
                         exercise={ex}
@@ -466,7 +424,7 @@ export default function WorkoutsScreen() {
                       <Ionicons name="flame-outline" size={20} color="#F59E0B" />
                       <Text style={styles.workoutSetStatText}>
                         ~{(set.recs || []).slice(0, user?.fitnessLevel === 'beginner' ? 4 : user?.fitnessLevel === 'intermediate' ? 5 : 6)
-                          .reduce((sum: number, ex: MLRecommendation) => sum + (ex.estimated_calories_burned || 0), 0)} cal
+                          .reduce((sum: number, ex: any) => sum + (ex.estimated_calories_burned || 0), 0)} cal
                       </Text>
                     </View>
                     <View style={styles.statDivider} />
@@ -476,7 +434,7 @@ export default function WorkoutsScreen() {
                         {(() => {
                           const workoutExercises = (set.recs || []).slice(0, user?.fitnessLevel === 'beginner' ? 4 : user?.fitnessLevel === 'intermediate' ? 5 : 6);
                           const muscleGroups = new Set<string>();
-                          workoutExercises.forEach((ex: MLRecommendation) => {
+                          workoutExercises.forEach((ex: any) => {
                             if (ex.target_muscle_group) {
                               ex.target_muscle_group.split(',').forEach((mg: string) => muscleGroups.add(mg.trim()));
                             }
@@ -726,7 +684,7 @@ export default function WorkoutsScreen() {
       .join(' ');
   };
 
-  const getFilteredRecommendations = (): MLRecommendation[] => {
+  const getFilteredRecommendations = (): any[] => {
     // Use the intelligently selected recommendations
     let recommendations = mlRecommendations || [];
 
@@ -734,12 +692,12 @@ export default function WorkoutsScreen() {
     if (difficultyFilter !== 'all' && recommendations.length > 0) {
       const difficultyLevel = difficultyFilter === 'beginner' ? 1 :
                              difficultyFilter === 'intermediate' ? 2 : 3;
-      recommendations = recommendations.filter((r: MLRecommendation) => r.difficulty_level === difficultyLevel);
+      recommendations = recommendations.filter((r: any) => r.difficulty_level === difficultyLevel);
     }
 
     // Filter by search query
     if (searchQuery.trim() && recommendations.length > 0) {
-      recommendations = recommendations.filter((r: MLRecommendation) =>
+      recommendations = recommendations.filter((r: any) =>
         (r.exercise_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (r.target_muscle_group || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
