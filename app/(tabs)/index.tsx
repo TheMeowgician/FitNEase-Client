@@ -23,6 +23,15 @@ import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '..
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 
+// ====================================================================
+// 🧪 TESTING FLAG: Daily Workout Limit Control
+// ====================================================================
+// TODO: RESTORE TO TRUE BEFORE PRODUCTION DEPLOYMENT!
+// Set to false during testing to allow unlimited workouts per day
+// Set to true in production to enforce one workout per day limit
+const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKOUTS
+// ====================================================================
+
 export default function HomeScreen() {
   const { user, logout } = useAuth();
   const { getRecommendations } = useMLService();
@@ -77,6 +86,13 @@ export default function HomeScreen() {
    */
   const checkTodayWorkoutCompletion = async () => {
     if (!user) return;
+
+    // 🧪 TESTING MODE: Skip check if daily limit is disabled
+    if (!ENABLE_DAILY_WORKOUT_LIMIT) {
+      console.log('🧪 [DASHBOARD] Daily workout limit DISABLED - unlimited workouts allowed');
+      setIsTodayWorkoutCompleted(false);
+      return;
+    }
 
     try {
       console.log('✅ [DASHBOARD] Checking if today\'s workout is completed...');

@@ -24,6 +24,15 @@ import { COLORS, FONTS } from '../../constants/colors';
 
 type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
 
+// ====================================================================
+// 🧪 TESTING FLAG: Daily Workout Limit Control
+// ====================================================================
+// TODO: RESTORE TO TRUE BEFORE PRODUCTION DEPLOYMENT!
+// Set to false during testing to allow unlimited workouts per day
+// Set to true in production to enforce one workout per day limit
+const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKOUTS
+// ====================================================================
+
 export default function WorkoutsScreen() {
   const { user } = useAuth();
   const { getRecommendations } = useMLService();
@@ -64,6 +73,13 @@ export default function WorkoutsScreen() {
    */
   const checkTodayWorkoutCompletion = async () => {
     if (!user) return;
+
+    // 🧪 TESTING MODE: Skip check if daily limit is disabled
+    if (!ENABLE_DAILY_WORKOUT_LIMIT) {
+      console.log('🧪 [WORKOUTS] Daily workout limit DISABLED - unlimited workouts allowed');
+      setIsTodayWorkoutCompleted(false);
+      return;
+    }
 
     try {
       console.log('✅ [WORKOUTS] Checking if today\'s workout is completed...');
