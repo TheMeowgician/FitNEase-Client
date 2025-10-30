@@ -52,6 +52,7 @@ export interface ExerciseSet {
 
 export interface WorkoutSession {
   id: string;
+  session_id?: number; // Database session ID (returned from backend)
   workoutId: string;
   workoutName: string;
   userId: string;

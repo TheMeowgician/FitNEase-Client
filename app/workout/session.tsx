@@ -962,7 +962,7 @@ export default function WorkoutSessionScreen() {
 
       // STEP 3: Save workout session
       console.log('💾 [COMPLETE] Saving workout session to tracking service...');
-      await trackingService.createWorkoutSession({
+      const savedSession = await trackingService.createWorkoutSession({
         workoutId: sessionId,
         userId: Number(user.id),
         sessionType: type === 'group_tabata' ? 'group' : 'individual',
@@ -976,7 +976,17 @@ export default function WorkoutSessionScreen() {
           : `Tabata workout completed - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`
       });
 
-      console.log('✅ [COMPLETE] Workout session saved successfully');
+      // CRITICAL: Capture the database session_id for rating submissions
+      const databaseSessionId = savedSession.session_id;
+
+      console.log('✅ [COMPLETE] Workout session saved successfully', {
+        databaseSessionId,
+        workoutId: sessionId,
+      });
+
+      if (!databaseSessionId) {
+        console.error('⚠️ [COMPLETE] Warning: No database session_id received from backend!');
+      }
 
       // STEP 4: Fetch AFTER stats
       console.log('📊 [COMPLETE] Fetching progression data AFTER saving...');
@@ -1017,7 +1027,7 @@ export default function WorkoutSessionScreen() {
       router.push({
         pathname: '/workout/exercise-rating',
         params: {
-          sessionId: String(sessionId),
+          sessionId: String(databaseSessionId), // CRITICAL: Use database session_id, not workout identifier
           workoutId: workoutId ? String(workoutId) : '',
           exercises: JSON.stringify(exercisesToRate),
           beforeStats: JSON.stringify(beforeStats),

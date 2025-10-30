@@ -1,4 +1,4 @@
-import apiClient from '../api/client';
+import { apiClient } from '../api/client';
 
 /**
  * Rating Service
@@ -47,10 +47,7 @@ export const ratingService = {
         count: data.ratings.length,
       });
 
-      const response = await apiClient.post(
-        '/tracking/exercise-ratings/batch',
-        data
-      );
+      const response = await apiClient.post('tracking', '/api/exercise-ratings/batch', data);
 
       console.log('✅ [RATING SERVICE] Batch ratings submitted successfully:', {
         saved: response.data?.data?.saved_count,
@@ -79,7 +76,7 @@ export const ratingService = {
         rating: data.rating_value,
       });
 
-      const response = await apiClient.post('/tracking/exercise-rating', data);
+      const response = await apiClient.post('tracking', '/api/exercise-rating', data);
 
       console.log('✅ [RATING SERVICE] Rating submitted successfully');
 
@@ -98,7 +95,7 @@ export const ratingService = {
    */
   async getUserRatings(userId: number) {
     try {
-      const response = await apiClient.get(`/tracking/exercise-ratings/${userId}`);
+      const response = await apiClient.get('tracking', `/api/exercise-ratings/${userId}`);
       return response.data;
     } catch (error: any) {
       console.error('❌ [RATING SERVICE] Failed to fetch user ratings:', error);
@@ -111,9 +108,7 @@ export const ratingService = {
    */
   async getExerciseRatings(exerciseId: number) {
     try {
-      const response = await apiClient.get(
-        `/tracking/exercise-ratings/exercise/${exerciseId}`
-      );
+      const response = await apiClient.get('tracking', `/api/exercise-ratings/exercise/${exerciseId}`);
       return response.data;
     } catch (error: any) {
       console.error('❌ [RATING SERVICE] Failed to fetch exercise ratings:', error);
@@ -126,9 +121,7 @@ export const ratingService = {
    */
   async getRatingStats(userId: number) {
     try {
-      const response = await apiClient.get(
-        `/tracking/exercise-ratings/stats/${userId}`
-      );
+      const response = await apiClient.get('tracking', `/api/exercise-ratings/stats/${userId}`);
       return response.data;
     } catch (error: any) {
       console.error('❌ [RATING SERVICE] Failed to fetch rating stats:', error);
@@ -141,9 +134,7 @@ export const ratingService = {
    */
   async getSessionRatings(sessionId: number) {
     try {
-      const response = await apiClient.get(
-        `/tracking/exercise-ratings/session/${sessionId}`
-      );
+      const response = await apiClient.get('tracking', `/api/exercise-ratings/session/${sessionId}`);
       return response.data;
     } catch (error: any) {
       console.error('❌ [RATING SERVICE] Failed to fetch session ratings:', error);
