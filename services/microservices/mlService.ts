@@ -62,6 +62,15 @@ export interface SimilarExercises {
   limit?: number;
 }
 
+// Response type for recommendations with metadata
+export interface RecommendationResponse {
+  recommendations: MLRecommendation[];
+  algorithm: string;  // e.g., "hybrid", "hybrid_fallback_to_content", "content"
+  algorithmDisplay?: string; // Human-readable version for UI
+  weights?: { content_weight: number; collaborative_weight: number };
+  count: number;
+}
+
 export class MLService {
   private serviceName: keyof APIClientConfig = 'ml';
   private baseUrl = '/api/v1'; // Flask API base path
@@ -74,7 +83,7 @@ export class MLService {
       content_weight?: number;
       collaborative_weight?: number;
     }
-  ): Promise<MLRecommendation[]> {
+  ): Promise<RecommendationResponse> {
     const maxRetries = 2;
     let lastError: any = null;
 
@@ -111,7 +120,18 @@ export class MLService {
         );
 
         console.log(`✅ [ML SERVICE] Success on attempt ${attempt}`);
-        return response.data.recommendations;
+        console.log(`🎯 [ML SERVICE] Algorithm used: ${response.data.algorithm}`);
+
+        // Convert algorithm to display-friendly format
+        const algorithmDisplay = this._getAlgorithmDisplay(response.data.algorithm);
+
+        return {
+          recommendations: response.data.recommendations,
+          algorithm: response.data.algorithm,
+          algorithmDisplay,
+          weights: response.data.weights,
+          count: response.data.count
+        };
       } catch (error) {
         lastError = error;
         console.warn(`❌ [ML SERVICE] Attempt ${attempt}/${maxRetries} failed:`, error);
@@ -124,7 +144,12 @@ export class MLService {
     }
 
     console.warn('ML hybrid service unavailable after retries - returning empty recommendations:', lastError);
-    return []; // Don't use misleading fallback for hybrid recommendations
+    return {
+      recommendations: [],
+      algorithm: 'unavailable',
+      algorithmDisplay: 'Service Unavailable',
+      count: 0
+    };
   }
 
   // Content-based recommendations only
@@ -473,19 +498,46 @@ export class MLService {
 
     return fallbackExercises.slice(0, limit);
   }
+
+  /**
+   * Convert algorithm name to user-friendly display text
+   */
+  private _getAlgorithmDisplay(algorithm: string): string {
+    const displayMap: Record<string, string> = {
+      'hybrid': 'Hybrid',
+      'hybrid_fallback_to_content': 'Content',
+      'content': 'Content',
+      'content_based': 'Content',
+      'collaborative': 'Collaborative',
+      'unavailable': 'Unavailable'
+    };
+
+    return displayMap[algorithm] || 'Hybrid';
+  }
 }
 
 export const mlService = new MLService();
 
 export const useMLService = () => {
+  // Version that matches store signature (userId, limit)
   const getRecommendations = async (
+    userId: string | number,
+    limit?: number
+  ): Promise<RecommendationResponse> => {
+    return mlService.getRecommendations(userId, {
+      num_recommendations: limit || 10
+    });
+  };
+
+  // Full options version
+  const getRecommendationsWithOptions = async (
     userId: string | number,
     options?: {
       num_recommendations?: number;
       content_weight?: number;
       collaborative_weight?: number;
     }
-  ) => {
+  ): Promise<RecommendationResponse> => {
     return mlService.getRecommendations(userId, options);
   };
 
@@ -568,6 +620,7 @@ export const useMLService = () => {
 
   return {
     getRecommendations,
+    getRecommendationsWithOptions,
     getContentBasedRecommendations,
     getCollaborativeRecommendations,
     getWorkoutRecommendations,

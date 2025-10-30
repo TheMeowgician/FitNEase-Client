@@ -49,6 +49,9 @@ export default function HomeScreen() {
   // Use centralized recommendation store for consistent exercises across all pages
   const {
     recommendations,
+    algorithm,
+    algorithmDisplay,
+    weights,
     isLoading: isLoadingRecommendations,
     fetchRecommendations,
   } = useRecommendationStore();
@@ -649,7 +652,7 @@ export default function HomeScreen() {
                       index={idx}
                       showCompletionIcon={true}
                       showMLBadge={true} // 🧪 Testing: Show ML model type
-                      mlModelType="Hybrid" // Content 60% + Collab 40%
+                      mlModelType={algorithmDisplay || 'Hybrid'} // Dynamic: shows actual algorithm
                     />
                   ))}
                   {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) > 3 && (

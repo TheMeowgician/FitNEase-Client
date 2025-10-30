@@ -40,6 +40,9 @@ export default function WorkoutsScreen() {
   // Use centralized recommendation store for consistent exercises across all pages
   const {
     recommendations: mlRecommendations,
+    algorithm,
+    algorithmDisplay,
+    weights,
     isLoading: isLoadingRecommendations,
     fetchRecommendations,
   } = useRecommendationStore();
@@ -513,7 +516,7 @@ export default function WorkoutsScreen() {
                         index={idx}
                         showCompletionIcon={true}
                         showMLBadge={true} // 🧪 Testing: Show ML model type
-                        mlModelType="Hybrid" // Content 60% + Collab 40%
+                        mlModelType={algorithmDisplay || 'Hybrid'} // Dynamic: shows actual algorithm
                       />
                     ))}
                     {set.recs.length > 3 && (
