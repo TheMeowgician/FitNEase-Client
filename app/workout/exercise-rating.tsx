@@ -14,6 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, FONTS } from '../../constants/colors';
+import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 
 /**
  * Exercise Rating Screen
@@ -77,10 +78,16 @@ export default function ExerciseRatingScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showProgressModal, setShowProgressModal] = useState(false);
 
   // Current exercise being rated
   const currentExercise = exercises[currentIndex];
   const currentRating = ratings.get(currentExercise?.exercise_id);
+
+  // Parse progress data for modal
+  const parsedBeforeStats = beforeStats ? JSON.parse(beforeStats) : null;
+  const parsedAfterStats = afterStats ? JSON.parse(afterStats) : null;
+  const parsedWorkoutData = workoutData ? JSON.parse(workoutData) : null;
 
   const handleStarRating = (stars: number) => {
     if (!currentExercise) return;
@@ -162,11 +169,8 @@ export default function ExerciseRatingScreen() {
 
       console.log('✅ [RATING] Exercise ratings submitted successfully');
 
-      Alert.alert(
-        'Thank You!',
-        'Your ratings will help us improve your recommendations.',
-        [{ text: 'Continue', onPress: navigateToProgressModal }]
-      );
+      // Show progress modal
+      setShowProgressModal(true);
     } catch (error) {
       console.error('❌ [RATING] Failed to submit ratings:', error);
       Alert.alert(
@@ -180,9 +184,14 @@ export default function ExerciseRatingScreen() {
   };
 
   const navigateToProgressModal = () => {
-    // Navigate to a route that will show progress modal
-    // For now, just go back (the session.tsx will show modal)
-    router.back();
+    // Show progress modal directly
+    setShowProgressModal(true);
+  };
+
+  const handleProgressModalClose = () => {
+    setShowProgressModal(false);
+    // Navigate to home tab and replace history to prevent going back
+    router.replace('/(tabs)');
   };
 
   if (!currentExercise) {
@@ -431,6 +440,17 @@ export default function ExerciseRatingScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Progress Modal */}
+      {showProgressModal && parsedBeforeStats && parsedAfterStats && parsedWorkoutData && (
+        <ProgressUpdateModal
+          visible={showProgressModal}
+          onClose={handleProgressModalClose}
+          beforeStats={parsedBeforeStats}
+          afterStats={parsedAfterStats}
+          workoutData={parsedWorkoutData}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -497,7 +517,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.NEUTRAL[600],
   },
   content: {
@@ -567,7 +587,7 @@ const styles = StyleSheet.create({
   },
   ratingFeedback: {
     fontSize: 14,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
   },
   difficultySection: {
