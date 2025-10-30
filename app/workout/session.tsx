@@ -1000,16 +1000,36 @@ export default function WorkoutSessionScreen() {
 
       console.log('📊 [COMPLETE] After stats:', afterStats);
 
-      // STEP 5: Store data for modal and show it
-      setProgressBeforeStats(beforeStats);
-      setProgressAfterStats(afterStats);
-      setCompletedWorkoutData({
-        duration: finalDurationMinutes,
-        calories: finalCaloriesBurned,
-      });
-      setShowProgressModal(true);
+      // STEP 5: Navigate to exercise rating screen
+      console.log('🎯 [COMPLETE] Preparing exercise rating navigation...');
 
-      console.log('✅ [COMPLETE] Progress modal will be shown');
+      // Prepare exercises list for rating screen
+      const exercisesToRate = tabataSession ? tabataSession.exercises.map((ex: any) => ({
+        exercise_id: ex.exercise_id,
+        exercise_name: ex.exercise_name,
+        target_muscle_group: ex.target_muscle_group,
+        completed: true,
+      })) : [];
+
+      console.log('📝 [COMPLETE] Exercises to rate:', exercisesToRate.length);
+
+      // Navigate to exercise rating screen with all necessary data
+      router.push({
+        pathname: '/workout/exercise-rating',
+        params: {
+          sessionId: String(sessionId),
+          workoutId: workoutId ? String(workoutId) : '',
+          exercises: JSON.stringify(exercisesToRate),
+          beforeStats: JSON.stringify(beforeStats),
+          afterStats: JSON.stringify(afterStats),
+          workoutData: JSON.stringify({
+            duration: finalDurationMinutes,
+            calories: finalCaloriesBurned,
+          }),
+        },
+      });
+
+      console.log('✅ [COMPLETE] Navigating to exercise rating screen');
       console.log('💾 [COMPLETE] ========== Workout Completion Finished ==========');
 
     } catch (error) {
