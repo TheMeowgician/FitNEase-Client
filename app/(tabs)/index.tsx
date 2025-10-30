@@ -648,6 +648,8 @@ export default function HomeScreen() {
                       exercise={ex}
                       index={idx}
                       showCompletionIcon={true}
+                      showMLBadge={true} // 🧪 Testing: Show ML model type
+                      mlModelType="Hybrid" // Content 60% + Collab 40%
                     />
                   ))}
                   {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) > 3 && (

@@ -512,6 +512,8 @@ export default function WorkoutsScreen() {
                         exercise={ex}
                         index={idx}
                         showCompletionIcon={true}
+                        showMLBadge={true} // 🧪 Testing: Show ML model type
+                        mlModelType="Hybrid" // Content 60% + Collab 40%
                       />
                     ))}
                     {set.recs.length > 3 && (

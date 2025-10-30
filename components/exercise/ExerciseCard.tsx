@@ -13,6 +13,8 @@ export interface ExerciseCardProps {
   };
   index: number;
   showCompletionIcon?: boolean;
+  showMLBadge?: boolean; // 🧪 For testing: show ML model type
+  mlModelType?: string; // e.g., "Hybrid", "Content", "Collaborative"
   style?: ViewStyle;
 }
 
@@ -37,6 +39,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   exercise,
   index,
   showCompletionIcon = true,
+  showMLBadge = false,
+  mlModelType = 'Hybrid',
   style,
 }) => {
   return (
@@ -47,9 +51,19 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
       </View>
 
       {/* Exercise Name */}
-      <Text style={styles.exerciseName} numberOfLines={1}>
-        {exercise.exercise_name}
-      </Text>
+      <View style={styles.nameContainer}>
+        <Text style={styles.exerciseName} numberOfLines={1}>
+          {exercise.exercise_name}
+        </Text>
+
+        {/* 🧪 ML Model Badge (Testing Only) */}
+        {showMLBadge && (
+          <View style={styles.mlBadge}>
+            <Ionicons name="sparkles" size={10} color={COLORS.WARNING[600]} />
+            <Text style={styles.mlBadgeText}>{mlModelType}</Text>
+          </View>
+        )}
+      </View>
 
       {/* Completion Icon */}
       {showCompletionIcon && (
@@ -85,11 +99,31 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
-  exerciseName: {
+  nameContainer: {
     flex: 1,
+    marginRight: 10,
+  },
+  exerciseName: {
     fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
-    marginRight: 10,
+    marginBottom: 2,
+  },
+  mlBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: COLORS.WARNING[100],
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  mlBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.WARNING[700],
+    textTransform: 'uppercase',
   },
 });
