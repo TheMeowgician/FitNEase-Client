@@ -26,6 +26,12 @@ export const useMLService = () => {
       }
 
       console.log(`✅ [ML SERVICE] Using HYBRID MODEL - Got ${recommendations.length} recommendations`);
+
+      // 🐛 DEBUG: Log all 8 recommendations from ML service
+      if (recommendations.length > 0) {
+        console.log(`🐛 [ML SERVICE DEBUG] All 8 recommendations:`, recommendations.map((r: any) => `${r.exercise_name} (${r.exercise_id})`));
+      }
+
       return recommendations;
     } catch (err) {
       console.warn('⚠️ [ML SERVICE] Hybrid ML service unavailable, using CONTENT-BASED FALLBACK:', err);
@@ -34,6 +40,12 @@ export const useMLService = () => {
         // Fallback to content-based recommendations
         const fallbackRecs = await mlService.getContentBasedRecommendations(userId, { num_recommendations: limit });
         console.log(`✅ [ML SERVICE] Using CONTENT-BASED FALLBACK - Got ${fallbackRecs.length} recommendations`);
+
+        // 🐛 DEBUG: Log fallback recommendations
+        if (fallbackRecs.length > 0) {
+          console.log(`🐛 [ML SERVICE DEBUG] Fallback recommendations:`, fallbackRecs.map((r: any) => `${r.exercise_name} (${r.exercise_id})`));
+        }
+
         return fallbackRecs;
       } catch (fallbackErr) {
         console.warn('❌ [ML SERVICE] Content-based fallback also failed:', fallbackErr);
@@ -45,54 +57,11 @@ export const useMLService = () => {
     }
   }, []);
 
-  const getNutritionRecommendations = useCallback(async (options: any = {}) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      return await mlService.getNutritionRecommendations(options);
-    } catch (err) {
-      setError((err as any).message);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const analyzeWorkout = useCallback(async (workoutId: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      return await mlService.analyzeWorkout({
-        workoutId,
-        includeComparison: true,
-        includePredictions: true,
-      });
-    } catch (err) {
-      setError((err as any).message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const getPersonalizedInsights = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      return await mlService.getPersonalizedInsights();
-    } catch (err) {
-      setError((err as any).message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Note: Nutrition, analyzeWorkout, and insights methods not implemented in MLService yet
+  // Commenting out to avoid TypeScript errors
 
   return {
     getRecommendations,
-    getNutritionRecommendations,
-    analyzeWorkout,
-    getPersonalizedInsights,
     isLoading,
     error,
   };

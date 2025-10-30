@@ -16,11 +16,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { router, useFocusEffect } from 'expo-router';
 import { planningService, WeeklyWorkoutPlan, Exercise } from '@/services/microservices/planningService';
+import { trackingService } from '@/services/microservices/trackingService';
 import { format } from 'date-fns';
 import { COLORS, FONTS, FONT_SIZES, GRADIENTS } from '@/constants/colors';
 import { ExerciseCard } from '@/components/exercise/ExerciseCard';
 import { useMLService } from '@/hooks/api/useMLService';
 import { useProgressStore } from '../../stores/progressStore';
+import { useRecommendationStore } from '../../stores/recommendationStore';
 
 const { width } = Dimensions.get('window');
 
@@ -47,15 +49,21 @@ export default function WeeklyPlanScreen() {
     refreshAfterWorkout,
   } = useProgressStore();
 
+  // Use centralized recommendation store for consistent exercises across all pages
+  const {
+    recommendations: todayRecommendations,
+    isLoading: isLoadingRecommendations,
+    fetchRecommendations,
+  } = useRecommendationStore();
+
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyWorkoutPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [expandedDay, setExpandedDay] = useState<DayOfWeek | null>(null);
 
-  // ML recommendations for TODAY'S workout (to match Dashboard and Workouts page)
-  const [todayRecommendations, setTodayRecommendations] = useState<any[]>([]);
-  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  // Track completed days based on actual workout sessions
+  const [completedDays, setCompletedDays] = useState<Set<DayOfWeek>>(new Set());
 
   // Track last completed workout count for auto-completion detection
   const lastCompletedCountRef = useRef<number>(0);
@@ -85,31 +93,18 @@ export default function WeeklyPlanScreen() {
 
   useEffect(() => {
     loadWeeklyPlan();
+    checkCompletedDays(); // Check which days have completed workouts
   }, [user]);
 
-  // Refresh progress data when screen comes into focus (same as Dashboard)
+  // Refresh progress data and check completed days when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       if (user) {
         console.log('🔄 [WEEKLY_PLAN] Screen focused - refreshing progress and checking completion');
         fetchAllProgressData(user.id);
-
-        // Auto-completion detection: check if user completed a workout
-        const currentCompletedCount = recentWorkouts.length;
-        if (currentCompletedCount > lastCompletedCountRef.current && lastCompletedCountRef.current > 0) {
-          // New workout completed - auto-mark today as complete
-          const today = getTodayDay();
-          if (today && userWorkoutDays.includes(today)) {
-            const todayData = getDayData(today);
-            if (!todayData.completed && weeklyPlan) {
-              console.log('✅ [WEEKLY_PLAN] Auto-completing today\'s workout');
-              handleCompleteDay(today, true); // true = silent mode
-            }
-          }
-        }
-        lastCompletedCountRef.current = currentCompletedCount;
+        checkCompletedDays(); // Re-check completed days
       }
-    }, [user, recentWorkouts, weeklyPlan, userWorkoutDays, fetchAllProgressData])
+    }, [user, fetchAllProgressData])
   );
 
   // 🔥 NEW: Load ML recommendations for ALL workout days (to match Dashboard and Workouts)
@@ -121,28 +116,86 @@ export default function WeeklyPlanScreen() {
     if (!user) return;
 
     try {
-      setLoadingRecommendations(true);
-      console.log('💪 [WEEKLY_PLAN] Loading ML recommendations for ALL WORKOUT DAYS (unified with Dashboard)');
+      console.log('💪 [WEEKLY_PLAN] Fetching recommendations from store (unified with Dashboard and Workouts)');
 
       const userId = String(user.id);
       const fitnessLevel = user.fitnessLevel || 'beginner';
 
-      // 🔥 CRITICAL: Fetch 8 recommendations EXACTLY like Dashboard and Workouts
-      // Then slice to fitness level amount (4/5/6) to ensure consistency
-      const recommendations = await getRecommendations(userId, 8);
+      // Fetch from centralized store (will use cache if available)
+      await fetchRecommendations(userId, getRecommendations);
 
-      if (recommendations && recommendations.length > 0) {
-        // Slice to fitness level amount (same logic as Dashboard's generateTabataSession)
+      if (todayRecommendations && todayRecommendations.length > 0) {
+        // Calculate the number to display based on fitness level
         const exercisesCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
-        const selectedExercises = recommendations.slice(0, exercisesCount);
+        const selectedExercises = todayRecommendations.slice(0, exercisesCount);
 
-        console.log(`✅ [WEEKLY_PLAN] Loaded ${recommendations.length} ML recommendations, using first ${selectedExercises.length} for ALL WORKOUT DAYS`);
-        setTodayRecommendations(selectedExercises);
+        console.log(`✅ [WEEKLY_PLAN] Using ${todayRecommendations.length} cached recommendations from store`);
+
+        // 🐛 DEBUG: Log exercises from store to compare with Dashboard and Workouts
+        console.log(`🐛 [WEEKLY_PLAN DEBUG] Fitness Level: ${fitnessLevel}, Count: ${exercisesCount}`);
+        console.log(`🐛 [WEEKLY_PLAN DEBUG] First exercise: ${selectedExercises[0]?.exercise_name} (ID: ${selectedExercises[0]?.exercise_id})`);
       }
     } catch (error) {
-      console.error('❌ [WEEKLY_PLAN] Failed to load ML recommendations:', error);
-    } finally {
-      setLoadingRecommendations(false);
+      console.error('❌ [WEEKLY_PLAN] Failed to load ML recommendations from store:', error);
+    }
+  };
+
+  /**
+   * Check which days this week have completed workouts
+   * Auto-detects workout completion without manual button press
+   */
+  const checkCompletedDays = async () => {
+    if (!user) return;
+
+    try {
+      console.log('✅ [WEEKLY_PLAN] Checking completed workouts for this week...');
+
+      // Get all completed workout sessions
+      const userId = String(user.id);
+      const sessions = await trackingService.getSessions({
+        userId,
+        status: 'completed',
+        limit: 100, // Get recent sessions
+      });
+
+      // Get start and end of current week (Monday to Sunday)
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust for Sunday
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + mondayOffset);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      console.log(`📅 [WEEKLY_PLAN] Week range: ${weekStart.toISOString()} to ${weekEnd.toISOString()}`);
+
+      // Filter sessions that occurred this week
+      const thisWeekSessions = sessions.sessions.filter((session: any) => {
+        const sessionDate = new Date(session.createdAt);
+        return sessionDate >= weekStart && sessionDate <= weekEnd;
+      });
+
+      console.log(`✅ [WEEKLY_PLAN] Found ${thisWeekSessions.length} completed workouts this week`);
+
+      // Map each session to the day of week it was completed
+      const completed = new Set<DayOfWeek>();
+      const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+      thisWeekSessions.forEach((session: any) => {
+        const sessionDate = new Date(session.createdAt);
+        const dayIndex = sessionDate.getDay();
+        const dayName = dayMap[dayIndex] as DayOfWeek;
+        completed.add(dayName);
+        console.log(`✅ [WEEKLY_PLAN] ${dayName.toUpperCase()} marked as completed (session: ${session.id})`);
+      });
+
+      setCompletedDays(completed);
+      console.log(`✅ [WEEKLY_PLAN] Completed days:`, Array.from(completed));
+    } catch (error) {
+      console.error('❌ [WEEKLY_PLAN] Failed to check completed days:', error);
     }
   };
 
@@ -253,36 +306,58 @@ export default function WeeklyPlanScreen() {
     const isScheduledWorkoutDay = userWorkoutDays.includes(day);
     const isTodayDay = isToday(day);
 
-    if (!weeklyPlan) {
+    // 🎯 Use auto-detected completion status from completed workouts
+    const completed = completedDays.has(day);
+
+    if (!weeklyPlan && todayRecommendations.length === 0) {
       return {
         name: dayNames[day],
         fullName: dayFullNames[day],
         workouts: [],
-        completed: false,
+        completed,
         isRestDay: !isScheduledWorkoutDay,
       };
     }
 
-    // Read from plan_data structure returned by backend
-    const planData = (weeklyPlan as any).plan_data || {};
-    const dayData = planData[day] || {};
-    const rawExercises = dayData.exercises || [];
-    const completed = dayData.completed || false;
-
-    // 🔥 KEY CHANGE: Use ML recommendations for ALL WORKOUT DAYS (unified with Dashboard and Workouts)
+    // 🔥 KEY CHANGE: Use DIFFERENT exercises for each workout day
     let workouts: Exercise[];
     if (isScheduledWorkoutDay && todayRecommendations.length > 0) {
-      // Use ML recommendations for ALL workout days (same as Dashboard and Workouts)
-      workouts = todayRecommendations.map(normalizeExercise);
-      console.log(`💪 [WEEKLY_PLAN] Using ML recommendations for ${day.toUpperCase()}: ${workouts.length} exercises`);
+      // Use ML recommendations with rotation per day to ensure different exercises
+      const fitnessLevel = user?.fitnessLevel || 'beginner';
+      const exercisesPerDay = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+
+      // Get day index (0-6) to determine which exercises to use
+      const dayIndex = daysOfWeek.indexOf(day);
+
+      // Rotate exercises based on day index
+      // If we have 8 exercises total, we can create 2 different workout sets
+      // Days 0, 2, 4, 6 (Mon, Wed, Fri, Sun) get exercises 0-3/4/5
+      // Days 1, 3, 5 (Tue, Thu, Sat) get exercises 4-7
+
+      const useSecondSet = dayIndex % 2 === 1; // Alternate between two sets
+
+      if (useSecondSet && todayRecommendations.length >= 8) {
+        // Use second half of recommendations (exercises 4-7)
+        const startIndex = 4;
+        const endIndex = Math.min(4 + exercisesPerDay, todayRecommendations.length);
+        workouts = todayRecommendations.slice(startIndex, endIndex).map(normalizeExercise);
+        console.log(`💪 [WEEKLY_PLAN] ${day.toUpperCase()}: Using exercises ${startIndex}-${endIndex-1} (SET B)`);
+      } else {
+        // Use first half of recommendations (exercises 0-3/4/5)
+        workouts = todayRecommendations.slice(0, exercisesPerDay).map(normalizeExercise);
+        console.log(`💪 [WEEKLY_PLAN] ${day.toUpperCase()}: Using exercises 0-${exercisesPerDay-1} (SET A)`);
+      }
     } else {
       // Fallback to pre-planned exercises if ML recommendations not available
+      const planData = (weeklyPlan as any)?.plan_data || {};
+      const dayData = planData[day] || {};
+      const rawExercises = dayData.exercises || [];
       workouts = rawExercises.map(normalizeExercise);
     }
 
     // DEBUG: Log first exercise ID for each day to verify uniqueness
-    if (workouts.length > 0 && isTodayDay) {
-      console.log(`📅 ${day.toUpperCase()} (TODAY): First exercise = ${workouts[0].exercise_name} (ID: ${workouts[0].exercise_id})`);
+    if (workouts.length > 0) {
+      console.log(`📅 ${day.toUpperCase()}: ${workouts[0].exercise_name} (ID: ${workouts[0].exercise_id})${isTodayDay ? ' [TODAY]' : ''}${completed ? ' ✅' : ''}`);
     }
 
     return {
@@ -678,22 +753,31 @@ export default function WeeklyPlanScreen() {
                         />
                       ))}
 
-                      {/* Complete Button */}
-                      {!dayData.completed && (
-                        <TouchableOpacity
-                          onPress={() => handleCompleteDay(day)}
-                          style={styles.completeButton}
-                        >
+                      {/* Completion Status - Auto-detected from completed workouts */}
+                      {dayData.completed ? (
+                        <View style={styles.completionStatusContainer}>
                           <LinearGradient
-                            colors={GRADIENTS.SUCCESS as [string, string]}
+                            colors={['#10B981', '#059669']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={styles.completeButtonGradient}
+                            style={styles.completionStatusGradient}
                           >
-                            <Ionicons name="checkmark-circle-outline" size={18} color="white" style={{ marginRight: 8 }} />
-                            <Text style={styles.completeButtonText}>Mark as Complete</Text>
+                            <Ionicons name="checkmark-circle" size={32} color="white" />
+                            <View style={styles.completionStatusText}>
+                              <Text style={styles.completionStatusTitle}>Workout Completed!</Text>
+                              <Text style={styles.completionStatusSubtitle}>Great job finishing your workout</Text>
+                            </View>
                           </LinearGradient>
-                        </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.incompletionStatusContainer}>
+                          <View style={styles.incompletionStatusContent}>
+                            <Ionicons name="time-outline" size={24} color={COLORS.SECONDARY[400]} />
+                            <Text style={styles.incompletionStatusText}>
+                              Complete your workout to mark this day as done
+                            </Text>
+                          </View>
+                        </View>
                       )}
                     </View>
                   )}
@@ -1166,24 +1250,55 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
-  completeButton: {
-    marginTop: 12,
+  // Completion Status Styles (replaces old complete button)
+  completionStatusContainer: {
+    marginTop: 16,
   },
-  completeButtonGradient: {
+  completionStatusGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: COLORS.SUCCESS[600],
-    shadowOffset: { width: 0, height: 2 },
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  completeButtonText: {
-    fontSize: FONT_SIZES.SM,
+  completionStatusText: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  completionStatusTitle: {
+    fontSize: FONT_SIZES.MD,
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL.WHITE,
+    marginBottom: 2,
+  },
+  completionStatusSubtitle: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  incompletionStatusContainer: {
+    marginTop: 16,
+  },
+  incompletionStatusContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: COLORS.SECONDARY[50],
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+  },
+  incompletionStatusText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginLeft: 12,
+    flex: 1,
   },
 });

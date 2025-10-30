@@ -16,6 +16,8 @@ import { router } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { useMLService } from '../../hooks/api/useMLService';
+import { useRecommendationStore } from '../../stores/recommendationStore';
+import { trackingService } from '../../services/microservices/trackingService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { COLORS, FONTS } from '../../constants/colors';
@@ -26,14 +28,20 @@ export default function WorkoutsScreen() {
   const { user } = useAuth();
   const { getRecommendations } = useMLService();
 
+  // Use centralized recommendation store for consistent exercises across all pages
+  const {
+    recommendations: mlRecommendations,
+    isLoading: isLoadingRecommendations,
+    fetchRecommendations,
+  } = useRecommendationStore();
+
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // ML Recommendation data - unified like Dashboard
-  const [mlRecommendations, setMlRecommendations] = useState<any[]>([]);
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
+  const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false); // Track if today's workout is done
 
   useEffect(() => {
     loadWorkoutData();
@@ -50,23 +58,81 @@ export default function WorkoutsScreen() {
     return user.workoutDays.includes(todayName);
   };
 
+  /**
+   * Check if user has completed a workout TODAY
+   * If completed, hide exercises and show completion message
+   */
+  const checkTodayWorkoutCompletion = async () => {
+    if (!user) return;
+
+    try {
+      console.log('✅ [WORKOUTS] Checking if today\'s workout is completed...');
+
+      const userId = String(user.id);
+      const sessions = await trackingService.getSessions({
+        userId,
+        status: 'completed',
+        limit: 50, // Get recent sessions
+      });
+
+      // Get today's date range (start and end of day)
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      console.log(`📅 [WORKOUTS] Today range: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
+
+      // Check if any session was completed today
+      const todaySession = sessions.sessions.find((session: any) => {
+        const sessionDate = new Date(session.createdAt);
+        return sessionDate >= todayStart && sessionDate <= todayEnd;
+      });
+
+      if (todaySession) {
+        console.log(`✅ [WORKOUTS] Found completed workout today (session: ${todaySession.id})`);
+        setIsTodayWorkoutCompleted(true);
+      } else {
+        console.log(`📅 [WORKOUTS] No completed workout today`);
+        setIsTodayWorkoutCompleted(false);
+      }
+    } catch (error) {
+      console.error('❌ [WORKOUTS] Failed to check today\'s workout completion:', error);
+      setIsTodayWorkoutCompleted(false);
+    }
+  };
+
   const loadWorkoutData = async () => {
     if (!user) return;
 
     try {
       setIsLoading(true);
-      console.log('💪 [WORKOUTS] Loading ML recommendations (unified with Dashboard)...');
+      console.log('💪 [WORKOUTS] Fetching recommendations from store (unified with Dashboard)...');
 
-      // 🔥 CRITICAL: Use same approach as Dashboard for consistency
+      // Fetch from centralized store (will use cache if available)
       const userId = String(user.id);
-      const recommendations = await getRecommendations(userId, 8);
+      await fetchRecommendations(userId, getRecommendations);
 
-      console.log(`💪 [WORKOUTS] Loaded ${recommendations?.length || 0} recommendations (same as Dashboard)`);
-      setMlRecommendations(recommendations || []);
+      // Check if today's workout is completed
+      await checkTodayWorkoutCompletion();
+
+      console.log(`💪 [WORKOUTS] Store now has ${mlRecommendations?.length || 0} cached recommendations (same as Dashboard)`);
+
+      // 🐛 DEBUG: Log exercises from store to compare with other pages
+      if (mlRecommendations && mlRecommendations.length > 0) {
+        const fitnessLvl = user.fitnessLevel || 'beginner';
+        const count = fitnessLvl === 'beginner' ? 4 : fitnessLvl === 'intermediate' ? 5 : 6;
+        const firstExercises = mlRecommendations.slice(0, count);
+        console.log(`🐛 [WORKOUTS DEBUG] Fitness Level: ${fitnessLvl}, Count: ${count}`);
+        console.log(`🐛 [WORKOUTS DEBUG] First exercise: ${firstExercises[0]?.exercise_name} (ID: ${firstExercises[0]?.exercise_id})`);
+        console.log(`🐛 [WORKOUTS DEBUG] All ${count} exercises:`, firstExercises.map((e: any) => `${e.exercise_name} (${e.exercise_id})`));
+      }
 
       // Alert user if no recommendations were loaded
-      if (!recommendations || recommendations.length === 0) {
-        console.error('❌ [WORKOUTS] No recommendations loaded!');
+      if (!mlRecommendations || mlRecommendations.length === 0) {
+        console.error('❌ [WORKOUTS] No recommendations in store!');
         Alert.alert(
           'No Recommendations',
           'Unable to load exercise recommendations. Please check your internet connection and try again.',
@@ -185,9 +251,17 @@ export default function WorkoutsScreen() {
 
   const handleRefreshRecommendations = async () => {
     if (!user) return;
-    console.log('🔄 [WORKOUTS] REFRESH button pressed - reloading recommendations...');
+    console.log('🔄 [WORKOUTS] REFRESH button pressed - clearing cache and reloading...');
     setIsLoading(true);
-    await loadWorkoutData();
+
+    // Clear store cache and fetch fresh recommendations
+    const userId = String(user.id);
+    const { clearRecommendations } = useRecommendationStore.getState();
+    clearRecommendations();
+
+    await fetchRecommendations(userId, getRecommendations);
+    console.log('🔄 [WORKOUTS] Store refreshed with', mlRecommendations?.length || 0, 'new recommendations');
+
     setIsLoading(false);
     console.log('🔄 [WORKOUTS] REFRESH completed');
   };
@@ -365,7 +439,25 @@ export default function WorkoutsScreen() {
             Personalized Tabata workout sets tailored to your fitness level
           </Text>
 
-          {filteredRecommendations.length === 0 ? (
+          {isTodayWorkoutCompleted ? (
+            // Show completion message if today's workout is done
+            <View style={styles.completedWorkoutCard}>
+              <View style={styles.completedWorkoutIconContainer}>
+                <Ionicons name="checkmark-circle" size={64} color="#10B981" />
+              </View>
+              <Text style={styles.completedWorkoutTitle}>Today's Workout Complete!</Text>
+              <Text style={styles.completedWorkoutText}>
+                Excellent work! You've finished your Tabata workout for today.
+                Come back tomorrow for your next session.
+              </Text>
+              <View style={styles.completedWorkoutStats}>
+                <Ionicons name="trophy" size={20} color="#F59E0B" />
+                <Text style={styles.completedWorkoutStatsText}>
+                  Keep your streak going!
+                </Text>
+              </View>
+            </View>
+          ) : filteredRecommendations.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="fitness-outline" size={48} color="#9CA3AF" />
               <Text style={styles.emptyStateText}>No recommendations yet</Text>
@@ -1296,6 +1388,53 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  completedWorkoutCard: {
+    backgroundColor: '#F0FDF4', // Light green background
+    borderRadius: 16,
+    padding: 32,
+    marginHorizontal: 24,
+    marginTop: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  completedWorkoutIconContainer: {
+    marginBottom: 16,
+  },
+  completedWorkoutTitle: {
+    fontSize: 22,
+    fontFamily: FONTS.BOLD,
+    color: '#065F46',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  completedWorkoutText: {
+    fontSize: 15,
+    fontFamily: FONTS.REGULAR,
+    color: '#047857',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  completedWorkoutStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  completedWorkoutStatsText: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#065F46',
+    marginLeft: 8,
   },
   mlInsightsContainer: {
     marginTop: 8,

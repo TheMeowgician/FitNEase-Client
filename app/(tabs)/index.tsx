@@ -15,6 +15,7 @@ import { useMLService } from '../../hooks/api/useMLService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useProgressStore } from '../../stores/progressStore';
+import { useRecommendationStore } from '../../stores/recommendationStore';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
@@ -36,7 +37,12 @@ export default function HomeScreen() {
     fetchAllProgressData,
   } = useProgressStore();
 
-  const [recommendations, setRecommendations] = useState<any[]>([]);
+  // Use centralized recommendation store for consistent exercises across all pages
+  const {
+    recommendations,
+    isLoading: isLoadingRecommendations,
+    fetchRecommendations,
+  } = useRecommendationStore();
   const [achievements, setAchievements] = useState<any[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
@@ -46,6 +52,7 @@ export default function HomeScreen() {
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
   const [isRefreshingWorkouts, setIsRefreshingWorkouts] = useState(false);
+  const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false); // Track if today's workout is done
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
   useEffect(() => {
@@ -59,9 +66,56 @@ export default function HomeScreen() {
       if (user) {
         console.log('🔄 [DASHBOARD] Screen focused - refreshing progress from store');
         fetchAllProgressData(user.id);
+        checkTodayWorkoutCompletion(); // Check if today's workout is completed
       }
     }, [user, fetchAllProgressData])
   );
+
+  /**
+   * Check if user has completed a workout TODAY
+   * If completed, hide exercises and show completion message
+   */
+  const checkTodayWorkoutCompletion = async () => {
+    if (!user) return;
+
+    try {
+      console.log('✅ [DASHBOARD] Checking if today\'s workout is completed...');
+
+      const userId = String(user.id);
+      const sessions = await trackingService.getSessions({
+        userId,
+        status: 'completed',
+        limit: 50, // Get recent sessions
+      });
+
+      // Get today's date range (start and end of day)
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      console.log(`📅 [DASHBOARD] Today range: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
+
+      // Check if any session was completed today
+      const todaySession = sessions.sessions.find((session: any) => {
+        const sessionDate = new Date(session.createdAt);
+        return sessionDate >= todayStart && sessionDate <= todayEnd;
+      });
+
+      if (todaySession) {
+        console.log(`✅ [DASHBOARD] Found completed workout today (session: ${todaySession.id})`);
+        setIsTodayWorkoutCompleted(true);
+      } else {
+        console.log(`📅 [DASHBOARD] No completed workout today`);
+        setIsTodayWorkoutCompleted(false);
+      }
+    } catch (error) {
+      console.error('❌ [DASHBOARD] Failed to check today\'s workout completion:', error);
+      setIsTodayWorkoutCompleted(false);
+    }
+  };
 
   const loadDashboardData = async () => {
     if (!user) {
@@ -80,16 +134,14 @@ export default function HomeScreen() {
       setIsLoading(true);
       console.log('📊 [DASHBOARD] Loading dashboard data for user:', user.id);
 
-      // Try to get recommendations with better error handling
-      let recsResponse: any[] = [];
+      // Fetch recommendations from centralized store (will use cache if available)
       try {
-        console.log('📊 [DASHBOARD] Calling getRecommendations for user ID:', user.id, typeof user.id);
+        console.log('📊 [DASHBOARD] Fetching recommendations from store for user ID:', user.id);
         const userId = String(user.id); // Ensure it's a string
-        recsResponse = await getRecommendations(userId, 8);
-        console.log('📊 [DASHBOARD] Recommendations received:', recsResponse?.length || 0, 'exercises');
-        console.log('📊 [DASHBOARD] First recommendation:', recsResponse?.[0]);
+        await fetchRecommendations(userId, getRecommendations);
+        console.log('📊 [DASHBOARD] Store now has:', recommendations?.length || 0, 'cached recommendations');
       } catch (recError) {
-        console.error('📊 [DASHBOARD] Error getting recommendations:', recError);
+        console.error('📊 [DASHBOARD] Error fetching recommendations from store:', recError);
         // Only show alert if it's a critical error, not just empty results
         if (recError && (recError as any).message !== 'Empty response') {
           Alert.alert(
@@ -121,9 +173,22 @@ export default function HomeScreen() {
       // Fetch progress data from centralized store
       await fetchAllProgressData(user.id);
 
-      console.log(`📊 [DASHBOARD] Loaded ${recsResponse?.length || 0} recommendations for dashboard`);
+      // Check if today's workout is completed
+      await checkTodayWorkoutCompletion();
+
+      console.log(`📊 [DASHBOARD] Using ${recommendations?.length || 0} recommendations from store`);
       console.log('📊 [DASHBOARD] Weekly stats from store:', weeklyStats);
-      setRecommendations(recsResponse || []);
+
+      // 🐛 DEBUG: Log exercises from store to compare with other pages
+      if (recommendations && recommendations.length > 0) {
+        const fitnessLvl = user.fitnessLevel || 'beginner';
+        const count = fitnessLvl === 'beginner' ? 4 : fitnessLvl === 'intermediate' ? 5 : 6;
+        const firstExercises = recommendations.slice(0, count);
+        console.log(`🐛 [DASHBOARD DEBUG] Fitness Level: ${fitnessLvl}, Count: ${count}`);
+        console.log(`🐛 [DASHBOARD DEBUG] First exercise: ${firstExercises[0]?.exercise_name} (ID: ${firstExercises[0]?.exercise_id})`);
+        console.log(`🐛 [DASHBOARD DEBUG] All ${count} exercises:`, firstExercises.map((e: any) => `${e.exercise_name} (${e.exercise_id})`));
+      }
+
       setAchievements(achievementsResponse || []);
       setEngagementStats(engagementResponse);
 
@@ -139,11 +204,11 @@ export default function HomeScreen() {
       }
 
       // If still no recommendations, log warning but don't block UI
-      if (!recsResponse || recsResponse.length === 0) {
-        console.warn('📊 [DASHBOARD] No recommendations received - showing empty state');
+      if (!recommendations || recommendations.length === 0) {
+        console.warn('📊 [DASHBOARD] No recommendations in store - showing empty state');
         // Don't show alert - let the UI show the empty state instead
       } else {
-        console.log(`✅ [DASHBOARD] Successfully loaded ${recsResponse.length} recommendations!`);
+        console.log(`✅ [DASHBOARD] Successfully using ${recommendations.length} cached recommendations from store!`);
       }
     } catch (error) {
       console.error('📊 [DASHBOARD] Fatal error loading dashboard data:', error);
@@ -172,19 +237,21 @@ export default function HomeScreen() {
 
     try {
       setIsRefreshingWorkouts(true);
-      console.log('🔄 [DASHBOARD] Refreshing workout recommendations only');
+      console.log('🔄 [DASHBOARD] Refreshing workout recommendations - clearing cache');
 
-      // Only fetch new recommendations from ML service
+      // Clear store cache and fetch fresh recommendations
       const userId = String(user.id);
-      const recsResponse = await getRecommendations(userId, 8);
+      const { clearRecommendations } = useRecommendationStore.getState();
+      clearRecommendations();
 
-      console.log('🔄 [DASHBOARD] Received', recsResponse?.length || 0, 'new recommendations');
-      setRecommendations(recsResponse || []);
+      await fetchRecommendations(userId, getRecommendations);
 
-      if (!recsResponse || recsResponse.length === 0) {
+      console.log('🔄 [DASHBOARD] Store refreshed with', recommendations?.length || 0, 'new recommendations');
+
+      if (!recommendations || recommendations.length === 0) {
         console.warn('🔄 [DASHBOARD] No recommendations received');
       } else {
-        console.log('✅ [DASHBOARD] Successfully refreshed', recsResponse.length, 'recommendations!');
+        console.log('✅ [DASHBOARD] Successfully refreshed', recommendations.length, 'recommendations in store!');
       }
     } catch (error) {
       console.error('🔄 [DASHBOARD] Error refreshing recommendations:', error);
@@ -518,7 +585,25 @@ export default function HomeScreen() {
                 )}
               </TouchableOpacity>
             </View>
-            {recommendations.length > 0 ? (
+            {isTodayWorkoutCompleted ? (
+              // Show completion message if today's workout is done
+              <View style={styles.completedWorkoutCard}>
+                <View style={styles.completedWorkoutIconContainer}>
+                  <Ionicons name="checkmark-circle" size={64} color="#10B981" />
+                </View>
+                <Text style={styles.completedWorkoutTitle}>Today's Workout Complete!</Text>
+                <Text style={styles.completedWorkoutText}>
+                  Excellent work! You've finished your Tabata workout for today.
+                  Come back tomorrow for your next session.
+                </Text>
+                <View style={styles.completedWorkoutStats}>
+                  <Ionicons name="trophy" size={20} color="#F59E0B" />
+                  <Text style={styles.completedWorkoutStatsText}>
+                    Keep your streak going!
+                  </Text>
+                </View>
+              </View>
+            ) : recommendations.length > 0 ? (
               <TouchableOpacity
                 style={styles.workoutSetCard}
                 onPress={handleViewWorkoutSet}
@@ -1131,6 +1216,51 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  completedWorkoutCard: {
+    backgroundColor: '#F0FDF4', // Light green background
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  completedWorkoutIconContainer: {
+    marginBottom: 16,
+  },
+  completedWorkoutTitle: {
+    fontSize: 22,
+    fontFamily: FONTS.BOLD,
+    color: '#065F46',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  completedWorkoutText: {
+    fontSize: 15,
+    fontFamily: FONTS.REGULAR,
+    color: '#047857',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  completedWorkoutStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  completedWorkoutStatsText: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#065F46',
+    marginLeft: 8,
   },
   restDayCard: {
     backgroundColor: 'white',

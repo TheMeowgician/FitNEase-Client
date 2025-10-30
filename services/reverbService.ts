@@ -13,6 +13,7 @@ class ReverbService {
   private lastUserId: number | null = null;
   private maxRetriesReached: boolean = false;
   private connectionStateCallbacks: ((state: string) => void)[] = [];
+  private isIntentionalDisconnect: boolean = false; // Track manual disconnects
 
   /**
    * Initialize Reverb connection
@@ -73,6 +74,7 @@ class ReverbService {
       this.reconnectAttempts = 0;
       this.isReconnecting = false;
       this.maxRetriesReached = false;
+      this.isIntentionalDisconnect = false; // Reset flag on successful connection
 
       // Clear any pending reconnect timeout
       if (this.reconnectTimeout) {
@@ -94,19 +96,32 @@ class ReverbService {
       console.error('❌ Reverb connection error:', err);
     });
 
+    // 🔥 FIX: Only schedule reconnect on 'disconnected' event to prevent duplicate reconnection attempts
+    // WebSocket state transitions: connecting → unavailable → disconnected
+    // Scheduling reconnect on ALL states causes infinite loop
     this.pusher.connection.bind('disconnected', () => {
       console.log('🔌 Reverb disconnected');
-      this.scheduleReconnect(userId);
+
+      // Only auto-reconnect if this was NOT an intentional disconnect
+      if (!this.isIntentionalDisconnect) {
+        console.log('🔄 Unexpected disconnect detected - scheduling reconnect');
+        this.scheduleReconnect(userId);
+      } else {
+        console.log('✋ Intentional disconnect - not reconnecting');
+      }
     });
 
+    // 'unavailable' is a transient state that naturally transitions to 'disconnected'
+    // Do NOT schedule reconnect here - it causes duplicate attempts
     this.pusher.connection.bind('unavailable', () => {
-      console.log('⚠️ Reverb unavailable');
-      this.scheduleReconnect(userId);
+      console.log('⚠️ Reverb unavailable (transient state - will transition to disconnected)');
+      // Do nothing - 'disconnected' event will handle reconnection
     });
 
+    // 'failed' also transitions to 'disconnected', no need to reconnect here
     this.pusher.connection.bind('failed', () => {
-      console.error('❌ Reverb connection failed permanently');
-      this.scheduleReconnect(userId);
+      console.error('❌ Reverb connection failed (will transition to disconnected)');
+      // Do nothing - 'disconnected' event will handle reconnection
     });
 
     this.pusher.connection.bind('state_change', (states: any) => {
@@ -142,13 +157,22 @@ class ReverbService {
     this.reconnectTimeout = setTimeout(async () => {
       console.log('🔄 Attempting reconnect...');
       this.isReconnecting = false;
+      this.isIntentionalDisconnect = false; // Reset flag for auto-reconnect
 
       try {
         // Save current channels for resubscription
         const channelsToResubscribe = Array.from(this.channels.keys());
 
-        // Disconnect and reconnect
-        this.disconnect();
+        // Disconnect and reconnect (but don't trigger auto-reconnect)
+        if (this.pusher) {
+          this.channels.forEach((channel) => {
+            this.pusher?.unsubscribe(channel.name);
+          });
+          this.channels.clear();
+          this.pusher.disconnect();
+          this.pusher = null;
+        }
+
         await this.connect(userId);
 
         // Note: Channels will need to be resubscribed by WebSocketContext
@@ -181,13 +205,22 @@ class ReverbService {
    */
   public disconnect() {
     if (this.pusher) {
+      // Set flag to prevent auto-reconnect
+      this.isIntentionalDisconnect = true;
+
+      // Clear any pending reconnect timeout
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+
       this.channels.forEach((channel) => {
         this.pusher?.unsubscribe(channel.name);
       });
       this.channels.clear();
       this.pusher.disconnect();
       this.pusher = null;
-      console.log('Reverb disconnected');
+      console.log('✋ Reverb disconnected intentionally');
     }
   }
 
@@ -397,10 +430,11 @@ class ReverbService {
       return false;
     }
 
-    // Reset retry counters
+    // Reset retry counters and flags
     this.reconnectAttempts = 0;
     this.maxRetriesReached = false;
     this.isReconnecting = false;
+    this.isIntentionalDisconnect = false; // Allow reconnection
 
     // Clear any pending reconnect timeout
     if (this.reconnectTimeout) {
