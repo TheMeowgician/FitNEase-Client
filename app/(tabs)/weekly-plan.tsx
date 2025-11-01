@@ -56,9 +56,6 @@ export default function WeeklyPlanScreen() {
     fetchRecommendations,
   } = useRecommendationStore();
 
-  // Local state for weekly plan exercises (separate from dashboard)
-  const [weeklyExercises, setWeeklyExercises] = useState<any[]>([]);
-
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyWorkoutPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -109,53 +106,6 @@ export default function WeeklyPlanScreen() {
       }
     }, [user, fetchAllProgressData])
   );
-
-  // 🔥 NEW: Load ML recommendations for ALL workout days (to match Dashboard and Workouts)
-  useEffect(() => {
-    loadMLRecommendations();
-  }, [user]);
-
-  const loadMLRecommendations = async () => {
-    if (!user) return;
-
-    try {
-      const userId = String(user.id);
-      const fitnessLevel = user.fitnessLevel || 'beginner';
-      const exercisesPerDay = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
-      const totalWorkoutDays = userWorkoutDays.length;
-
-      // Calculate TOTAL exercises needed for ALL workout days (no repetition!)
-      const totalExercisesNeeded = totalWorkoutDays * exercisesPerDay;
-
-      console.log(`💪 [WEEKLY_PLAN] Fetching ${totalExercisesNeeded} exercises for ${totalWorkoutDays} workout days (${exercisesPerDay} per day)`);
-
-      // Request enough exercises for ALL workout days
-      const recommendationsResponse = await getRecommendations(userId, totalExercisesNeeded);
-
-      // Handle both array and object response types
-      const recs = Array.isArray(recommendationsResponse)
-        ? recommendationsResponse
-        : recommendationsResponse?.recommendations || [];
-
-      if (recs && recs.length > 0) {
-        console.log(`✅ [WEEKLY_PLAN] Received ${recs.length} unique exercises from ML (needed ${totalExercisesNeeded})`);
-
-        // ✅ SAVE to local state for weekly plan
-        setWeeklyExercises(recs);
-
-        // 🐛 DEBUG: Log exercise distribution
-        console.log(`🐛 [WEEKLY_PLAN DEBUG] Exercise distribution for ${totalWorkoutDays} days:`);
-        for (let i = 0; i < totalWorkoutDays; i++) {
-          const start = i * exercisesPerDay;
-          const end = Math.min(start + exercisesPerDay, recs.length);
-          const dayExercises = recs.slice(start, end);
-          console.log(`  Day ${i + 1}: Exercises ${start}-${end - 1} → ${dayExercises.map((e: any) => e.exercise_name).join(', ')}`);
-        }
-      }
-    } catch (error) {
-      console.error('❌ [WEEKLY_PLAN] Failed to load ML recommendations:', error);
-    }
-  };
 
   /**
    * Check which days this week have completed workouts
@@ -326,49 +276,11 @@ export default function WeeklyPlanScreen() {
     // 🎯 Use auto-detected completion status from completed workouts
     const completed = completedDays.has(day);
 
-    if (!weeklyPlan && weeklyExercises.length === 0) {
-      return {
-        name: dayNames[day],
-        fullName: dayFullNames[day],
-        workouts: [],
-        completed,
-        isRestDay: !isScheduledWorkoutDay,
-      };
-    }
-
-    // 🔥 FIXED: Use UNIQUE exercises for each workout day (no repetition)
-    let workouts: Exercise[];
-    if (isScheduledWorkoutDay && weeklyExercises.length > 0) {
-      // Use ML recommendations with SEQUENTIAL slicing to ensure NO repetition
-      const fitnessLevel = user?.fitnessLevel || 'beginner';
-      const exercisesPerDay = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
-
-      // Get the index of this day in the WORKOUT days list (not all days)
-      const workoutDayIndex = userWorkoutDays.indexOf(day);
-
-      // Calculate sequential start index for this workout day
-      // Day 0: exercises 0-3 (or 0-4 or 0-5)
-      // Day 1: exercises 4-7 (or 5-9 or 6-11) - NO OVERLAP!
-      // Day 2: exercises 8-11 (or 10-14 or 12-17) - NO OVERLAP!
-      const startIndex = workoutDayIndex * exercisesPerDay;
-      const endIndex = Math.min(startIndex + exercisesPerDay, weeklyExercises.length);
-
-      // Check if we have enough exercises
-      if (startIndex < weeklyExercises.length) {
-        workouts = weeklyExercises.slice(startIndex, endIndex).map(normalizeExercise);
-        console.log(`💪 [WEEKLY_PLAN] ${day.toUpperCase()}: Using exercises ${startIndex}-${endIndex-1} (Workout Day ${workoutDayIndex + 1}/${userWorkoutDays.length})`);
-      } else {
-        // Not enough exercises, fallback to empty
-        console.warn(`⚠️ [WEEKLY_PLAN] ${day.toUpperCase()}: Not enough exercises (need ${startIndex}+, have ${weeklyExercises.length})`);
-        workouts = [];
-      }
-    } else {
-      // Fallback to pre-planned exercises if ML recommendations not available
-      const planData = (weeklyPlan as any)?.plan_data || {};
-      const dayData = planData[day] || {};
-      const rawExercises = dayData.exercises || [];
-      workouts = rawExercises.map(normalizeExercise);
-    }
+    // 🎯 LONG-TERM FIX: Use backend plan as single source of truth
+    const planData = (weeklyPlan as any)?.plan_data || {};
+    const dayData = planData[day] || {};
+    const rawExercises = dayData.exercises || [];
+    const workouts: Exercise[] = rawExercises.map(normalizeExercise);
 
     // DEBUG: Log first exercise ID for each day to verify uniqueness
     if (workouts.length > 0) {
