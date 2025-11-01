@@ -358,6 +358,34 @@ export class MLService {
     }
   }
 
+  // Weekly workout plan generation (NEW)
+  public async generateWeeklyPlan(data: {
+    user_id: number;
+    workout_days: string[];
+    fitness_level: string;
+    target_muscle_groups?: string[];
+    goals?: string[];
+    time_constraints?: number;
+  }): Promise<any> {
+    try {
+      console.log('🗓️ [ML SERVICE] Generating weekly plan for user:', data.user_id);
+
+      const response = await apiClient.post<any>(
+        this.serviceName,
+        `${this.baseUrl}/generate-weekly-plan`,
+        data,
+        { timeout: 60000 } // 60 seconds for plan generation
+      );
+
+      console.log('✅ [ML SERVICE] Weekly plan generated successfully');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ [ML SERVICE] Weekly plan generation failed:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
   // Model management
   public async getModelHealth(): Promise<any> {
     try {
@@ -618,6 +646,17 @@ export const useMLService = () => {
     return mlService.getGroupWorkoutRecommendations(userIds, options);
   };
 
+  const generateWeeklyPlan = async (data: {
+    user_id: number;
+    workout_days: string[];
+    fitness_level: string;
+    target_muscle_groups?: string[];
+    goals?: string[];
+    time_constraints?: number;
+  }) => {
+    return mlService.generateWeeklyPlan(data);
+  };
+
   return {
     getRecommendations,
     getRecommendationsWithOptions,
@@ -625,6 +664,7 @@ export const useMLService = () => {
     getCollaborativeRecommendations,
     getWorkoutRecommendations,
     getGroupWorkoutRecommendations,
+    generateWeeklyPlan,
     updateBehaviorData,
     predictDifficulty,
     predictCompletion,
