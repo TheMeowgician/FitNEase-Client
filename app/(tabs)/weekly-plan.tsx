@@ -116,27 +116,45 @@ export default function WeeklyPlanScreen() {
     if (!user) return;
 
     try {
-      console.log('💪 [WEEKLY_PLAN] Fetching recommendations from store (unified with Dashboard and Workouts)');
-
       const userId = String(user.id);
       const fitnessLevel = user.fitnessLevel || 'beginner';
+      const exercisesPerDay = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+      const totalWorkoutDays = userWorkoutDays.length;
 
-      // Fetch from centralized store (will use cache if available)
-      await fetchRecommendations(userId, getRecommendations);
+      // Calculate TOTAL exercises needed for ALL workout days (no repetition!)
+      const totalExercisesNeeded = totalWorkoutDays * exercisesPerDay;
 
-      if (todayRecommendations && todayRecommendations.length > 0) {
-        // Calculate the number to display based on fitness level
-        const exercisesCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
-        const selectedExercises = todayRecommendations.slice(0, exercisesCount);
+      console.log(`💪 [WEEKLY_PLAN] Fetching ${totalExercisesNeeded} exercises for ${totalWorkoutDays} workout days (${exercisesPerDay} per day)`);
 
-        console.log(`✅ [WEEKLY_PLAN] Using ${todayRecommendations.length} cached recommendations from store`);
+      // Request enough exercises for ALL workout days
+      const recommendationsResponse = await getRecommendations(userId, {
+        num_recommendations: totalExercisesNeeded,
+      });
 
-        // 🐛 DEBUG: Log exercises from store to compare with Dashboard and Workouts
-        console.log(`🐛 [WEEKLY_PLAN DEBUG] Fitness Level: ${fitnessLevel}, Count: ${exercisesCount}`);
-        console.log(`🐛 [WEEKLY_PLAN DEBUG] First exercise: ${selectedExercises[0]?.exercise_name} (ID: ${selectedExercises[0]?.exercise_id})`);
+      if (recommendationsResponse && recommendationsResponse.recommendations) {
+        const recs = recommendationsResponse.recommendations;
+        console.log(`✅ [WEEKLY_PLAN] Received ${recs.length} unique exercises from ML (needed ${totalExercisesNeeded})`);
+
+        // Store in centralized recommendation store
+        const { setRecommendations } = useRecommendationStore.getState();
+        setRecommendations(
+          recs,
+          recommendationsResponse.algorithm,
+          recommendationsResponse.algorithm_display,
+          recommendationsResponse.weights
+        );
+
+        // 🐛 DEBUG: Log exercise distribution
+        console.log(`🐛 [WEEKLY_PLAN DEBUG] Exercise distribution for ${totalWorkoutDays} days:`);
+        for (let i = 0; i < totalWorkoutDays; i++) {
+          const start = i * exercisesPerDay;
+          const end = Math.min(start + exercisesPerDay, recs.length);
+          const dayExercises = recs.slice(start, end);
+          console.log(`  Day ${i + 1}: Exercises ${start}-${end - 1} → ${dayExercises.map(e => e.exercise_name).join(', ')}`);
+        }
       }
     } catch (error) {
-      console.error('❌ [WEEKLY_PLAN] Failed to load ML recommendations from store:', error);
+      console.error('❌ [WEEKLY_PLAN] Failed to load ML recommendations:', error);
     }
   };
 
@@ -319,33 +337,31 @@ export default function WeeklyPlanScreen() {
       };
     }
 
-    // 🔥 KEY CHANGE: Use DIFFERENT exercises for each workout day
+    // 🔥 FIXED: Use UNIQUE exercises for each workout day (no repetition)
     let workouts: Exercise[];
     if (isScheduledWorkoutDay && todayRecommendations.length > 0) {
-      // Use ML recommendations with rotation per day to ensure different exercises
+      // Use ML recommendations with SEQUENTIAL slicing to ensure NO repetition
       const fitnessLevel = user?.fitnessLevel || 'beginner';
       const exercisesPerDay = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
 
-      // Get day index (0-6) to determine which exercises to use
-      const dayIndex = daysOfWeek.indexOf(day);
+      // Get the index of this day in the WORKOUT days list (not all days)
+      const workoutDayIndex = userWorkoutDays.indexOf(day);
 
-      // Rotate exercises based on day index
-      // If we have 8 exercises total, we can create 2 different workout sets
-      // Days 0, 2, 4, 6 (Mon, Wed, Fri, Sun) get exercises 0-3/4/5
-      // Days 1, 3, 5 (Tue, Thu, Sat) get exercises 4-7
+      // Calculate sequential start index for this workout day
+      // Day 0: exercises 0-3 (or 0-4 or 0-5)
+      // Day 1: exercises 4-7 (or 5-9 or 6-11) - NO OVERLAP!
+      // Day 2: exercises 8-11 (or 10-14 or 12-17) - NO OVERLAP!
+      const startIndex = workoutDayIndex * exercisesPerDay;
+      const endIndex = Math.min(startIndex + exercisesPerDay, todayRecommendations.length);
 
-      const useSecondSet = dayIndex % 2 === 1; // Alternate between two sets
-
-      if (useSecondSet && todayRecommendations.length >= 8) {
-        // Use second half of recommendations (exercises 4-7)
-        const startIndex = 4;
-        const endIndex = Math.min(4 + exercisesPerDay, todayRecommendations.length);
+      // Check if we have enough exercises
+      if (startIndex < todayRecommendations.length) {
         workouts = todayRecommendations.slice(startIndex, endIndex).map(normalizeExercise);
-        console.log(`💪 [WEEKLY_PLAN] ${day.toUpperCase()}: Using exercises ${startIndex}-${endIndex-1} (SET B)`);
+        console.log(`💪 [WEEKLY_PLAN] ${day.toUpperCase()}: Using exercises ${startIndex}-${endIndex-1} (Workout Day ${workoutDayIndex + 1}/${userWorkoutDays.length})`);
       } else {
-        // Use first half of recommendations (exercises 0-3/4/5)
-        workouts = todayRecommendations.slice(0, exercisesPerDay).map(normalizeExercise);
-        console.log(`💪 [WEEKLY_PLAN] ${day.toUpperCase()}: Using exercises 0-${exercisesPerDay-1} (SET A)`);
+        // Not enough exercises, fallback to empty
+        console.warn(`⚠️ [WEEKLY_PLAN] ${day.toUpperCase()}: Not enough exercises (need ${startIndex}+, have ${todayRecommendations.length})`);
+        workouts = [];
       }
     } else {
       // Fallback to pre-planned exercises if ML recommendations not available
