@@ -127,22 +127,15 @@ export default function WeeklyPlanScreen() {
       console.log(`💪 [WEEKLY_PLAN] Fetching ${totalExercisesNeeded} exercises for ${totalWorkoutDays} workout days (${exercisesPerDay} per day)`);
 
       // Request enough exercises for ALL workout days
-      const recommendationsResponse = await getRecommendations(userId, {
-        num_recommendations: totalExercisesNeeded,
-      });
+      const recommendationsResponse = await getRecommendations(userId, totalExercisesNeeded);
 
-      if (recommendationsResponse && recommendationsResponse.recommendations) {
-        const recs = recommendationsResponse.recommendations;
+      // Handle both array and object response types
+      const recs = Array.isArray(recommendationsResponse)
+        ? recommendationsResponse
+        : recommendationsResponse?.recommendations || [];
+
+      if (recs && recs.length > 0) {
         console.log(`✅ [WEEKLY_PLAN] Received ${recs.length} unique exercises from ML (needed ${totalExercisesNeeded})`);
-
-        // Store in centralized recommendation store
-        const { setRecommendations } = useRecommendationStore.getState();
-        setRecommendations(
-          recs,
-          recommendationsResponse.algorithm,
-          recommendationsResponse.algorithm_display,
-          recommendationsResponse.weights
-        );
 
         // 🐛 DEBUG: Log exercise distribution
         console.log(`🐛 [WEEKLY_PLAN DEBUG] Exercise distribution for ${totalWorkoutDays} days:`);
@@ -150,7 +143,7 @@ export default function WeeklyPlanScreen() {
           const start = i * exercisesPerDay;
           const end = Math.min(start + exercisesPerDay, recs.length);
           const dayExercises = recs.slice(start, end);
-          console.log(`  Day ${i + 1}: Exercises ${start}-${end - 1} → ${dayExercises.map(e => e.exercise_name).join(', ')}`);
+          console.log(`  Day ${i + 1}: Exercises ${start}-${end - 1} → ${dayExercises.map((e: any) => e.exercise_name).join(', ')}`);
         }
       }
     } catch (error) {
