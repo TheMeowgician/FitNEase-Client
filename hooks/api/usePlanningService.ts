@@ -31,26 +31,37 @@ export const usePlanningService = () => {
       // Fetch current week's plan from Planning Service
       const response = await planningService.getCurrentWeeklyPlan(userId);
 
-      if (!response || !response.plan_data) {
-        console.warn('[PLANNING] No plan data found');
+      // Backend returns: { data: { plan: {...}, today: {...}, today_day_name: "..." } }
+      // The response from planningService.getCurrentWeeklyPlan is response.data
+      const planData = response?.data || response;
+
+      if (!planData) {
+        console.warn('[PLANNING] No response data found');
         return [];
       }
 
-      // Get today's day of week
-      const today = getTodayDay();
-      console.log('[PLANNING] Today is:', today);
+      // Get today's day name from the response
+      const todayDayName = planData.today_day_name;
+      console.log('[PLANNING] Today is:', todayDayName);
 
-      // Get today's exercises from the plan
-      const todayPlan = response.plan_data[today];
+      // Get today's exercises directly from the "today" field in the response
+      const todayPlan = planData.today;
 
-      if (!todayPlan || todayPlan.rest_day) {
+      if (!todayPlan) {
+        console.warn('[PLANNING] No today plan found in response');
+        return [];
+      }
+
+      if (todayPlan.rest_day) {
         console.log('[PLANNING] Today is a rest day');
         return [];
       }
 
       const exercises = todayPlan.exercises || [];
-      console.log(`[PLANNING] Found ${exercises.length} exercises for today (${today})`);
-      console.log('[PLANNING] First exercise:', exercises[0]?.exercise_name, `(ID: ${exercises[0]?.exercise_id})`);
+      console.log(`[PLANNING] Found ${exercises.length} exercises for today (${todayDayName})`);
+      if (exercises.length > 0) {
+        console.log('[PLANNING] First exercise:', exercises[0]?.exercise_name, `(ID: ${exercises[0]?.exercise_id})`);
+      }
 
       return exercises;
     } catch (err) {
