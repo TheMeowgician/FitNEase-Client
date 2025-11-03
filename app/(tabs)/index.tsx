@@ -22,6 +22,7 @@ import { commsService } from '../../services/microservices/commsService';
 import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
+import { getAlgorithmDisplayName } from '../../utils/mlUtils';
 
 // ====================================================================
 // 🧪 TESTING FLAG: Daily Workout Limit Control
@@ -48,7 +49,6 @@ export default function HomeScreen() {
 
   // 🎯 NEW: Use today's exercises from backend weekly plan (single source of truth)
   const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [algorithmDisplay] = useState<string>('Backend Plan'); // Display name for the algorithm
   const [achievements, setAchievements] = useState<any[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
@@ -646,8 +646,8 @@ export default function HomeScreen() {
                       exercise={ex}
                       index={idx}
                       showCompletionIcon={true}
-                      showMLBadge={true} // 🧪 Testing: Show ML model type
-                      mlModelType={algorithmDisplay || 'Hybrid'} // Dynamic: shows actual algorithm
+                      showMLBadge={true} // Show ML model type (hybrid, content-based, etc.)
+                      mlModelType={getAlgorithmDisplayName(ex.recommendation_type)} // Get algorithm from exercise data
                     />
                   ))}
                   {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) > 3 && (

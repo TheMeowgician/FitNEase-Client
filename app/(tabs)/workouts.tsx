@@ -20,6 +20,7 @@ import { trackingService } from '../../services/microservices/trackingService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { COLORS, FONTS } from '../../constants/colors';
+import { getAlgorithmDisplayName } from '../../utils/mlUtils';
 
 type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
 
@@ -38,8 +39,6 @@ export default function WorkoutsScreen() {
 
   // State for today's exercises from backend weekly plan
   const [mlRecommendations, setMlRecommendations] = useState<any[]>([]);
-  const [algorithm] = useState<string>('backend_plan');
-  const [algorithmDisplay] = useState<string>('Backend Plan');
 
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -503,8 +502,8 @@ export default function WorkoutsScreen() {
                         exercise={ex}
                         index={idx}
                         showCompletionIcon={true}
-                        showMLBadge={true} // 🧪 Testing: Show ML model type
-                        mlModelType={algorithmDisplay || 'Hybrid'} // Dynamic: shows actual algorithm
+                        showMLBadge={true} // Show ML model type (hybrid, content-based, etc.)
+                        mlModelType={getAlgorithmDisplayName(ex.recommendation_type)} // Get algorithm from exercise data
                       />
                     ))}
                     {set.recs.length > 3 && (
