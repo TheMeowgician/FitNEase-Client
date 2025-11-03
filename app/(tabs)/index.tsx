@@ -48,6 +48,7 @@ export default function HomeScreen() {
 
   // 🎯 NEW: Use today's exercises from backend weekly plan (single source of truth)
   const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [algorithmDisplay] = useState<string>('Backend Plan'); // Display name for the algorithm
   const [achievements, setAchievements] = useState<any[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
