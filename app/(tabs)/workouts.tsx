@@ -15,8 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { useMLService } from '../../hooks/api/useMLService';
-import { useRecommendationStore } from '../../stores/recommendationStore';
+import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
@@ -35,17 +34,12 @@ const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKO
 
 export default function WorkoutsScreen() {
   const { user } = useAuth();
-  const { getRecommendations } = useMLService();
+  const { getTodayExercises } = usePlanningService();
 
-  // Use centralized recommendation store for consistent exercises across all pages
-  const {
-    recommendations: mlRecommendations,
-    algorithm,
-    algorithmDisplay,
-    weights,
-    isLoading: isLoadingRecommendations,
-    fetchRecommendations,
-  } = useRecommendationStore();
+  // State for today's exercises from backend weekly plan
+  const [mlRecommendations, setMlRecommendations] = useState<any[]>([]);
+  const [algorithm] = useState<string>('backend_plan');
+  const [algorithmDisplay] = useState<string>('Backend Plan');
 
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,38 +122,30 @@ export default function WorkoutsScreen() {
 
     try {
       setIsLoading(true);
-      console.log('💪 [WORKOUTS] Fetching recommendations from store (unified with Dashboard)...');
+      console.log('💪 [WORKOUTS] Fetching today\'s exercises from backend plan...');
 
-      // Fetch from centralized store (will use cache if available)
       const userId = String(user.id);
-      await fetchRecommendations(userId, getRecommendations);
+      const todayExercises = await getTodayExercises(userId);
+      setMlRecommendations(todayExercises);
+
+      console.log(`💪 [WORKOUTS] Got ${todayExercises?.length || 0} exercises for today from backend plan`);
 
       // Check if today's workout is completed
       await checkTodayWorkoutCompletion();
 
-      console.log(`💪 [WORKOUTS] Store now has ${mlRecommendations?.length || 0} cached recommendations (same as Dashboard)`);
-
-      // 🐛 DEBUG: Log exercises from store to compare with other pages
-      if (mlRecommendations && mlRecommendations.length > 0) {
+      // 🐛 DEBUG: Log exercises to compare with other pages
+      if (todayExercises && todayExercises.length > 0) {
         const fitnessLvl = user.fitnessLevel || 'beginner';
         const count = fitnessLvl === 'beginner' ? 4 : fitnessLvl === 'intermediate' ? 5 : 6;
-        const firstExercises = mlRecommendations.slice(0, count);
+        const firstExercises = todayExercises.slice(0, count);
         console.log(`🐛 [WORKOUTS DEBUG] Fitness Level: ${fitnessLvl}, Count: ${count}`);
         console.log(`🐛 [WORKOUTS DEBUG] First exercise: ${firstExercises[0]?.exercise_name} (ID: ${firstExercises[0]?.exercise_id})`);
         console.log(`🐛 [WORKOUTS DEBUG] All ${count} exercises:`, firstExercises.map((e: any) => `${e.exercise_name} (${e.exercise_id})`));
       }
 
-      // Alert user if no recommendations were loaded
-      if (!mlRecommendations || mlRecommendations.length === 0) {
-        console.error('❌ [WORKOUTS] No recommendations in store!');
-        Alert.alert(
-          'No Recommendations',
-          'Unable to load exercise recommendations. Please check your internet connection and try again.',
-          [
-            { text: 'Retry', onPress: () => loadWorkoutData() },
-            { text: 'OK', style: 'cancel' }
-          ]
-        );
+      // Alert user if no exercises were loaded
+      if (!todayExercises || todayExercises.length === 0) {
+        console.log('📅 [WORKOUTS] No exercises scheduled for today (might be rest day)');
       }
     } catch (error) {
       console.error('❌ [WORKOUTS] Fatal error loading workout data:', error);
@@ -167,7 +153,7 @@ export default function WorkoutsScreen() {
       // Show error to user
       Alert.alert(
         'Error Loading Workouts',
-        'An unexpected error occurred while loading recommendations. Please try again.',
+        'An unexpected error occurred while loading your workout plan. Please try again.',
         [
           { text: 'Retry', onPress: () => loadWorkoutData() },
           { text: 'Cancel', style: 'cancel' }
@@ -270,19 +256,21 @@ export default function WorkoutsScreen() {
 
   const handleRefreshRecommendations = async () => {
     if (!user) return;
-    console.log('🔄 [WORKOUTS] REFRESH button pressed - clearing cache and reloading...');
+    console.log('🔄 [WORKOUTS] REFRESH button pressed - reloading from backend...');
     setIsLoading(true);
 
-    // Clear store cache and fetch fresh recommendations
-    const userId = String(user.id);
-    const { clearRecommendations } = useRecommendationStore.getState();
-    clearRecommendations();
-
-    await fetchRecommendations(userId, getRecommendations);
-    console.log('🔄 [WORKOUTS] Store refreshed with', mlRecommendations?.length || 0, 'new recommendations');
-
-    setIsLoading(false);
-    console.log('🔄 [WORKOUTS] REFRESH completed');
+    try {
+      const userId = String(user.id);
+      const todayExercises = await getTodayExercises(userId);
+      setMlRecommendations(todayExercises);
+      console.log('🔄 [WORKOUTS] Refreshed with', todayExercises?.length || 0, 'exercises from backend plan');
+    } catch (error) {
+      console.error('❌ [WORKOUTS] Error refreshing:', error);
+      Alert.alert('Error', 'Failed to refresh workouts. Please try again.');
+    } finally {
+      setIsLoading(false);
+      console.log('🔄 [WORKOUTS] REFRESH completed');
+    }
   };
 
   // Add missing function definitions

@@ -12,10 +12,10 @@ import ProgressionCard from '../../components/ProgressionCard';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMLService } from '../../hooks/api/useMLService';
+import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useProgressStore } from '../../stores/progressStore';
-import { useRecommendationStore } from '../../stores/recommendationStore';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
@@ -34,9 +34,9 @@ const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKO
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
-  const { getRecommendations } = useMLService();
   const { getUserStats, getUserAchievements } = useEngagementService();
   const { unreadCount } = useNotifications();
+  const { getTodayExercises } = usePlanningService();
 
   // Use centralized progress store
   const {
@@ -46,15 +46,8 @@ export default function HomeScreen() {
     fetchAllProgressData,
   } = useProgressStore();
 
-  // Use centralized recommendation store for consistent exercises across all pages
-  const {
-    recommendations,
-    algorithm,
-    algorithmDisplay,
-    weights,
-    isLoading: isLoadingRecommendations,
-    fetchRecommendations,
-  } = useRecommendationStore();
+  // 🎯 NEW: Use today's exercises from backend weekly plan (single source of truth)
+  const [recommendations, setRecommendations] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
@@ -153,14 +146,18 @@ export default function HomeScreen() {
       setIsLoading(true);
       console.log('📊 [DASHBOARD] Loading dashboard data for user:', user.id);
 
-      // Fetch recommendations from centralized store (will use cache if available)
+      // 🎯 NEW: Fetch today's exercises from backend weekly plan
       try {
-        console.log('📊 [DASHBOARD] Fetching recommendations from store for user ID:', user.id);
-        const userId = String(user.id); // Ensure it's a string
-        await fetchRecommendations(userId, getRecommendations);
-        console.log('📊 [DASHBOARD] Store now has:', recommendations?.length || 0, 'cached recommendations');
+        console.log('📊 [DASHBOARD] Fetching today\'s exercises from weekly plan for user ID:', user.id);
+        const todayExercises = await getTodayExercises(user.id);
+        setRecommendations(todayExercises);
+        console.log('📊 [DASHBOARD] Got', todayExercises?.length || 0, 'exercises for today from backend plan');
+
+        if (todayExercises && todayExercises.length > 0) {
+          console.log('📊 [DASHBOARD] First exercise:', todayExercises[0]?.exercise_name, `(ID: ${todayExercises[0]?.exercise_id})`);
+        }
       } catch (recError) {
-        console.error('📊 [DASHBOARD] Error fetching recommendations from store:', recError);
+        console.error('📊 [DASHBOARD] Error fetching today\'s exercises:', recError);
         // Only show alert if it's a critical error, not just empty results
         if (recError && (recError as any).message !== 'Empty response') {
           Alert.alert(
@@ -256,19 +253,16 @@ export default function HomeScreen() {
 
     try {
       setIsRefreshingWorkouts(true);
-      console.log('🔄 [DASHBOARD] Refreshing workout recommendations - clearing cache');
+      console.log('🔄 [DASHBOARD] Refreshing workout recommendations from backend plan');
 
-      // Clear store cache and fetch fresh recommendations
-      const userId = String(user.id);
-      const { clearRecommendations } = useRecommendationStore.getState();
-      clearRecommendations();
+      // 🎯 NEW: Fetch fresh exercises from backend weekly plan
+      const todayExercises = await getTodayExercises(user.id);
+      setRecommendations(todayExercises);
 
-      await fetchRecommendations(userId, getRecommendations);
+      console.log('🔄 [DASHBOARD] Backend plan refreshed with', todayExercises?.length || 0, 'exercises for today');
 
-      console.log('🔄 [DASHBOARD] Store refreshed with', recommendations?.length || 0, 'new recommendations');
-
-      if (!recommendations || recommendations.length === 0) {
-        console.warn('🔄 [DASHBOARD] No recommendations received');
+      if (!todayExercises || todayExercises.length === 0) {
+        console.warn('🔄 [DASHBOARD] No exercises received for today');
       } else {
         console.log('✅ [DASHBOARD] Successfully refreshed', recommendations.length, 'recommendations in store!');
       }

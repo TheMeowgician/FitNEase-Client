@@ -353,6 +353,20 @@ export class PlanningService {
       throw new Error(error.message || 'Failed to mark day as completed');
     }
   }
+
+  /**
+   * Get current weekly plan with the new format (plan_data with exercises per day)
+   * This matches the actual API response format
+   */
+  public async getCurrentWeeklyPlan(userId: number | string): Promise<any> {
+    try {
+      const response = await apiClient.get<any>('planning', `/api/planning/weekly-plans/current?user_id=${userId}`);
+      return response.data || response; // Handle both wrapped and unwrapped responses
+    } catch (error: any) {
+      console.error('[Planning Service] Failed to get current weekly plan:', error);
+      throw new Error(error.message || 'Failed to get current weekly plan');
+    }
+  }
 }
 
 export const planningService = new PlanningService();
