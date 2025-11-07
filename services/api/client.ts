@@ -111,7 +111,22 @@ export class APIClient {
       async (error: AxiosError) => {
         const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Check if this is an auth endpoint that should NOT trigger token refresh
+        const authExcludedEndpoints = [
+          '/api/auth/login',
+          '/api/auth/register',
+          '/api/auth/refresh',
+          '/api/auth/verify-email',
+          '/api/auth/forgot-password',
+          '/api/auth/reset-password',
+          '/api/auth/resend-verification'
+        ];
+
+        const isAuthExcluded = authExcludedEndpoints.some(endpoint =>
+          originalRequest.url?.includes(endpoint)
+        );
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isAuthExcluded) {
           console.log(`🔄 [${serviceName}] Got 401, attempting token refresh...`);
           originalRequest._retry = true;
 
@@ -129,6 +144,11 @@ export class APIClient {
             await this.clearTokens();
             throw new Error('Session expired. Please log in again.');
           }
+        }
+
+        // For auth excluded endpoints, just pass through the original error
+        if (isAuthExcluded && error.response?.status === 401) {
+          console.log(`🔐 [${serviceName}] Auth endpoint returned 401 (likely invalid credentials)`);
         }
 
         throw this.handleError(error, serviceName);

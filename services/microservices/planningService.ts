@@ -279,6 +279,12 @@ export class PlanningService {
         data: WeeklyWorkoutPlan;
         regenerated: boolean;
       }>('planning', '/api/planning/weekly-plans/generate', request);
+
+      // Transform the data before returning
+      if (response.data && response.data.data) {
+        response.data.data = this.transformWeeklyPlanData(response.data.data) as WeeklyWorkoutPlan;
+      }
+
       return response.data;
     } catch (error: any) {
       console.error('[Planning Service] Failed to generate weekly plan:', error);
@@ -300,6 +306,12 @@ export class PlanningService {
         message: string;
         data: WeeklyWorkoutPlan | null;
       }>('planning', `/api/planning/weekly-plans/current?user_id=${userId}`);
+
+      // Transform the data before returning
+      if (response.data && response.data.data) {
+        response.data.data = this.transformWeeklyPlanData(response.data.data) as WeeklyWorkoutPlan;
+      }
+
       return response.data;
     } catch (error: any) {
       console.error('[Planning Service] Failed to get current week plan:', error);
@@ -322,6 +334,12 @@ export class PlanningService {
         message: string;
         data: WeeklyWorkoutPlan | null;
       }>('planning', `/api/planning/weekly-plans/week/${date}?user_id=${userId}`);
+
+      // Transform the data before returning
+      if (response.data && response.data.data) {
+        response.data.data = this.transformWeeklyPlanData(response.data.data) as WeeklyWorkoutPlan;
+      }
+
       return response.data;
     } catch (error: any) {
       console.error('[Planning Service] Failed to get week plan:', error);
@@ -347,11 +365,65 @@ export class PlanningService {
       }>('planning', `/api/planning/weekly-plans/${planId}/complete-day`, {
         day
       });
+
+      // Transform the data before returning
+      if (response.data && response.data.data) {
+        response.data.data = this.transformWeeklyPlanData(response.data.data) as WeeklyWorkoutPlan;
+      }
+
       return response.data;
     } catch (error: any) {
       console.error('[Planning Service] Failed to complete day workout:', error);
       throw new Error(error.message || 'Failed to mark day as completed');
     }
+  }
+
+  /**
+   * Transform exercise data from backend format to client format
+   * Backend sends: { name, muscle_group, exercise_id, difficulty, ... }
+   * Client expects: { exercise_name, target_muscle_group, exercise_id, difficulty_level, ... }
+   */
+  private transformExerciseData(exercise: any): any {
+    if (!exercise) return exercise;
+
+    return {
+      ...exercise,
+      // Map backend field names to client field names
+      exercise_name: exercise.exercise_name || exercise.name,
+      target_muscle_group: exercise.target_muscle_group || exercise.muscle_group,
+      difficulty_level: exercise.difficulty_level || (
+        exercise.difficulty === 'beginner' ? 1 :
+        exercise.difficulty === 'intermediate' ? 2 :
+        exercise.difficulty === 'advanced' ? 3 : 1
+      ),
+      estimated_calories_burned: exercise.estimated_calories_burned ||
+                                 exercise.estimated_calories_per_minute * 4 || 0,
+      // Keep original fields for compatibility
+      name: exercise.name || exercise.exercise_name,
+      muscle_group: exercise.muscle_group || exercise.target_muscle_group
+    };
+  }
+
+  /**
+   * Transform weekly plan data to ensure exercises have correct field names
+   */
+  private transformWeeklyPlanData(planData: any): any {
+    if (!planData || !planData.plan_data) return planData;
+
+    const transformedPlanData = { ...planData.plan_data };
+
+    // Transform exercises in each day
+    Object.keys(transformedPlanData).forEach(day => {
+      const dayData = transformedPlanData[day];
+      if (dayData && dayData.exercises && Array.isArray(dayData.exercises)) {
+        dayData.exercises = dayData.exercises.map((ex: any) => this.transformExerciseData(ex));
+      }
+    });
+
+    return {
+      ...planData,
+      plan_data: transformedPlanData
+    };
   }
 
   /**
@@ -361,10 +433,54 @@ export class PlanningService {
   public async getCurrentWeeklyPlan(userId: number | string): Promise<any> {
     try {
       const response = await apiClient.get<any>('planning', `/api/planning/weekly-plans/current?user_id=${userId}`);
-      return response.data || response; // Handle both wrapped and unwrapped responses
+      const rawData = response.data || response;
+
+      // Transform the plan data to ensure field name consistency
+      if (rawData && rawData.data && rawData.data.plan) {
+        rawData.data.plan = this.transformWeeklyPlanData(rawData.data.plan);
+      }
+
+      return rawData;
     } catch (error: any) {
       console.error('[Planning Service] Failed to get current weekly plan:', error);
       throw new Error(error.message || 'Failed to get current weekly plan');
+    }
+  }
+
+  /**
+   * Adapt existing weekly plan when workout days change
+   * Intelligently reallocates exercises from removed days to new days
+   * @param planId - The weekly plan ID
+   * @param adaptationRequest - Details about the day changes
+   */
+  public async adaptWeeklyPlan(
+    planId: number,
+    adaptationRequest: {
+      old_days: string[];
+      new_days: string[];
+      preserve_completed?: boolean;
+      adaptation_strategy?: 'reallocate' | 'regenerate' | 'hybrid';
+    }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data: WeeklyWorkoutPlan;
+  }> {
+    try {
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+        data: WeeklyWorkoutPlan;
+      }>('planning', `/api/planning/weekly-plans/${planId}/adapt`, {
+        old_days: adaptationRequest.old_days,
+        new_days: adaptationRequest.new_days,
+        preserve_completed: adaptationRequest.preserve_completed ?? true,
+        adaptation_strategy: adaptationRequest.adaptation_strategy ?? 'reallocate',
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('[Planning Service] Failed to adapt weekly plan:', error);
+      throw new Error(error.message || 'Failed to adapt weekly plan');
     }
   }
 }

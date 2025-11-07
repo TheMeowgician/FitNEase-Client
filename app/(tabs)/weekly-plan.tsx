@@ -193,6 +193,25 @@ export default function WeeklyPlanScreen() {
     setRefreshing(false);
   };
 
+  /**
+   * Detect if weekly plan is stale (workout days changed since plan generation)
+   * Returns true if user's current workout days don't match the plan's snapshot
+   */
+  const detectPlanStaleness = (plan: WeeklyWorkoutPlan): boolean => {
+    if (!user?.workoutDays || !plan.user_preferences_snapshot) return false;
+
+    const currentDays = [...user.workoutDays].sort();
+    const snapshotDays = [...(plan.user_preferences_snapshot.preferred_workout_days || [])].sort();
+
+    const isStale = JSON.stringify(currentDays) !== JSON.stringify(snapshotDays);
+
+    if (isStale) {
+      console.warn('[WEEKLY_PLAN] Plan is stale! Current days:', currentDays, 'Snapshot days:', snapshotDays);
+    }
+
+    return isStale;
+  };
+
   const handleGeneratePlan = async (regenerate: boolean = false) => {
     if (!user?.id) return;
 
@@ -455,6 +474,34 @@ export default function WeeklyPlanScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.PRIMARY[600]} />
         }
       >
+        {/* Warning Banner: Stale Plan Detection */}
+        {weeklyPlan && detectPlanStaleness(weeklyPlan) && (
+          <View style={styles.warningBanner}>
+            <View style={styles.warningContent}>
+              <Ionicons name="warning" size={24} color={COLORS.WARNING[600]} />
+              <View style={styles.warningTextContainer}>
+                <Text style={styles.warningTitle}>Schedule Changed</Text>
+                <Text style={styles.warningDescription}>
+                  Your workout days have changed. This plan was created for your old schedule.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleGeneratePlan(true)}
+              style={styles.warningButton}
+            >
+              <LinearGradient
+                colors={[COLORS.WARNING[500], COLORS.WARNING[600]] as [string, string]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.warningButtonGradient}
+              >
+                <Text style={styles.warningButtonText}>Update Plan</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* This Week's Progress Stats (same as Dashboard) */}
         <View style={styles.statsSection}>
           <View style={styles.statsSectionHeader}>
@@ -1227,5 +1274,55 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[600],
     marginLeft: 12,
     flex: 1,
+  },
+  // Warning Banner Styles
+  warningBanner: {
+    backgroundColor: COLORS.WARNING[50],
+    borderWidth: 2,
+    borderColor: COLORS.WARNING[400],
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: COLORS.WARNING[600],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  warningContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  warningTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  warningTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.WARNING[900],
+    marginBottom: 4,
+  },
+  warningDescription: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.WARNING[800],
+    lineHeight: 20,
+  },
+  warningButton: {
+    width: '100%',
+  },
+  warningButtonGradient: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warningButtonText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });
