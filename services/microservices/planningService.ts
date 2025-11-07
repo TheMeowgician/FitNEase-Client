@@ -440,6 +440,13 @@ export class PlanningService {
         rawData.data.plan = this.transformWeeklyPlanData(rawData.data.plan);
       }
 
+      // Transform today's exercises - this is what's displayed on dashboard and workouts pages
+      if (rawData && rawData.data && rawData.data.today && rawData.data.today.exercises) {
+        rawData.data.today.exercises = rawData.data.today.exercises.map(
+          (ex: any) => this.transformExerciseData(ex)
+        );
+      }
+
       return rawData;
     } catch (error: any) {
       console.error('[Planning Service] Failed to get current weekly plan:', error);
