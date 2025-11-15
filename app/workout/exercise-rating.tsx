@@ -15,6 +15,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS, FONTS } from '../../constants/colors';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
+import { ratingService } from '../../services/microservices/ratingService';
+import { useProgressStore } from '../../stores/progressStore';
 
 /**
  * Exercise Rating Screen
@@ -48,6 +50,7 @@ interface ExerciseRating {
 
 export default function ExerciseRatingScreen() {
   const { user } = useAuth();
+  const { refreshAfterWorkout } = useProgressStore();
   const params = useLocalSearchParams();
 
   // Parse parameters
@@ -156,9 +159,6 @@ export default function ExerciseRatingScreen() {
         userId: user?.id,
       });
 
-      // Import rating service (we'll create this next)
-      const { ratingService } = await import('../../services/microservices/ratingService');
-
       // Submit batch ratings
       await ratingService.submitExerciseRatingsBatch({
         user_id: Number(user?.id),
@@ -188,8 +188,16 @@ export default function ExerciseRatingScreen() {
     setShowProgressModal(true);
   };
 
-  const handleProgressModalClose = () => {
+  const handleProgressModalClose = async () => {
     setShowProgressModal(false);
+
+    // Refresh progress store to update dashboard and progress page
+    if (user?.id) {
+      console.log('🔄 [RATING MODAL CLOSE] Refreshing progress store...');
+      await refreshAfterWorkout(user.id);
+      console.log('✅ [RATING MODAL CLOSE] Progress store refreshed');
+    }
+
     // Navigate to home tab and replace history to prevent going back
     router.replace('/(tabs)');
   };

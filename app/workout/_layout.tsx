@@ -224,6 +224,13 @@ export default function WorkoutLayout() {
           animation: 'slide_from_bottom',
         }}
       />
+      <Stack.Screen
+        name="exercise-rating"
+        options={{
+          headerShown: false, // Hide header for seamless rating experience
+          gestureEnabled: false, // Prevent swiping back to workout
+        }}
+      />
     </Stack>
   );
 }
