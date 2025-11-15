@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "FitNEase needs camera access for video workouts with friends.",
+        "NSMicrophoneUsageDescription": "FitNEase needs microphone access for video workouts with friends."
+      }
     },
     "android": {
       "package": "com.fitnease.app",
@@ -25,7 +29,10 @@
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
-        "VIBRATE"
+        "VIBRATE",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -47,6 +54,13 @@
         }
       ],
       "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow FitNEase to access your camera for video workouts.",
+          "microphonePermission": "Allow FitNEase to access your microphone for video workouts."
+        }
+      ],
       [
         "expo-build-properties",
         {
