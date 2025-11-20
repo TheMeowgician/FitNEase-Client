@@ -131,6 +131,8 @@ export default function WorkoutSessionScreen() {
         const currentX = (pan.x as any)._value;
         const currentY = (pan.y as any)._value;
 
+        console.log('📹 [DRAG] Release position:', { currentX, currentY });
+
         // Screen dimensions
         const screenWidth = Dimensions.get('window').width;
         const screenHeight = Dimensions.get('window').height;
@@ -142,33 +144,57 @@ export default function WorkoutSessionScreen() {
         let finalY = currentY;
 
         // Horizontal boundaries
-        if (finalX < 20) finalX = 20;
-        if (finalX > screenWidth - videoWidth - 20) finalX = screenWidth - videoWidth - 20;
+        const minX = 20;
+        const maxX = screenWidth - videoWidth - 20;
+        if (finalX < minX) finalX = minX;
+        if (finalX > maxX) finalX = maxX;
 
         // Vertical boundaries
-        if (finalY < 80) finalY = 80; // Below status bar
-        if (finalY > screenHeight - videoHeight - 120) finalY = screenHeight - videoHeight - 120; // Above controls
+        const minY = 80; // Below status bar
+        const maxY = screenHeight - videoHeight - 120; // Above controls
+        if (finalY < minY) finalY = minY;
+        if (finalY > maxY) finalY = maxY;
 
-        // Snap to nearest corner
-        const snapThreshold = 100;
-        const distanceToLeft = finalX;
-        const distanceToRight = screenWidth - videoWidth - finalX;
-        const distanceToTop = finalY;
-        const distanceToBottom = screenHeight - videoHeight - finalY;
+        // Snap to nearest corner with LARGER threshold
+        const snapThreshold = 150; // Increased from 100
+        const distanceToLeft = finalX - minX;
+        const distanceToRight = maxX - finalX;
+        const distanceToTop = finalY - minY;
+        const distanceToBottom = maxY - finalY;
 
-        // Find closest edge
-        const minHorizontal = Math.min(distanceToLeft, distanceToRight);
-        const minVertical = Math.min(distanceToTop, distanceToBottom);
+        console.log('📹 [DRAG] Distances:', {
+          left: distanceToLeft,
+          right: distanceToRight,
+          top: distanceToTop,
+          bottom: distanceToBottom,
+          threshold: snapThreshold,
+        });
+
+        let didSnap = false;
 
         // Snap horizontally if close to edge
-        if (minHorizontal < snapThreshold) {
-          finalX = distanceToLeft < distanceToRight ? 20 : screenWidth - videoWidth - 20;
+        if (distanceToLeft < snapThreshold) {
+          finalX = minX;
+          didSnap = true;
+          console.log('📹 [SNAP] Snapped to LEFT edge');
+        } else if (distanceToRight < snapThreshold) {
+          finalX = maxX;
+          didSnap = true;
+          console.log('📹 [SNAP] Snapped to RIGHT edge');
         }
 
         // Snap vertically if close to edge
-        if (minVertical < snapThreshold) {
-          finalY = distanceToTop < distanceToBottom ? 80 : screenHeight - videoHeight - 120;
+        if (distanceToTop < snapThreshold) {
+          finalY = minY;
+          didSnap = true;
+          console.log('📹 [SNAP] Snapped to TOP edge');
+        } else if (distanceToBottom < snapThreshold) {
+          finalY = maxY;
+          didSnap = true;
+          console.log('📹 [SNAP] Snapped to BOTTOM edge');
         }
+
+        console.log('📹 [DRAG] Final position:', { finalX, finalY, didSnap });
 
         // Animate to final position with snap
         Animated.spring(pan, {
@@ -1598,18 +1624,19 @@ export default function WorkoutSessionScreen() {
         />
       )}
 
-      {/* Floating Video Call - Picture-in-Picture or Full-Screen */}
+      {/* Floating Video Call - Render once with dynamic wrapper */}
       {showVideoCall && agoraCredentials && (
-        <>
-          {isVideoFullScreen ? (
-            // Full-screen video modal
-            <Modal
-              visible={isVideoFullScreen}
-              transparent={false}
-              animationType="fade"
-              onRequestClose={handleMinimizeVideo}
-            >
+        isVideoFullScreen ? (
+          // Full-screen modal wrapper
+          <Modal
+            visible={true}
+            transparent={false}
+            animationType="fade"
+            onRequestClose={handleMinimizeVideo}
+          >
+            <View style={{ flex: 1 }}>
               <AgoraVideoCall
+                key="agora-video-stable"
                 sessionId={tabataSession?.session_id || ''}
                 userId={agoraCredentials.uid}
                 channelName={agoraCredentials.channelName}
@@ -1619,31 +1646,32 @@ export default function WorkoutSessionScreen() {
                 onMinimize={handleMinimizeVideo}
                 compact={false}
               />
-            </Modal>
-          ) : (
-            // Draggable PiP window
-            <Animated.View
-              style={[
-                styles.floatingVideoContainer,
-                {
-                  transform: [{ translateX: pan.x }, { translateY: pan.y }],
-                },
-              ]}
-              {...panResponder.panHandlers}
-            >
-              <AgoraVideoCall
-                sessionId={tabataSession?.session_id || ''}
-                userId={agoraCredentials.uid}
-                channelName={agoraCredentials.channelName}
-                token={agoraCredentials.token}
-                appId={agoraCredentials.appId}
-                onLeave={handleLeaveVideoCall}
-                onExpand={handleExpandVideo}
-                compact={true}
-              />
-            </Animated.View>
-          )}
-        </>
+            </View>
+          </Modal>
+        ) : (
+          // PiP floating window
+          <Animated.View
+            style={[
+              styles.floatingVideoContainer,
+              {
+                transform: [{ translateX: pan.x }, { translateY: pan.y }],
+              },
+            ]}
+            {...panResponder.panHandlers}
+          >
+            <AgoraVideoCall
+              key="agora-video-stable"
+              sessionId={tabataSession?.session_id || ''}
+              userId={agoraCredentials.uid}
+              channelName={agoraCredentials.channelName}
+              token={agoraCredentials.token}
+              appId={agoraCredentials.appId}
+              onLeave={handleLeaveVideoCall}
+              onExpand={handleExpandVideo}
+              compact={true}
+            />
+          </Animated.View>
+        )
       )}
     </SafeAreaView>
   );
