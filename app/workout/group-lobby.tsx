@@ -24,9 +24,7 @@ import { useReverb } from '../../contexts/ReverbProvider';
 import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
-import { agoraService } from '../../services/agoraService';
 import LobbyChat from '../../components/groups/LobbyChat';
-import AgoraVideoCall from '../../components/video/AgoraVideoCall';
 
 /**
  * Group Lobby Screen
@@ -98,8 +96,6 @@ export default function GroupLobbyScreen() {
   const [exerciseDetails, setExerciseDetails] = useState<Exercise[]>([]);
   const [isLoadingExercises, setIsLoadingExercises] = useState(false);
   const [isWorkoutDetailsExpanded, setIsWorkoutDetailsExpanded] = useState(false);
-  const [showVideoCall, setShowVideoCall] = useState(false);
-  const [agoraCredentials, setAgoraCredentials] = useState<any>(null);
 
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -1060,23 +1056,6 @@ export default function GroupLobbyScreen() {
   /**
    * Start workout (initiator only)
    */
-  /**
-   * Enable video call
-   */
-  const handleEnableVideoCall = async () => {
-    try {
-      if (!currentUser || !sessionId) return;
-
-      console.log('📹 Enabling video call...');
-      const credentials = await agoraService.getToken(sessionId, parseInt(currentUser.id));
-      setAgoraCredentials(credentials);
-      setShowVideoCall(true);
-    } catch (error) {
-      console.error('Failed to enable video call:', error);
-      Alert.alert('Error', 'Failed to start video call. Please try again.');
-    }
-  };
-
   const handleStartWorkout = async () => {
     if (!canStartWorkout || isStarting) return;
 
@@ -1218,18 +1197,6 @@ export default function GroupLobbyScreen() {
               <Ionicons name="settings-outline" size={24} color={COLORS.PRIMARY[600]} />
             </TouchableOpacity>
           )}
-
-          {/* Video Call Button */}
-          <TouchableOpacity
-            onPress={handleEnableVideoCall}
-            style={styles.iconButton}
-          >
-            <Ionicons
-              name={showVideoCall ? "videocam" : "videocam-outline"}
-              size={24}
-              color={showVideoCall ? COLORS.SUCCESS[600] : COLORS.PRIMARY[600]}
-            />
-          </TouchableOpacity>
 
           {/* Chat Button */}
           <TouchableOpacity
@@ -1511,26 +1478,6 @@ export default function GroupLobbyScreen() {
           <LobbyChat sessionId={sessionId} currentUserId={parseInt(currentUser.id)} />
         </SafeAreaView>
       </Modal>
-
-      {/* Video Call Modal */}
-      {showVideoCall && agoraCredentials && (
-        <Modal
-          visible={showVideoCall}
-          animationType="slide"
-          transparent={false}
-          presentationStyle="fullScreen"
-          onRequestClose={() => setShowVideoCall(false)}
-        >
-          <AgoraVideoCall
-            sessionId={sessionId}
-            userId={parseInt(currentUser.id)}
-            channelName={agoraCredentials.channel_name}
-            token={agoraCredentials.token}
-            appId={agoraCredentials.app_id}
-            onLeave={() => setShowVideoCall(false)}
-          />
-        </Modal>
-      )}
 
       {/* Invite Members Modal */}
       <Modal

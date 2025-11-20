@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import RtcEngine, {
-  RtcEngineContext,
+import {
+  createAgoraRtcEngine,
+  IRtcEngine,
   ChannelProfileType,
   ClientRoleType,
-  VideoCanvas,
   RtcSurfaceView,
 } from 'react-native-agora';
 import { agoraService } from '../../services/agoraService';
@@ -27,7 +27,7 @@ export default function AgoraVideoCall({
   appId,
   onLeave,
 }: AgoraVideoCallProps) {
-  const agoraEngineRef = useRef<RtcEngine | null>(null);
+  const agoraEngineRef = useRef<IRtcEngine | null>(null);
   const [isJoined, setIsJoined] = useState(false);
   const [remoteUids, setRemoteUids] = useState<number[]>([]);
   const [isMuted, setIsMuted] = useState(false);
@@ -43,40 +43,39 @@ export default function AgoraVideoCall({
   const setupVideoSDKEngine = async () => {
     try {
       // Create RTC engine
-      const engine = RtcEngine.createWithContext({
-        appId,
-      } as RtcEngineContext);
+      const engine = createAgoraRtcEngine();
+      engine.initialize({ appId });
 
       agoraEngineRef.current = engine;
 
       // Enable video
-      await engine.enableVideo();
+      engine.enableVideo();
 
       // Register event handlers
-      engine.addListener('onUserJoined', (connection, uid, elapsed) => {
-        console.log('📹 User joined:', uid);
-        setRemoteUids((prev) => [...prev, uid]);
+      engine.registerEventHandler({
+        onUserJoined: (_connection, uid, _elapsed) => {
+          console.log('📹 User joined:', uid);
+          setRemoteUids((prev) => [...prev, uid]);
+        },
+        onUserOffline: (_connection, uid, _reason) => {
+          console.log('📹 User left:', uid);
+          setRemoteUids((prev) => prev.filter((id) => id !== uid));
+        },
+        onJoinChannelSuccess: (_connection, _elapsed) => {
+          console.log('✅ Joined channel successfully');
+          setIsJoined(true);
+        },
+        onError: (err) => {
+          console.error('❌ Agora error:', err);
+        },
       });
 
-      engine.addListener('onUserOffline', (connection, uid, reason) => {
-        console.log('📹 User left:', uid);
-        setRemoteUids((prev) => prev.filter((id) => id !== uid));
-      });
-
-      engine.addListener('onJoinChannelSuccess', (connection, elapsed) => {
-        console.log('✅ Joined channel successfully');
-        setIsJoined(true);
-      });
-
-      engine.addListener('onError', (err) => {
-        console.error('❌ Agora error:', err);
-      });
+      // Set channel profile
+      engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
+      engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
 
       // Join channel
-      await engine.joinChannel(token, channelName, userId, {
-        clientRoleType: ClientRoleType.ClientRoleBroadcaster,
-        channelProfile: ChannelProfileType.ChannelProfileCommunication,
-      });
+      engine.joinChannel(token, channelName, userId, {});
 
       console.log('📹 Joining Agora channel:', channelName);
     } catch (error) {
@@ -87,8 +86,8 @@ export default function AgoraVideoCall({
   const leaveChannel = async () => {
     try {
       if (agoraEngineRef.current) {
-        await agoraEngineRef.current.leaveChannel();
-        await agoraEngineRef.current.release();
+        agoraEngineRef.current.leaveChannel();
+        agoraEngineRef.current.release();
         console.log('📹 Left channel');
       }
       setIsJoined(false);
@@ -106,7 +105,7 @@ export default function AgoraVideoCall({
   const toggleMute = async () => {
     try {
       const newMuteState = !isMuted;
-      await agoraEngineRef.current?.muteLocalAudioStream(newMuteState);
+      agoraEngineRef.current?.muteLocalAudioStream(newMuteState);
       setIsMuted(newMuteState);
 
       // Update backend
@@ -121,7 +120,7 @@ export default function AgoraVideoCall({
   const toggleVideo = async () => {
     try {
       const newVideoState = !isVideoOff;
-      await agoraEngineRef.current?.muteLocalVideoStream(newVideoState);
+      agoraEngineRef.current?.muteLocalVideoStream(newVideoState);
       setIsVideoOff(newVideoState);
 
       // Update backend
