@@ -18,6 +18,8 @@ interface AgoraVideoCallProps {
   appId: string;
   onLeave?: () => void;
   compact?: boolean; // Compact mode for floating window
+  onExpand?: () => void; // Callback when user wants to expand to full-screen
+  onMinimize?: () => void; // Callback when user wants to minimize from full-screen
 }
 
 export default function AgoraVideoCall({
@@ -27,6 +29,8 @@ export default function AgoraVideoCall({
   token,
   appId,
   onLeave,
+  onExpand,
+  onMinimize,
   compact = false,
 }: AgoraVideoCallProps) {
   const agoraEngineRef = useRef<IRtcEngine | null>(null);
@@ -155,6 +159,16 @@ export default function AgoraVideoCall({
           </View>
         )}
 
+        {/* Expand button - top-left */}
+        {onExpand && (
+          <TouchableOpacity
+            style={styles.expandButton}
+            onPress={onExpand}
+          >
+            <Ionicons name="expand" size={18} color="#fff" />
+          </TouchableOpacity>
+        )}
+
         {/* Mini controls overlay */}
         <View style={styles.compactControls}>
           <TouchableOpacity
@@ -198,6 +212,16 @@ export default function AgoraVideoCall({
   // Full mode - original layout
   return (
     <View style={styles.container}>
+      {/* Minimize button - top-right (only if onMinimize provided) */}
+      {onMinimize && (
+        <TouchableOpacity
+          style={styles.minimizeButton}
+          onPress={onMinimize}
+        >
+          <Ionicons name="contract" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
+
       {/* Local video (yourself) */}
       <View style={styles.localVideoContainer}>
         {isJoined && !isVideoOff ? (
@@ -435,5 +459,31 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  expandButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  minimizeButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
 });

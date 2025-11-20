@@ -13,6 +13,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  PanResponder,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -98,6 +101,85 @@ export default function WorkoutSessionScreen() {
     uid: number;
   } | null>(null);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const [isVideoFullScreen, setIsVideoFullScreen] = useState(false);
+
+  // Draggable video position
+  const pan = useRef(new Animated.ValueXY({ x: Dimensions.get('window').width - 170, y: Dimensions.get('window').height - 320 })).current;
+  const isDragging = useRef(false);
+
+  // PanResponder for draggable video
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isVideoFullScreen, // Only allow drag in compact mode
+      onMoveShouldSetPanResponder: () => !isVideoFullScreen,
+      onPanResponderGrant: () => {
+        isDragging.current = true;
+        pan.setOffset({
+          x: (pan.x as any)._value,
+          y: (pan.y as any)._value,
+        });
+        pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+        useNativeDriver: false,
+      }),
+      onPanResponderRelease: (_, gesture) => {
+        isDragging.current = false;
+        pan.flattenOffset();
+
+        // Get current position
+        const currentX = (pan.x as any)._value;
+        const currentY = (pan.y as any)._value;
+
+        // Screen dimensions
+        const screenWidth = Dimensions.get('window').width;
+        const screenHeight = Dimensions.get('window').height;
+        const videoWidth = 150;
+        const videoHeight = 200;
+
+        // Apply boundaries
+        let finalX = currentX;
+        let finalY = currentY;
+
+        // Horizontal boundaries
+        if (finalX < 20) finalX = 20;
+        if (finalX > screenWidth - videoWidth - 20) finalX = screenWidth - videoWidth - 20;
+
+        // Vertical boundaries
+        if (finalY < 80) finalY = 80; // Below status bar
+        if (finalY > screenHeight - videoHeight - 120) finalY = screenHeight - videoHeight - 120; // Above controls
+
+        // Snap to nearest corner
+        const snapThreshold = 100;
+        const distanceToLeft = finalX;
+        const distanceToRight = screenWidth - videoWidth - finalX;
+        const distanceToTop = finalY;
+        const distanceToBottom = screenHeight - videoHeight - finalY;
+
+        // Find closest edge
+        const minHorizontal = Math.min(distanceToLeft, distanceToRight);
+        const minVertical = Math.min(distanceToTop, distanceToBottom);
+
+        // Snap horizontally if close to edge
+        if (minHorizontal < snapThreshold) {
+          finalX = distanceToLeft < distanceToRight ? 20 : screenWidth - videoWidth - 20;
+        }
+
+        // Snap vertically if close to edge
+        if (minVertical < snapThreshold) {
+          finalY = distanceToTop < distanceToBottom ? 80 : screenHeight - videoHeight - 120;
+        }
+
+        // Animate to final position with snap
+        Animated.spring(pan, {
+          toValue: { x: finalX, y: finalY },
+          useNativeDriver: false,
+          friction: 7,
+          tension: 40,
+        }).start();
+      },
+    })
+  ).current;
 
   // Debug logging for button visibility
   console.log('🎮 [SESSION] Button visibility check:', {
@@ -1146,6 +1228,17 @@ export default function WorkoutSessionScreen() {
   const handleLeaveVideoCall = () => {
     setShowVideoCall(false);
     setAgoraCredentials(null);
+    setIsVideoFullScreen(false);
+  };
+
+  // Handler for expanding video to full-screen
+  const handleExpandVideo = () => {
+    setIsVideoFullScreen(true);
+  };
+
+  // Handler for minimizing video back to PiP
+  const handleMinimizeVideo = () => {
+    setIsVideoFullScreen(false);
   };
 
   const formatTime = (seconds: number) => {
@@ -1505,19 +1598,52 @@ export default function WorkoutSessionScreen() {
         />
       )}
 
-      {/* Floating Video Call - Picture-in-Picture */}
+      {/* Floating Video Call - Picture-in-Picture or Full-Screen */}
       {showVideoCall && agoraCredentials && (
-        <View style={styles.floatingVideoContainer}>
-          <AgoraVideoCall
-            sessionId={tabataSession?.session_id || ''}
-            userId={agoraCredentials.uid}
-            channelName={agoraCredentials.channelName}
-            token={agoraCredentials.token}
-            appId={agoraCredentials.appId}
-            onLeave={handleLeaveVideoCall}
-            compact={true}
-          />
-        </View>
+        <>
+          {isVideoFullScreen ? (
+            // Full-screen video modal
+            <Modal
+              visible={isVideoFullScreen}
+              transparent={false}
+              animationType="fade"
+              onRequestClose={handleMinimizeVideo}
+            >
+              <AgoraVideoCall
+                sessionId={tabataSession?.session_id || ''}
+                userId={agoraCredentials.uid}
+                channelName={agoraCredentials.channelName}
+                token={agoraCredentials.token}
+                appId={agoraCredentials.appId}
+                onLeave={handleLeaveVideoCall}
+                onMinimize={handleMinimizeVideo}
+                compact={false}
+              />
+            </Modal>
+          ) : (
+            // Draggable PiP window
+            <Animated.View
+              style={[
+                styles.floatingVideoContainer,
+                {
+                  transform: [{ translateX: pan.x }, { translateY: pan.y }],
+                },
+              ]}
+              {...panResponder.panHandlers}
+            >
+              <AgoraVideoCall
+                sessionId={tabataSession?.session_id || ''}
+                userId={agoraCredentials.uid}
+                channelName={agoraCredentials.channelName}
+                token={agoraCredentials.token}
+                appId={agoraCredentials.appId}
+                onLeave={handleLeaveVideoCall}
+                onExpand={handleExpandVideo}
+                compact={true}
+              />
+            </Animated.View>
+          )}
+        </>
       )}
     </SafeAreaView>
   );
@@ -1962,8 +2088,8 @@ const styles = StyleSheet.create({
   },
   floatingVideoContainer: {
     position: 'absolute',
-    bottom: 100,
-    right: 20,
+    top: 0,
+    left: 0,
     zIndex: 1000,
   },
 });
