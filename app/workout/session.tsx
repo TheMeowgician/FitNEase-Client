@@ -12,6 +12,7 @@ import {
   AppStateStatus,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,11 +27,13 @@ import { trackingService } from '../../services/microservices/trackingService';
 import { socialService } from '../../services/microservices/socialService';
 import { progressionService } from '../../services/microservices/progressionService';
 import { reverbService } from '../../services/reverbService';
+import { agoraService } from '../../services/agoraService';
 import { TabataWorkoutSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useLobbyStore } from '../../stores/lobbyStore';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
+import AgoraVideoCall from '../../components/video/AgoraVideoCall';
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
 type SessionStatus = 'ready' | 'running' | 'paused' | 'completed';
@@ -85,6 +88,16 @@ export default function WorkoutSessionScreen() {
   const [progressBeforeStats, setProgressBeforeStats] = useState<any>(null);
   const [progressAfterStats, setProgressAfterStats] = useState<any>(null);
   const [completedWorkoutData, setCompletedWorkoutData] = useState<any>(null);
+
+  // Video call state
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [agoraCredentials, setAgoraCredentials] = useState<{
+    token: string;
+    channelName: string;
+    appId: string;
+    uid: number;
+  } | null>(null);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
 
   // Debug logging for button visibility
   console.log('🎮 [SESSION] Button visibility check:', {
@@ -1090,6 +1103,51 @@ export default function WorkoutSessionScreen() {
     }
   };
 
+  // Handler for enabling video call
+  const handleEnableVideoCall = async () => {
+    if (!tabataSession || !user) {
+      Alert.alert('Error', 'Cannot start video call - missing session or user data');
+      return;
+    }
+
+    try {
+      setIsLoadingVideo(true);
+      console.log('📹 [VIDEO] Requesting Agora token...');
+
+      // Request Agora token from backend
+      const tokenData = await agoraService.getToken(
+        tabataSession.session_id,
+        Number(user.id)
+      );
+
+      console.log('✅ [VIDEO] Agora token received:', {
+        channelName: tokenData.channel_name,
+        appId: tokenData.app_id,
+        uid: tokenData.uid,
+      });
+
+      setAgoraCredentials({
+        token: tokenData.token,
+        channelName: tokenData.channel_name,
+        appId: tokenData.app_id,
+        uid: tokenData.uid,
+      });
+
+      setShowVideoCall(true);
+      setIsLoadingVideo(false);
+    } catch (error) {
+      console.error('❌ [VIDEO] Failed to get Agora token:', error);
+      setIsLoadingVideo(false);
+      Alert.alert('Error', 'Failed to start video call. Please try again.');
+    }
+  };
+
+  // Handler for leaving video call
+  const handleLeaveVideoCall = () => {
+    setShowVideoCall(false);
+    setAgoraCredentials(null);
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -1148,19 +1206,39 @@ export default function WorkoutSessionScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: getPhaseColor() }]} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={getPhaseColor()} />
 
-      {/* Top Bar with Close Button */}
+      {/* Top Bar with Video and Close Button */}
       <View style={styles.topBar}>
         <View style={styles.topBarContent}>
           <View style={styles.workoutBadge}>
             <Ionicons name="fitness" size={14} color="white" />
             <Text style={styles.workoutBadgeText}>TABATA</Text>
           </View>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={sessionState.status === 'ready' ? router.back : handleBackPress}
-          >
-            <Ionicons name="close" size={24} color="white" />
-          </TouchableOpacity>
+          <View style={styles.topBarButtons}>
+            {/* Video Call Button - Only show for group workouts */}
+            {type === 'group_tabata' && sessionState.status === 'running' && (
+              <TouchableOpacity
+                style={[styles.videoButton, showVideoCall && styles.videoButtonActive]}
+                onPress={showVideoCall ? handleLeaveVideoCall : handleEnableVideoCall}
+                disabled={isLoadingVideo}
+              >
+                {isLoadingVideo ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Ionicons
+                    name={showVideoCall ? 'videocam' : 'videocam-outline'}
+                    size={20}
+                    color="white"
+                  />
+                )}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={sessionState.status === 'ready' ? router.back : handleBackPress}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1426,6 +1504,29 @@ export default function WorkoutSessionScreen() {
           workoutData={completedWorkoutData}
         />
       )}
+
+      {/* Floating Video Call Modal */}
+      {showVideoCall && agoraCredentials && (
+        <Modal
+          visible={showVideoCall}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleLeaveVideoCall}
+        >
+          <View style={styles.videoModalContainer}>
+            <View style={styles.videoCallWrapper}>
+              <AgoraVideoCall
+                sessionId={tabataSession?.session_id || ''}
+                userId={agoraCredentials.uid}
+                channelName={agoraCredentials.channelName}
+                token={agoraCredentials.token}
+                appId={agoraCredentials.appId}
+                onLeave={handleLeaveVideoCall}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -1468,6 +1569,25 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     color: 'white',
     letterSpacing: 1,
+  },
+  topBarButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  videoButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  videoButtonActive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.4)',
+    borderColor: 'rgba(34, 197, 94, 0.6)',
   },
   closeButton: {
     width: 40,
@@ -1847,5 +1967,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.SEMIBOLD,
     color: 'white',
     letterSpacing: 0.2,
+  },
+  videoModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  videoCallWrapper: {
+    flex: 1,
   },
 });
