@@ -17,6 +17,7 @@ interface AgoraVideoCallProps {
   token: string;
   appId: string;
   onLeave?: () => void;
+  compact?: boolean; // Compact mode for floating window
 }
 
 export default function AgoraVideoCall({
@@ -26,6 +27,7 @@ export default function AgoraVideoCall({
   token,
   appId,
   onLeave,
+  compact = false,
 }: AgoraVideoCallProps) {
   const agoraEngineRef = useRef<IRtcEngine | null>(null);
   const [isJoined, setIsJoined] = useState(false);
@@ -132,6 +134,68 @@ export default function AgoraVideoCall({
     }
   };
 
+  // Compact mode - small floating window
+  if (compact) {
+    return (
+      <View style={styles.compactContainer}>
+        {/* Show first remote user, or local if no remote users */}
+        {remoteUids.length > 0 ? (
+          <RtcSurfaceView
+            canvas={{ uid: remoteUids[0] }}
+            style={styles.compactVideo}
+          />
+        ) : isJoined && !isVideoOff ? (
+          <RtcSurfaceView
+            canvas={{ uid: 0 }}
+            style={styles.compactVideo}
+          />
+        ) : (
+          <View style={styles.compactPlaceholder}>
+            <Ionicons name="people-outline" size={32} color="#666" />
+          </View>
+        )}
+
+        {/* Mini controls overlay */}
+        <View style={styles.compactControls}>
+          <TouchableOpacity
+            style={styles.compactControlButton}
+            onPress={toggleMute}
+          >
+            <Ionicons
+              name={isMuted ? 'mic-off' : 'mic'}
+              size={16}
+              color={isMuted ? '#EF4444' : '#fff'}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.compactControlButton}
+            onPress={toggleVideo}
+          >
+            <Ionicons
+              name={isVideoOff ? 'videocam-off' : 'videocam'}
+              size={16}
+              color={isVideoOff ? '#EF4444' : '#fff'}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.compactControlButton, styles.compactLeaveButton]}
+            onPress={leaveChannel}
+          >
+            <Ionicons name="close" size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Participant count badge */}
+        {remoteUids.length > 0 && (
+          <View style={styles.participantBadge}>
+            <Text style={styles.participantCount}>{remoteUids.length + 1}</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // Full mode - original layout
   return (
     <View style={styles.container}>
       {/* Local video (yourself) */}
@@ -306,5 +370,70 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Compact mode styles
+  compactContainer: {
+    width: 150,
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  compactVideo: {
+    width: '100%',
+    height: '100%',
+  },
+  compactPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactControls: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  compactControlButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactLeaveButton: {
+    backgroundColor: '#EF4444',
+  },
+  participantBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(34, 197, 94, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  participantCount: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -1505,27 +1505,19 @@ export default function WorkoutSessionScreen() {
         />
       )}
 
-      {/* Floating Video Call Modal */}
+      {/* Floating Video Call - Picture-in-Picture */}
       {showVideoCall && agoraCredentials && (
-        <Modal
-          visible={showVideoCall}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={handleLeaveVideoCall}
-        >
-          <View style={styles.videoModalContainer}>
-            <View style={styles.videoCallWrapper}>
-              <AgoraVideoCall
-                sessionId={tabataSession?.session_id || ''}
-                userId={agoraCredentials.uid}
-                channelName={agoraCredentials.channelName}
-                token={agoraCredentials.token}
-                appId={agoraCredentials.appId}
-                onLeave={handleLeaveVideoCall}
-              />
-            </View>
-          </View>
-        </Modal>
+        <View style={styles.floatingVideoContainer}>
+          <AgoraVideoCall
+            sessionId={tabataSession?.session_id || ''}
+            userId={agoraCredentials.uid}
+            channelName={agoraCredentials.channelName}
+            token={agoraCredentials.token}
+            appId={agoraCredentials.appId}
+            onLeave={handleLeaveVideoCall}
+            compact={true}
+          />
+        </View>
       )}
     </SafeAreaView>
   );
@@ -1968,11 +1960,10 @@ const styles = StyleSheet.create({
     color: 'white',
     letterSpacing: 0.2,
   },
-  videoModalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-  },
-  videoCallWrapper: {
-    flex: 1,
+  floatingVideoContainer: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    zIndex: 1000,
   },
 });
