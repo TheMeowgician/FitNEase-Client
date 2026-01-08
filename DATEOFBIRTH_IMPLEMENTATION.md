@@ -17,8 +17,8 @@ Added a date picker for date of birth in the registration form with automatic ag
 - `calculateAge(dateOfBirth: Date): number` - Calculates age from birth date
 - `formatDateToISO(date: Date): string` - Formats date to YYYY-MM-DD
 - `parseISODate(dateString: string): Date | null` - Parses ISO date string
-- `validateAge(age: number)` - Validates age requirements (13-120 years)
-- `getDateLimits()` - Returns min/max dates for date picker
+- `validateAge(age: number)` - Validates age requirements (18-54 years) - RESEARCH REQUIREMENT
+- `getDateLimits()` - Returns min/max dates for date picker (18-54 years)
 
 ## Modified Files
 
@@ -39,7 +39,7 @@ Added a date picker for date of birth in the registration form with automatic ag
 ### 1. Date Selection
 - User-friendly date picker interface
 - Platform-appropriate display (iOS spinner vs Android modal)
-- Proper date limits (13-120 years age range)
+- Proper date limits (18-54 years age range) - RESEARCH REQUIREMENT
 - Automatic form data synchronization
 
 ### 2. Age Calculation
@@ -48,13 +48,14 @@ Added a date picker for date of birth in the registration form with automatic ag
 - Visual display of calculated age with styling
 
 ### 3. Validation
-- Minimum age requirement (13 years)
-- Maximum age limit (120 years)
+- Minimum age requirement (18 years) - RESEARCH REQUIREMENT
+- Maximum age limit (54 years) - RESEARCH REQUIREMENT
+- Age restriction for safety during high-intensity Tabata training
 - Proper error messages for invalid dates
 - Form validation integration
 
 ### 4. User Experience
-- Optional field (not required for registration)
+- Required field for registration (safety requirement)
 - Clear visual feedback when age is calculated
 - Consistent styling with other form components
 - Cross-platform compatibility
@@ -94,10 +95,11 @@ Added a date picker for date of birth in the registration form with automatic ag
 - Responsive layout compatible with form structure
 
 ## Validation Rules
-- **Minimum Age:** 13 years (configurable)
-- **Maximum Age:** 120 years (configurable)
-- **Date Range:** From 120 years ago to 13 years ago from current date
-- **Optional Field:** Registration can proceed without date of birth
+- **Minimum Age:** 18 years (RESEARCH REQUIREMENT - NOT configurable)
+- **Maximum Age:** 54 years (RESEARCH REQUIREMENT - NOT configurable)
+- **Date Range:** From 54 years ago to 18 years ago from current date
+- **Required Field:** Date of birth is mandatory for registration (safety requirement)
+- **Purpose:** Age restriction minimizes the risk of exercise-related injuries during high-intensity Tabata training workouts
 
 ## Platform Compatibility
 - **iOS:** Spinner-style date picker
