@@ -576,6 +576,24 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Weekly Check-In Card */}
+        <TouchableOpacity
+          style={styles.weeklyCheckInCard}
+          onPress={() => router.push('/assessment/weekly')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.weeklyCheckInIcon}>
+            <Ionicons name="clipboard-outline" size={28} color={COLORS.PRIMARY[600]} />
+          </View>
+          <View style={styles.weeklyCheckInContent}>
+            <Text style={styles.weeklyCheckInTitle}>Weekly Check-In</Text>
+            <Text style={styles.weeklyCheckInSubtitle}>
+              Share your progress and get better recommendations
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
+        </TouchableOpacity>
+
         {/* Progression Card */}
         <View style={styles.progressionSection}>
           <ProgressionCard />
@@ -1364,6 +1382,46 @@ const styles = StyleSheet.create({
   progressionSection: {
     marginHorizontal: 24,
     marginBottom: 24,
+  },
+  weeklyCheckInCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginHorizontal: 24,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY[100],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  weeklyCheckInIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.PRIMARY[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  weeklyCheckInContent: {
+    flex: 1,
+  },
+  weeklyCheckInTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+    marginBottom: 4,
+  },
+  weeklyCheckInSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    lineHeight: 18,
   },
   activitySection: {
     marginHorizontal: 24,
