@@ -136,10 +136,7 @@ export default function ProfileScreen() {
           title: 'Notifications',
           subtitle: 'Manage your reminders',
           onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Notification settings will be available soon!'
-            );
+            router.push('/settings/notifications');
           },
         },
         {
