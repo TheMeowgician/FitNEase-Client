@@ -594,6 +594,26 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
         </TouchableOpacity>
 
+        {/* Mentor Dashboard Card - Only visible to mentors */}
+        {user?.role === 'mentor' && (
+          <TouchableOpacity
+            style={styles.mentorDashboardCard}
+            onPress={() => router.push('/mentor/dashboard')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.mentorDashboardIcon}>
+              <Ionicons name="people-outline" size={28} color={COLORS.SUCCESS[600]} />
+            </View>
+            <View style={styles.mentorDashboardContent}>
+              <Text style={styles.mentorDashboardTitle}>My Members</Text>
+              <Text style={styles.mentorDashboardSubtitle}>
+                Track member progress and workout plans
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
+          </TouchableOpacity>
+        )}
+
         {/* Progression Card */}
         <View style={styles.progressionSection}>
           <ProgressionCard />
@@ -1418,6 +1438,46 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   weeklyCheckInSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    lineHeight: 18,
+  },
+  mentorDashboardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginHorizontal: 24,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.SUCCESS[100],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  mentorDashboardIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.SUCCESS[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  mentorDashboardContent: {
+    flex: 1,
+  },
+  mentorDashboardTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+    marginBottom: 4,
+  },
+  mentorDashboardSubtitle: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],

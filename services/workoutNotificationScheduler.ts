@@ -1,14 +1,23 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Conditional import for expo-notifications
+let Notifications: any = null;
+
+try {
+  // Try to import expo-notifications
+  Notifications = require('expo-notifications');
+
+  // Configure notification behavior only if module is available
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (error) {
+  console.warn('[NOTIFICATIONS] expo-notifications not available. Rebuild dev client to enable notifications.');
+}
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -27,6 +36,11 @@ class WorkoutNotificationScheduler {
    * Request notification permissions from the device
    */
   async requestPermissions(): Promise<boolean> {
+    if (!Notifications) {
+      console.warn('[NOTIFICATIONS] expo-notifications not available. Rebuild dev client.');
+      return false;
+    }
+
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
 
@@ -38,14 +52,14 @@ class WorkoutNotificationScheduler {
       }
 
       if (finalStatus !== 'granted') {
-        console.warn('⚠️ [WORKOUT NOTIFICATIONS] Permission denied');
+        console.warn('[NOTIFICATIONS] Permission denied');
         return false;
       }
 
-      console.log('✅ [WORKOUT NOTIFICATIONS] Permission granted');
+      console.log('[NOTIFICATIONS] Permission granted');
       return true;
     } catch (error) {
-      console.error('❌ [WORKOUT NOTIFICATIONS] Permission error:', error);
+      console.error('[NOTIFICATIONS] Permission error:', error);
       return false;
     }
   }
@@ -54,8 +68,14 @@ class WorkoutNotificationScheduler {
    * Check if notifications are enabled
    */
   async areNotificationsEnabled(): Promise<boolean> {
-    const { status } = await Notifications.getPermissionsAsync();
-    return status === 'granted';
+    if (!Notifications) return false;
+
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      return status === 'granted';
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
@@ -67,8 +87,13 @@ class WorkoutNotificationScheduler {
     workoutDays: string[],
     settings: NotificationSettings = DEFAULT_SETTINGS
   ): Promise<void> {
+    if (!Notifications) {
+      console.warn('[NOTIFICATIONS] expo-notifications not available');
+      return;
+    }
+
     if (!settings.enabled) {
-      console.log('⏭️ [WORKOUT NOTIFICATIONS] Notifications disabled, skipping schedule');
+      console.log('[NOTIFICATIONS] Notifications disabled, skipping schedule');
       return;
     }
 
@@ -78,7 +103,7 @@ class WorkoutNotificationScheduler {
 
       const permissionGranted = await this.requestPermissions();
       if (!permissionGranted) {
-        console.warn('⚠️ [WORKOUT NOTIFICATIONS] Cannot schedule without permission');
+        console.warn('[NOTIFICATIONS] Cannot schedule without permission');
         return;
       }
 
@@ -102,7 +127,7 @@ class WorkoutNotificationScheduler {
         // Schedule morning reminder
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: '🏋️ Workout Day!',
+            title: 'Workout Day!',
             body: `It's ${day}! Time to crush your Tabata workout today.`,
             data: { type: 'morning_reminder', day },
             sound: true,
@@ -115,12 +140,12 @@ class WorkoutNotificationScheduler {
           },
         });
 
-        console.log(`✅ [WORKOUT NOTIFICATIONS] Scheduled morning reminder for ${day} at ${hour}:${String(minute).padStart(2, '0')}`);
+        console.log(`[NOTIFICATIONS] Scheduled morning reminder for ${day} at ${hour}:${String(minute).padStart(2, '0')}`);
       }
 
-      console.log(`✅ [WORKOUT NOTIFICATIONS] Scheduled ${workoutDays.length} workout reminders`);
+      console.log(`[NOTIFICATIONS] Scheduled ${workoutDays.length} workout reminders`);
     } catch (error) {
-      console.error('❌ [WORKOUT NOTIFICATIONS] Error scheduling notifications:', error);
+      console.error('[NOTIFICATIONS] Error scheduling notifications:', error);
       throw error;
     }
   }
@@ -134,6 +159,11 @@ class WorkoutNotificationScheduler {
     workoutTime: Date,
     advanceMinutes: number = 60
   ): Promise<string | null> {
+    if (!Notifications) {
+      console.warn('[NOTIFICATIONS] expo-notifications not available');
+      return null;
+    }
+
     try {
       const permissionGranted = await this.requestPermissions();
       if (!permissionGranted) {
@@ -145,13 +175,13 @@ class WorkoutNotificationScheduler {
 
       // Don't schedule if reminder time is in the past
       if (reminderTime <= now) {
-        console.log('⏭️ [WORKOUT NOTIFICATIONS] Reminder time is in the past, skipping');
+        console.log('[NOTIFICATIONS] Reminder time is in the past, skipping');
         return null;
       }
 
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⏰ Workout Starting Soon!',
+          title: 'Workout Starting Soon!',
           body: `Your Tabata workout starts in ${advanceMinutes} minutes. Get ready!`,
           data: { type: 'advance_reminder' },
           sound: true,
@@ -161,10 +191,10 @@ class WorkoutNotificationScheduler {
         },
       });
 
-      console.log(`✅ [WORKOUT NOTIFICATIONS] Scheduled advance reminder for ${reminderTime.toLocaleString()}`);
+      console.log(`[NOTIFICATIONS] Scheduled advance reminder for ${reminderTime.toLocaleString()}`);
       return notificationId;
     } catch (error) {
-      console.error('❌ [WORKOUT NOTIFICATIONS] Error scheduling advance reminder:', error);
+      console.error('[NOTIFICATIONS] Error scheduling advance reminder:', error);
       return null;
     }
   }
@@ -173,11 +203,13 @@ class WorkoutNotificationScheduler {
    * Cancel all scheduled notifications
    */
   async cancelAllNotifications(): Promise<void> {
+    if (!Notifications) return;
+
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
-      console.log('✅ [WORKOUT NOTIFICATIONS] Cancelled all scheduled notifications');
+      console.log('[NOTIFICATIONS] Cancelled all scheduled notifications');
     } catch (error) {
-      console.error('❌ [WORKOUT NOTIFICATIONS] Error cancelling notifications:', error);
+      console.error('[NOTIFICATIONS] Error cancelling notifications:', error);
     }
   }
 
@@ -185,24 +217,28 @@ class WorkoutNotificationScheduler {
    * Cancel a specific notification
    */
   async cancelNotification(notificationId: string): Promise<void> {
+    if (!Notifications) return;
+
     try {
       await Notifications.cancelScheduledNotificationAsync(notificationId);
-      console.log(`✅ [WORKOUT NOTIFICATIONS] Cancelled notification ${notificationId}`);
+      console.log(`[NOTIFICATIONS] Cancelled notification ${notificationId}`);
     } catch (error) {
-      console.error('❌ [WORKOUT NOTIFICATIONS] Error cancelling notification:', error);
+      console.error('[NOTIFICATIONS] Error cancelling notification:', error);
     }
   }
 
   /**
    * Get all scheduled notifications (for debugging)
    */
-  async getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
+  async getScheduledNotifications(): Promise<any[]> {
+    if (!Notifications) return [];
+
     try {
       const notifications = await Notifications.getAllScheduledNotificationsAsync();
-      console.log(`📋 [WORKOUT NOTIFICATIONS] ${notifications.length} scheduled notifications`);
+      console.log(`[NOTIFICATIONS] ${notifications.length} scheduled notifications`);
       return notifications;
     } catch (error) {
-      console.error('❌ [WORKOUT NOTIFICATIONS] Error getting notifications:', error);
+      console.error('[NOTIFICATIONS] Error getting notifications:', error);
       return [];
     }
   }
