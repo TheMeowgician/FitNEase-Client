@@ -61,6 +61,14 @@ export default function HomeScreen() {
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false); // Track if today's workout is done
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
+  // 🎓 MENTOR REDIRECT: If user is a mentor, redirect to mentor dashboard
+  useEffect(() => {
+    if (user?.role === 'mentor') {
+      console.log('🎓 [HOME] Mentor detected - redirecting to mentor dashboard');
+      router.replace('/mentor/dashboard');
+    }
+  }, [user?.role]);
+
   useEffect(() => {
     loadDashboardData();
   }, []);

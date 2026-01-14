@@ -3,8 +3,11 @@ import { Platform, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function TabLayout() {
+  const { user } = useAuth();
+  const isMentor = user?.role === 'mentor';
 
   return (
     <View style={{ flex: 1 }}>
@@ -31,10 +34,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: isMentor ? 'Dashboard' : 'Home',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? 'home' : 'home-outline'}
+              name={isMentor ? (focused ? 'school' : 'school-outline') : (focused ? 'home' : 'home-outline')}
               size={size}
               color={color}
             />

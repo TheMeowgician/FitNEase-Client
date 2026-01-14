@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { authService } from '../../services/microservices/authService';
 import { validateEmail } from '../../utils/validation/authValidation';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
@@ -67,10 +68,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         console.log('🔑 Login successful, triggering navigation...');
 
         // Small delay to ensure state updates propagate
-        setTimeout(() => {
-          console.log('🔑 Checking user state for navigation...');
-          // Force navigation based on current auth state
-          router.replace('/');
+        setTimeout(async () => {
+          // Get fresh user data to check role
+          const currentUser = await authService.getCurrentUser();
+          console.log('🔑 Checking user role for navigation:', currentUser?.role);
+
+          // Role-based routing: Mentors go to mentor dashboard, members go to home
+          if (currentUser?.role === 'mentor') {
+            console.log('🎓 Mentor detected - routing to mentor dashboard');
+            router.replace('/mentor/dashboard');
+          } else {
+            console.log('👤 Member detected - routing to home');
+            router.replace('/');
+          }
         }, 200);
       }
     } catch (error: any) {

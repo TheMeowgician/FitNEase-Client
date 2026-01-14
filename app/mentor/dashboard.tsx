@@ -1,45 +1,95 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
-interface MemberData {
-  id: string;
-  name: string;
-  email: string;
-  totalWorkouts: number;
-  currentStreak: number;
-  lastWorkoutDate?: string;
-  weeklyProgress: number; // percentage
+interface TrainingGroup extends Group {
+  members: GroupMember[];
+  loadingMembers: boolean;
 }
 
 export default function MentorDashboardScreen() {
   const { user } = useAuth();
-  const [members, setMembers] = useState<MemberData[]>([]);
+  const [trainingGroups, setTrainingGroups] = useState<TrainingGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    loadMembers();
-  }, []);
+  // Load data when screen focuses
+  useFocusEffect(
+    useCallback(() => {
+      loadTrainingGroups();
+    }, [])
+  );
 
-  const loadMembers = async () => {
+  const loadTrainingGroups = async () => {
     try {
       setIsLoading(true);
-      // TODO: Replace with actual API call when backend is ready
-      // const response = await authService.getMentorMembers();
-      // setMembers(response);
+      console.log('🎓 [MENTOR] Loading training groups for mentor:', user?.id);
 
-      // Placeholder: Show message that feature is being developed
-      setMembers([]);
+      // Fetch groups where the current mentor is the owner
+      const response = await socialService.getGroups({
+        user_id: user?.id ? Number(user.id) : undefined,
+      });
+
+      console.log('🎓 [MENTOR] Groups response:', response);
+
+      // Filter to only groups owned by this mentor
+      const mentorGroups = response.groups.filter(
+        (group) => group.createdBy === user?.id?.toString()
+      );
+
+      console.log('🎓 [MENTOR] Filtered mentor groups:', mentorGroups.length);
+
+      // Initialize groups with empty members and loading state
+      const groupsWithMembers: TrainingGroup[] = mentorGroups.map((group) => ({
+        ...group,
+        members: [],
+        loadingMembers: true,
+      }));
+
+      setTrainingGroups(groupsWithMembers);
+
+      // Load members for each group
+      for (const group of mentorGroups) {
+        try {
+          const membersResponse = await socialService.getGroupMembers(group.id);
+          console.log(`🎓 [MENTOR] Members for group ${group.name}:`, membersResponse.members.length);
+
+          setTrainingGroups((prev) =>
+            prev.map((g) =>
+              g.id === group.id
+                ? { ...g, members: membersResponse.members, loadingMembers: false }
+                : g
+            )
+          );
+        } catch (error) {
+          console.error(`Error loading members for group ${group.id}:`, error);
+          setTrainingGroups((prev) =>
+            prev.map((g) =>
+              g.id === group.id ? { ...g, loadingMembers: false } : g
+            )
+          );
+        }
+      }
     } catch (error) {
-      console.error('Error loading members:', error);
-      Alert.alert('Error', 'Failed to load members. This feature may not be available yet.');
+      console.error('Error loading training groups:', error);
+      Alert.alert('Error', 'Failed to load training groups. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -47,52 +97,151 @@ export default function MentorDashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadMembers();
+    await loadTrainingGroups();
     setRefreshing(false);
   };
 
-  const renderMemberCard = (member: MemberData) => (
+  const toggleGroupExpanded = (groupId: string) => {
+    setExpandedGroups((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
+      } else {
+        newSet.add(groupId);
+      }
+      return newSet;
+    });
+  };
+
+  const navigateToMemberDetail = (member: GroupMember) => {
+    // Navigate to member detail view (can be implemented later)
+    console.log('View member:', member);
+    Alert.alert(
+      member.username,
+      `Member since: ${new Date(member.joinedAt).toLocaleDateString()}\nRole: ${member.role}`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleCreateTrainingGroup = () => {
+    router.push('/groups/create');
+  };
+
+  const handleStartWorkoutSession = (group: TrainingGroup) => {
+    // Navigate to group detail to start workout session
+    router.push(`/groups/${group.id}`);
+  };
+
+  const renderMemberCard = (member: GroupMember, index: number) => (
     <TouchableOpacity
       key={member.id}
       style={styles.memberCard}
-      onPress={() => router.push(`/mentor/member/${member.id}`)}
+      onPress={() => navigateToMemberDetail(member)}
       activeOpacity={0.7}
     >
-      <View style={styles.memberHeader}>
-        <View style={styles.memberAvatar}>
-          <Ionicons name="person" size={24} color={COLORS.PRIMARY[600]} />
-        </View>
-        <View style={styles.memberInfo}>
-          <Text style={styles.memberName}>{member.name}</Text>
-          <Text style={styles.memberEmail}>{member.email}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
+      <View style={styles.memberAvatar}>
+        <Text style={styles.memberAvatarText}>
+          {member.username.charAt(0).toUpperCase()}
+        </Text>
       </View>
-
-      <View style={styles.memberStats}>
-        <View style={styles.statItem}>
-          <Ionicons name="barbell-outline" size={20} color={COLORS.SECONDARY[600]} />
-          <Text style={styles.statValue}>{member.totalWorkouts}</Text>
-          <Text style={styles.statLabel}>Workouts</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Ionicons name="flame-outline" size={20} color={COLORS.WARNING[500]} />
-          <Text style={styles.statValue}>{member.currentStreak}</Text>
-          <Text style={styles.statLabel}>Day Streak</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Ionicons name="trending-up-outline" size={20} color={COLORS.SUCCESS[600]} />
-          <Text style={styles.statValue}>{member.weeklyProgress}%</Text>
-          <Text style={styles.statLabel}>This Week</Text>
-        </View>
+      <View style={styles.memberInfo}>
+        <Text style={styles.memberName}>{member.username}</Text>
+        <Text style={styles.memberRole}>
+          {member.role === 'owner' ? 'Group Owner' : member.role}
+        </Text>
+      </View>
+      <View style={styles.memberStatus}>
+        <View
+          style={[
+            styles.statusDot,
+            { backgroundColor: member.status === 'active' ? COLORS.SUCCESS[500] : COLORS.SECONDARY[400] },
+          ]}
+        />
       </View>
     </TouchableOpacity>
   );
 
+  const renderGroupCard = (group: TrainingGroup) => {
+    const isExpanded = expandedGroups.has(group.id);
+    const memberCount = group.members.length;
+
+    return (
+      <View key={group.id} style={styles.groupCard}>
+        {/* Group Header */}
+        <TouchableOpacity
+          style={styles.groupHeader}
+          onPress={() => toggleGroupExpanded(group.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.groupIcon}>
+            <Ionicons name="people" size={24} color={COLORS.PRIMARY[600]} />
+          </View>
+          <View style={styles.groupInfo}>
+            <Text style={styles.groupName}>{group.name}</Text>
+            <Text style={styles.groupMeta}>
+              {memberCount} member{memberCount !== 1 ? 's' : ''}
+              {group.groupCode ? ` • Code: ${group.groupCode}` : ''}
+            </Text>
+          </View>
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={24}
+            color={COLORS.SECONDARY[400]}
+          />
+        </TouchableOpacity>
+
+        {/* Group Actions */}
+        <View style={styles.groupActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleStartWorkoutSession(group)}
+          >
+            <Ionicons name="fitness" size={18} color={COLORS.PRIMARY[600]} />
+            <Text style={styles.actionButtonText}>Start Session</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonSecondary]}
+            onPress={() => router.push(`/groups/${group.id}`)}
+          >
+            <Ionicons name="settings-outline" size={18} color={COLORS.SECONDARY[600]} />
+            <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>
+              Manage
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Expanded Member List */}
+        {isExpanded && (
+          <View style={styles.membersSection}>
+            <Text style={styles.membersSectionTitle}>Group Members</Text>
+            {group.loadingMembers ? (
+              <View style={styles.loadingMembers}>
+                <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
+                <Text style={styles.loadingText}>Loading members...</Text>
+              </View>
+            ) : memberCount === 0 ? (
+              <View style={styles.noMembers}>
+                <Ionicons name="person-add-outline" size={32} color={COLORS.SECONDARY[300]} />
+                <Text style={styles.noMembersText}>No members yet</Text>
+                <Text style={styles.noMembersSubtext}>
+                  Share the group code to invite members
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.membersList}>
+                {group.members.map((member, index) => renderMemberCard(member, index))}
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <LoadingSpinner message="Loading members..." />
+        <LoadingSpinner message="Loading your training groups..." />
       </SafeAreaView>
     );
   }
@@ -108,39 +257,126 @@ export default function MentorDashboardScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Members</Text>
-          <View style={styles.backButton} />
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.headerTitle}>Mentor Dashboard</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={handleCreateTrainingGroup} style={styles.addButton}>
+              <Ionicons name="add" size={24} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Intro */}
-        <View style={styles.introSection}>
-          <Ionicons name="people" size={48} color={COLORS.SUCCESS[600]} />
-          <Text style={styles.introTitle}>Member Progress</Text>
-          <Text style={styles.introSubtitle}>
-            Track your members' fitness journeys and progress
+        {/* Welcome Section */}
+        <View style={styles.welcomeSection}>
+          <View style={styles.welcomeIcon}>
+            <Ionicons name="school" size={40} color={COLORS.SUCCESS[600]} />
+          </View>
+          <Text style={styles.welcomeTitle}>
+            Welcome, {user?.firstName || 'Mentor'}!
+          </Text>
+          <Text style={styles.welcomeSubtitle}>
+            Manage your training groups and track member progress
           </Text>
         </View>
 
-        {/* Member List or Empty State */}
-        {members.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="person-add-outline" size={64} color={COLORS.SECONDARY[300]} />
-            <Text style={styles.emptyTitle}>No Members Yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Members will appear here once they join your program
-            </Text>
-            <Text style={styles.emptyNote}>
-              Note: Member management features are currently being developed
-            </Text>
+        {/* Stats Summary */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Ionicons name="people" size={24} color={COLORS.PRIMARY[600]} />
+            <Text style={styles.statValue}>{trainingGroups.length}</Text>
+            <Text style={styles.statLabel}>Groups</Text>
           </View>
-        ) : (
-          <View style={styles.memberList}>
-            {members.map(renderMemberCard)}
+          <View style={styles.statCard}>
+            <Ionicons name="person" size={24} color={COLORS.SUCCESS[600]} />
+            <Text style={styles.statValue}>
+              {trainingGroups.reduce((sum, g) => sum + g.members.length, 0)}
+            </Text>
+            <Text style={styles.statLabel}>Total Members</Text>
           </View>
-        )}
+          <View style={styles.statCard}>
+            <Ionicons name="fitness" size={24} color={COLORS.WARNING[500]} />
+            <Text style={styles.statValue}>-</Text>
+            <Text style={styles.statLabel}>Sessions</Text>
+          </View>
+        </View>
+
+        {/* Training Groups */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Your Training Groups</Text>
+            <TouchableOpacity onPress={handleCreateTrainingGroup}>
+              <Ionicons name="add-circle" size={28} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
+          </View>
+
+          {trainingGroups.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color={COLORS.SECONDARY[300]} />
+              <Text style={styles.emptyTitle}>No Training Groups Yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Create a training group to start supervising members
+              </Text>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={handleCreateTrainingGroup}
+              >
+                <Ionicons name="add" size={20} color={COLORS.NEUTRAL.WHITE} />
+                <Text style={styles.createButtonText}>Create Training Group</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.groupsList}>
+              {trainingGroups.map(renderGroupCard)}
+            </View>
+          )}
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickActions}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={handleCreateTrainingGroup}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.PRIMARY[50] }]}>
+                <Ionicons name="people-outline" size={24} color={COLORS.PRIMARY[600]} />
+              </View>
+              <Text style={styles.quickActionText}>Create Group</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => router.push('/(tabs)/groups')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.SUCCESS[50] }]}>
+                <Ionicons name="search" size={24} color={COLORS.SUCCESS[600]} />
+              </View>
+              <Text style={styles.quickActionText}>Browse Groups</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => router.push('/(tabs)/profile')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.WARNING[50] }]}>
+                <Ionicons name="person-outline" size={24} color={COLORS.WARNING[600]} />
+              </View>
+              <Text style={styles.quickActionText}>My Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Bottom Navigation Hint */}
+        <View style={styles.bottomHint}>
+          <Text style={styles.bottomHintText}>
+            Tap on a group to expand and see members
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -149,7 +385,7 @@ export default function MentorDashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    backgroundColor: COLORS.NEUTRAL[50],
   },
   scrollView: {
     flex: 1,
@@ -161,135 +397,328 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.NEUTRAL[200],
   },
+  headerLeft: {
+    width: 44,
+  },
+  headerRight: {
+    width: 44,
+    alignItems: 'flex-end',
+  },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
+  },
+  addButton: {
+    padding: 8,
   },
   headerTitle: {
     fontSize: FONT_SIZES.LG,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
-  introSection: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 24,
+  welcomeSection: {
     alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginBottom: 16,
   },
-  introTitle: {
+  welcomeIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.SUCCESS[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  welcomeTitle: {
     fontSize: FONT_SIZES.XL,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
-    marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  introSubtitle: {
+  welcomeSubtitle: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
     textAlign: 'center',
-    lineHeight: 20,
   },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    textAlign: 'center',
-    lineHeight: 22,
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
     marginBottom: 16,
+    gap: 12,
   },
-  emptyNote: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  memberList: {
-    paddingHorizontal: 20,
-  },
-  memberCard: {
+  statCard: {
+    flex: 1,
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.NEUTRAL[200],
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statValue: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    marginTop: 8,
+  },
+  statLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginTop: 4,
+  },
+  section: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  groupsList: {
+    gap: 12,
+  },
+  groupCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
-  memberHeader: {
+  groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 16,
   },
-  memberAvatar: {
+  groupIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: COLORS.SUCCESS[50],
+    backgroundColor: COLORS.PRIMARY[50],
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  memberInfo: {
+  groupInfo: {
     flex: 1,
   },
-  memberName: {
+  groupName: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
     marginBottom: 2,
   },
-  memberEmail: {
+  groupMeta: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
   },
-  memberStats: {
+  groupActions: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.PRIMARY[50],
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  actionButtonSecondary: {
+    backgroundColor: COLORS.NEUTRAL[100],
+  },
+  actionButtonText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.PRIMARY[600],
+  },
+  actionButtonTextSecondary: {
+    color: COLORS.SECONDARY[600],
+  },
+  membersSection: {
     borderTopWidth: 1,
     borderTopColor: COLORS.NEUTRAL[200],
+    padding: 16,
   },
-  statItem: {
+  membersSectionTitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+    marginBottom: 12,
+  },
+  loadingMembers: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    gap: 8,
   },
-  statValue: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
+  loadingText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+  },
+  noMembers: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  noMembersText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[600],
+    marginTop: 8,
+  },
+  noMembersSubtext: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
     marginTop: 4,
-    marginBottom: 2,
   },
-  statLabel: {
+  membersList: {
+    gap: 8,
+  },
+  memberCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL[50],
+    borderRadius: 8,
+    padding: 12,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.PRIMARY[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  memberAvatarText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[900],
+  },
+  memberRole: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
+  },
+  memberStatus: {
+    padding: 4,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+  },
+  emptyTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY[600],
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  createButtonText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickActionCard: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  quickActionText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[700],
+    textAlign: 'center',
+  },
+  bottomHint: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  bottomHintText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
