@@ -234,7 +234,7 @@ export class AuthService {
         activity_level: 'moderately_active', // Default activity level
         fitness_goals: userData.goals || [], // Map goals to fitness_goals array
         date_of_birth: userData.dateOfBirth, // Include dateOfBirth if provided
-        // Note: role will be handled separately via role assignment API
+        role: userData.role || 'member', // Include role (default to member)
       };
 
       // Remove undefined/empty values, but keep age if it's calculated
@@ -270,11 +270,7 @@ export class AuthService {
       // Laravel registration doesn't return tokens immediately
       // Tokens are only returned after email verification via login
 
-      // Role assignment is handled separately after login since it requires auth tokens
-      // and admin privileges. For now, store role preference for later assignment.
-      if (userData.role) {
-        console.log(`🔖 Role "${userData.role}" noted for user. Will be assigned after email verification and first login.`);
-      }
+      console.log(`🔖 User registered with role: ${userData.role || 'member'}`);
 
       // Transform Laravel response to match our interface
       return {
