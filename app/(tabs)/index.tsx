@@ -61,13 +61,8 @@ export default function HomeScreen() {
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false); // Track if today's workout is done
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
-  // 🎓 MENTOR REDIRECT: If user is a mentor, redirect to mentor dashboard
-  useEffect(() => {
-    if (user?.role === 'mentor') {
-      console.log('🎓 [HOME] Mentor detected - redirecting to mentor dashboard');
-      router.replace('/mentor/dashboard');
-    }
-  }, [user?.role]);
+  // 🎓 MENTOR NOTE: Mentors stay in tabs navigation and can access their dashboard via "My Members" card
+  // They can also do their own Tabata workouts like regular members
 
   useEffect(() => {
     loadDashboardData();
@@ -529,6 +524,30 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Mentor Quick Access - Shown prominently for mentors */}
+        {user?.role === 'mentor' && (
+          <TouchableOpacity
+            style={styles.mentorQuickAccessCard}
+            onPress={() => router.push('/mentor/dashboard')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.mentorQuickAccessLeft}>
+              <View style={styles.mentorQuickAccessIcon}>
+                <Ionicons name="school" size={32} color={COLORS.SUCCESS[600]} />
+              </View>
+              <View style={styles.mentorQuickAccessContent}>
+                <Text style={styles.mentorQuickAccessTitle}>Mentor Dashboard</Text>
+                <Text style={styles.mentorQuickAccessSubtitle}>
+                  Manage your training groups and members
+                </Text>
+              </View>
+            </View>
+            <View style={styles.mentorQuickAccessArrow}>
+              <Ionicons name="chevron-forward" size={28} color={COLORS.SUCCESS[600]} />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Workout Day Status */}
         {user?.workoutDays && user.workoutDays.length > 0 && (
           <WorkoutDayStatus workoutDays={user.workoutDays} />
@@ -602,24 +621,14 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
         </TouchableOpacity>
 
-        {/* Mentor Dashboard Card - Only visible to mentors */}
+        {/* Mentor tip - remind mentors they can do workouts too */}
         {user?.role === 'mentor' && (
-          <TouchableOpacity
-            style={styles.mentorDashboardCard}
-            onPress={() => router.push('/mentor/dashboard')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.mentorDashboardIcon}>
-              <Ionicons name="people-outline" size={28} color={COLORS.SUCCESS[600]} />
-            </View>
-            <View style={styles.mentorDashboardContent}>
-              <Text style={styles.mentorDashboardTitle}>My Members</Text>
-              <Text style={styles.mentorDashboardSubtitle}>
-                Track member progress and workout plans
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
-          </TouchableOpacity>
+          <View style={styles.mentorTipCard}>
+            <Ionicons name="fitness" size={20} color={COLORS.PRIMARY[600]} />
+            <Text style={styles.mentorTipText}>
+              As a mentor, you can also do Tabata workouts below!
+            </Text>
+          </View>
         )}
 
         {/* Progression Card */}
@@ -1451,45 +1460,75 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[600],
     lineHeight: 18,
   },
-  mentorDashboardCard: {
+  mentorQuickAccessCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    marginHorizontal: 24,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: COLORS.SUCCESS[100],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  mentorDashboardIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    justifyContent: 'space-between',
     backgroundColor: COLORS.SUCCESS[50],
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: COLORS.SUCCESS[200],
+    shadowColor: COLORS.SUCCESS[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  mentorQuickAccessLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  mentorQuickAccessIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  mentorDashboardContent: {
+  mentorQuickAccessContent: {
     flex: 1,
   },
-  mentorDashboardTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
+  mentorQuickAccessTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SUCCESS[800],
     marginBottom: 4,
   },
-  mentorDashboardSubtitle: {
+  mentorQuickAccessSubtitle: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
+    color: COLORS.SUCCESS[700],
     lineHeight: 18,
+  },
+  mentorQuickAccessArrow: {
+    padding: 8,
+  },
+  mentorTipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY[50],
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  mentorTipText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.PRIMARY[700],
+    flex: 1,
   },
   activitySection: {
     marginHorizontal: 24,

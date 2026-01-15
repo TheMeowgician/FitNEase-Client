@@ -71,16 +71,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         setTimeout(async () => {
           // Get fresh user data to check role
           const currentUser = await authService.getCurrentUser();
-          console.log('🔑 Checking user role for navigation:', currentUser?.role);
+          console.log('🔑 User logged in with role:', currentUser?.role);
 
-          // Role-based routing: Mentors go to mentor dashboard, members go to home
-          if (currentUser?.role === 'mentor') {
-            console.log('🎓 Mentor detected - routing to mentor dashboard');
-            router.replace('/mentor/dashboard');
-          } else {
-            console.log('👤 Member detected - routing to home');
-            router.replace('/');
-          }
+          // Both mentors and members go to home (tabs) - mentors can access their dashboard from there
+          console.log('🏠 Routing to home (with tab navigation)');
+          router.replace('/');
         }, 200);
       }
     } catch (error: any) {

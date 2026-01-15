@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
 interface TrainingGroup extends Group {
@@ -29,6 +30,7 @@ export default function MentorDashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Load data when screen focuses
   useFocusEffect(
@@ -124,7 +126,11 @@ export default function MentorDashboardScreen() {
   };
 
   const handleCreateTrainingGroup = () => {
-    router.push('/groups/create');
+    setShowCreateModal(true);
+  };
+
+  const handleGroupCreated = () => {
+    loadTrainingGroups();
   };
 
   const handleStartWorkoutSession = (group: TrainingGroup) => {
@@ -258,8 +264,8 @@ export default function MentorDashboardScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
+            <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.backButton}>
+              <Ionicons name="home-outline" size={24} color={COLORS.SECONDARY[900]} />
             </TouchableOpacity>
           </View>
           <Text style={styles.headerTitle}>Mentor Dashboard</Text>
@@ -369,6 +375,21 @@ export default function MentorDashboardScreen() {
               <Text style={styles.quickActionText}>My Profile</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Personal Workout Section */}
+          <View style={styles.personalWorkoutSection}>
+            <Text style={styles.personalWorkoutTitle}>Your Personal Training</Text>
+            <Text style={styles.personalWorkoutSubtitle}>
+              As a mentor, you can also do your own Tabata workouts
+            </Text>
+            <TouchableOpacity
+              style={styles.personalWorkoutButton}
+              onPress={() => router.push('/(tabs)')}
+            >
+              <Ionicons name="fitness" size={24} color={COLORS.NEUTRAL.WHITE} />
+              <Text style={styles.personalWorkoutButtonText}>Go to My Workouts</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Bottom Navigation Hint */}
@@ -378,6 +399,13 @@ export default function MentorDashboardScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Create Group Modal - reusing existing component */}
+      <CreateGroupModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handleGroupCreated}
+      />
     </SafeAreaView>
   );
 }
@@ -391,7 +419,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 100, // Extra padding for safe area
   },
   header: {
     flexDirection: 'row',
@@ -720,5 +748,44 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[500],
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  personalWorkoutSection: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 8,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY[100],
+  },
+  personalWorkoutTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[800],
+    marginBottom: 4,
+  },
+  personalWorkoutSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.PRIMARY[700],
+    marginBottom: 16,
+  },
+  personalWorkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.PRIMARY[600],
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 8,
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  personalWorkoutButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });
