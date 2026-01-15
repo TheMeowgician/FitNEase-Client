@@ -1642,6 +1642,199 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to fetch pending invitations');
     }
   }
+
+  // ============================================================================
+  // JOIN REQUEST METHODS (Approval System)
+  // ============================================================================
+
+  /**
+   * Create a join request for a group
+   * POST /api/groups/{groupId}/join-requests
+   */
+  public async createJoinRequest(groupId: string, message?: string): Promise<{
+    status: string;
+    message: string;
+    data: { request_id: number; status: string };
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Creating join request for group:', groupId);
+
+      const response = await apiClient.post(
+        'social',
+        `/api/groups/${groupId}/join-requests`,
+        { message }
+      );
+
+      console.log('✅ [SOCIAL] Join request created successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to create join request:', error);
+      throw new Error((error as any).message || 'Failed to create join request');
+    }
+  }
+
+  /**
+   * Get pending join requests for a group (owner/moderator only)
+   * GET /api/groups/{groupId}/join-requests
+   */
+  public async getJoinRequests(groupId: string): Promise<{
+    status: string;
+    data: {
+      requests: Array<{
+        request_id: number;
+        user_id: number;
+        username: string;
+        user_role: string;
+        message?: string;
+        requested_at: string;
+      }>;
+      total: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Fetching join requests for group:', groupId);
+
+      const response = await apiClient.get(
+        'social',
+        `/api/groups/${groupId}/join-requests`
+      );
+
+      console.log('✅ [SOCIAL] Join requests fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to fetch join requests:', error);
+      throw new Error((error as any).message || 'Failed to fetch join requests');
+    }
+  }
+
+  /**
+   * Get pending join request count for a group
+   * GET /api/groups/{groupId}/join-requests/count
+   */
+  public async getJoinRequestCount(groupId: string): Promise<number> {
+    try {
+      console.log('📤 [SOCIAL] Fetching join request count for group:', groupId);
+
+      const response = await apiClient.get(
+        'social',
+        `/api/groups/${groupId}/join-requests/count`
+      );
+
+      const count = response.data?.data?.count || 0;
+      console.log('✅ [SOCIAL] Join request count:', count);
+      return count;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to fetch join request count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Approve a join request
+   * POST /api/groups/{groupId}/join-requests/{requestId}/approve
+   */
+  public async approveJoinRequest(groupId: string, requestId: number): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Approving join request:', { groupId, requestId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/groups/${groupId}/join-requests/${requestId}/approve`,
+        {}
+      );
+
+      console.log('✅ [SOCIAL] Join request approved successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to approve join request:', error);
+      throw new Error((error as any).message || 'Failed to approve join request');
+    }
+  }
+
+  /**
+   * Reject a join request
+   * POST /api/groups/{groupId}/join-requests/{requestId}/reject
+   */
+  public async rejectJoinRequest(groupId: string, requestId: number, reason?: string): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Rejecting join request:', { groupId, requestId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/groups/${groupId}/join-requests/${requestId}/reject`,
+        { reason }
+      );
+
+      console.log('✅ [SOCIAL] Join request rejected successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to reject join request:', error);
+      throw new Error((error as any).message || 'Failed to reject join request');
+    }
+  }
+
+  /**
+   * Cancel user's own pending join request
+   * DELETE /api/groups/{groupId}/join-requests
+   */
+  public async cancelJoinRequest(groupId: string): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Cancelling join request for group:', groupId);
+
+      const response = await apiClient.delete(
+        'social',
+        `/api/groups/${groupId}/join-requests`
+      );
+
+      console.log('✅ [SOCIAL] Join request cancelled successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to cancel join request:', error);
+      throw new Error((error as any).message || 'Failed to cancel join request');
+    }
+  }
+
+  /**
+   * Get user's own join requests
+   * GET /api/user/join-requests
+   */
+  public async getUserJoinRequests(): Promise<{
+    status: string;
+    data: Array<{
+      request_id: number;
+      group_id: number;
+      group_name: string;
+      status: 'pending' | 'approved' | 'rejected';
+      message?: string;
+      rejection_reason?: string;
+      requested_at: string;
+      responded_at?: string;
+    }>;
+  }> {
+    try {
+      console.log('📤 [SOCIAL] Fetching user join requests');
+
+      const response = await apiClient.get(
+        'social',
+        '/api/user/join-requests'
+      );
+
+      console.log('✅ [SOCIAL] User join requests fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL] Failed to fetch user join requests:', error);
+      throw new Error((error as any).message || 'Failed to fetch user join requests');
+    }
+  }
 }
 
 export const socialService = new SocialService();

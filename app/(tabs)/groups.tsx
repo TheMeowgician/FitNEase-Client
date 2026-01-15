@@ -147,11 +147,17 @@ export default function GroupsScreen() {
 
   const handleJoinGroup = async (group: Group) => {
     try {
-      await socialService.joinGroup({ groupId: group.id });
-      Alert.alert('Success', `You have joined ${group.name}!`);
-      loadGroups();
+      // Create a join request instead of directly joining
+      await socialService.createJoinRequest(group.id);
+      Alert.alert(
+        'Request Sent!',
+        `Your request to join "${group.name}" has been sent to the group owner for approval.`,
+        [{ text: 'OK' }]
+      );
+      // Remove from public groups list since request is pending
+      setPublicGroups(publicGroups.filter(g => g.id !== group.id));
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to join group.');
+      Alert.alert('Error', error.message || 'Failed to send join request.');
     }
   };
 
@@ -329,7 +335,7 @@ export default function GroupsScreen() {
                       onPress={() => handleJoinGroup(group)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.joinButtonText}>Join</Text>
+                      <Text style={styles.joinButtonText}>Request to Join</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

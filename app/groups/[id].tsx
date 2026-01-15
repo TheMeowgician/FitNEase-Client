@@ -23,6 +23,7 @@ import { useReverb } from '../../contexts/ReverbProvider';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
+import { JoinRequestsModal } from '../../components/groups/JoinRequestsModal';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import reverbService from '../../services/reverbService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -56,6 +57,10 @@ export default function GroupDetailsScreen() {
 
   // Settings modal state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Join requests modal state
+  const [showJoinRequestsModal, setShowJoinRequestsModal] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   useEffect(() => {
     loadGroupDetails();
@@ -174,6 +179,23 @@ export default function GroupDetailsScreen() {
     await loadGroupDetails();
     setRefreshing(false);
   };
+
+  // Load pending join requests count for owners/moderators
+  const loadPendingRequestsCount = async () => {
+    try {
+      const response = await socialService.getJoinRequestCount(id as string);
+      setPendingRequestsCount(response.data?.count || 0);
+    } catch (error) {
+      console.error('Failed to load pending requests count:', error);
+    }
+  };
+
+  // Load pending requests when user is owner/moderator
+  useEffect(() => {
+    if (userRole === 'owner' || userRole === 'moderator') {
+      loadPendingRequestsCount();
+    }
+  }, [userRole, id]);
 
   const handleCopyCode = () => {
     if (!group?.groupCode) {
@@ -600,6 +622,24 @@ export default function GroupDetailsScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Pending Requests Button - Only for owner/moderator */}
+          {(userRole === 'owner' || userRole === 'moderator') && (
+            <TouchableOpacity
+              style={[styles.actionButtonsRow, { marginTop: 12 }]}
+              onPress={() => setShowJoinRequestsModal(true)}
+            >
+              <View style={[styles.actionButton, styles.pendingRequestsButton]}>
+                <Ionicons name="people" size={20} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.actionButtonText}>Pending Requests</Text>
+                {pendingRequestsCount > 0 && (
+                  <View style={styles.pendingBadge}>
+                    <Text style={styles.pendingBadgeText}>{pendingRequestsCount}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
+
           {/* Second Row for Destructive Actions */}
           {(userRole === 'owner' || userRole === 'member') && (
             <View style={[styles.actionButtonsRow, { marginTop: 12 }]}>
@@ -755,6 +795,18 @@ export default function GroupDetailsScreen() {
         groupName={group.name}
       />
 
+      {/* Join Requests Modal */}
+      <JoinRequestsModal
+        visible={showJoinRequestsModal}
+        onClose={() => setShowJoinRequestsModal(false)}
+        groupId={id as string}
+        groupName={group.name}
+        onRequestHandled={() => {
+          loadPendingRequestsCount();
+          loadGroupDetails();
+        }}
+      />
+
       {/* Invite by Username Modal */}
       <Modal
         visible={showInviteModal}
@@ -868,6 +920,24 @@ export default function GroupDetailsScreen() {
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Invite Members</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  setShowJoinRequestsModal(true);
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="people-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <View style={styles.settingsOptionWithBadge}>
+                      <Text style={styles.settingsOptionText}>Join Requests</Text>
+                      {pendingRequestsCount > 0 && (
+                        <View style={styles.settingsBadge}>
+                          <Text style={styles.settingsBadgeText}>{pendingRequestsCount}</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
@@ -1127,6 +1197,27 @@ const styles = StyleSheet.create({
   },
   actionButtonDanger: {
     backgroundColor: '#FEE2E2',
+  },
+  pendingRequestsButton: {
+    flex: 1,
+    position: 'relative',
+  },
+  pendingBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: COLORS.ERROR[500],
+    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  pendingBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.BOLD,
+    color: '#FFFFFF',
   },
   actionButtonText: {
     fontSize: 14,
@@ -1453,6 +1544,25 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
+  },
+  settingsOptionWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsBadge: {
+    backgroundColor: COLORS.ERROR[500],
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  settingsBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.BOLD,
+    color: '#FFFFFF',
   },
   dangerSection: {
     borderTopWidth: 1,
