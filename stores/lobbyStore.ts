@@ -6,6 +6,7 @@ export interface LobbyMember {
   status: 'waiting' | 'ready';
   joined_at: number;
   fitness_level?: 'beginner' | 'intermediate' | 'advanced';
+  user_role?: 'mentor' | 'member'; // User's app role (for mentor badge)
 }
 
 export interface ChatMessage {

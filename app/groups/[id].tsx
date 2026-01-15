@@ -677,10 +677,20 @@ export default function GroupDetailsScreen() {
                       Joined {new Date(member.joinedAt).toLocaleDateString()}
                     </Text>
                   </View>
-                  <View style={[styles.roleBadge, getRoleBadgeStyle(member.role)]}>
-                    <Text style={[styles.roleBadgeText, getRoleBadgeTextStyle(member.role)]}>
-                      {member.role}
-                    </Text>
+                  <View style={styles.badgesContainer}>
+                    {/* Mentor badge */}
+                    {member.userRole === 'mentor' && (
+                      <View style={styles.mentorBadge}>
+                        <Ionicons name="school" size={12} color="#FFFFFF" />
+                        <Text style={styles.mentorBadgeText}>Mentor</Text>
+                      </View>
+                    )}
+                    {/* Group role badge */}
+                    <View style={[styles.roleBadge, getRoleBadgeStyle(member.role)]}>
+                      <Text style={[styles.roleBadgeText, getRoleBadgeTextStyle(member.role)]}>
+                        {member.role}
+                      </Text>
+                    </View>
                   </View>
                   {/* Kick button for owner */}
                   {userRole === 'owner' && member.userId !== user?.id && (
@@ -1253,6 +1263,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mentorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[600],
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  mentorBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#FFFFFF',
   },
   roleBadge: {
     paddingHorizontal: 12,

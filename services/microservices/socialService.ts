@@ -39,6 +39,7 @@ export interface GroupMember {
   username: string;
   profilePicture?: string;
   role: 'owner' | 'moderator' | 'member';
+  userRole?: 'mentor' | 'member'; // User's app role (for mentor badge)
   joinedAt: string;
   lastActive: string;
   contributions: {

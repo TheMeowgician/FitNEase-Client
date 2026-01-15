@@ -1274,6 +1274,12 @@ export default function GroupLobbyScreen() {
                         {isCurrentUser && (
                           <Text style={styles.youBadge}>(You)</Text>
                         )}
+                        {member.user_role === 'mentor' && (
+                          <View style={styles.mentorBadge}>
+                            <Ionicons name="school" size={10} color="#FFFFFF" />
+                            <Text style={styles.mentorBadgeText}>Mentor</Text>
+                          </View>
+                        )}
                       </View>
 
                       {/* Fitness Level */}
@@ -1898,6 +1904,21 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
+  },
+  mentorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[600],
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 3,
+    marginLeft: 4,
+  },
+  mentorBadgeText: {
+    fontSize: 9,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#FFFFFF',
   },
   fitnessLevel: {
     fontSize: FONT_SIZES.XS,

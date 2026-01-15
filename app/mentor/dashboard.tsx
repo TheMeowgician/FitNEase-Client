@@ -314,9 +314,7 @@ export default function MentorDashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Your Training Groups</Text>
-            <TouchableOpacity onPress={handleCreateTrainingGroup}>
-              <Ionicons name="add-circle" size={28} color={COLORS.PRIMARY[600]} />
-            </TouchableOpacity>
+            <Text style={styles.groupCount}>{trainingGroups.length}</Text>
           </View>
 
           {trainingGroups.length === 0 ? (
@@ -347,20 +345,10 @@ export default function MentorDashboardScreen() {
           <View style={styles.quickActions}>
             <TouchableOpacity
               style={styles.quickActionCard}
-              onPress={handleCreateTrainingGroup}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.PRIMARY[50] }]}>
-                <Ionicons name="people-outline" size={24} color={COLORS.PRIMARY[600]} />
-              </View>
-              <Text style={styles.quickActionText}>Create Group</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickActionCard}
               onPress={() => router.push('/(tabs)/groups')}
             >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.SUCCESS[50] }]}>
-                <Ionicons name="search" size={24} color={COLORS.SUCCESS[600]} />
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.PRIMARY[50] }]}>
+                <Ionicons name="search" size={24} color={COLORS.PRIMARY[600]} />
               </View>
               <Text style={styles.quickActionText}>Browse Groups</Text>
             </TouchableOpacity>
@@ -369,27 +357,23 @@ export default function MentorDashboardScreen() {
               style={styles.quickActionCard}
               onPress={() => router.push('/(tabs)/profile')}
             >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.WARNING[50] }]}>
-                <Ionicons name="person-outline" size={24} color={COLORS.WARNING[600]} />
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.SUCCESS[50] }]}>
+                <Ionicons name="person-outline" size={24} color={COLORS.SUCCESS[600]} />
               </View>
               <Text style={styles.quickActionText}>My Profile</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* Personal Workout Section */}
-          <View style={styles.personalWorkoutSection}>
-            <Text style={styles.personalWorkoutTitle}>Your Personal Training</Text>
-            <Text style={styles.personalWorkoutSubtitle}>
-              As a mentor, you can also do your own Tabata workouts
-            </Text>
             <TouchableOpacity
-              style={styles.personalWorkoutButton}
+              style={styles.quickActionCard}
               onPress={() => router.push('/(tabs)')}
             >
-              <Ionicons name="fitness" size={24} color={COLORS.NEUTRAL.WHITE} />
-              <Text style={styles.personalWorkoutButtonText}>Go to My Workouts</Text>
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.WARNING[50] }]}>
+                <Ionicons name="fitness" size={24} color={COLORS.WARNING[600]} />
+              </View>
+              <Text style={styles.quickActionText}>My Workouts</Text>
             </TouchableOpacity>
           </View>
+
         </View>
 
         {/* Bottom Navigation Hint */}
@@ -521,6 +505,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
+  },
+  groupCount: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
   },
   groupsList: {
     gap: 12,
@@ -748,44 +737,5 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[500],
     textAlign: 'center',
     fontStyle: 'italic',
-  },
-  personalWorkoutSection: {
-    backgroundColor: COLORS.PRIMARY[50],
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 8,
-    borderWidth: 2,
-    borderColor: COLORS.PRIMARY[100],
-  },
-  personalWorkoutTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[800],
-    marginBottom: 4,
-  },
-  personalWorkoutSubtitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.PRIMARY[700],
-    marginBottom: 16,
-  },
-  personalWorkoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.PRIMARY[600],
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 8,
-    shadowColor: COLORS.PRIMARY[600],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  personalWorkoutButtonText: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.NEUTRAL.WHITE,
   },
 });
