@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
@@ -13,11 +14,32 @@ import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 export default function WeeklyAssessmentScreen() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false);
   const [weight, setWeight] = useState('');
   const [motivationLevel, setMotivationLevel] = useState(3);
   const [workoutRating, setWorkoutRating] = useState(0);
   const [difficultyLevel, setDifficultyLevel] = useState<'too_easy' | 'just_right' | 'too_hard' | null>(null);
   const [notes, setNotes] = useState('');
+
+  // Check if user has already submitted this week's assessment
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        setIsCheckingStatus(true);
+        const status = await authService.getWeeklyAssessmentStatus();
+        if (status.completed_this_week) {
+          setAlreadyCompleted(true);
+        }
+      } catch (error) {
+        console.error('Error checking weekly assessment status:', error);
+      } finally {
+        setIsCheckingStatus(false);
+      }
+    };
+
+    checkStatus();
+  }, []);
 
   const handleSubmit = async () => {
     if (!weight || workoutRating === 0 || !difficultyLevel) {
@@ -152,6 +174,46 @@ export default function WeeklyAssessmentScreen() {
     );
   };
 
+  // Show loading while checking status
+  if (isCheckingStatus) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <LoadingSpinner message="Checking assessment status..." />
+      </SafeAreaView>
+    );
+  }
+
+  // Show already completed message if user submitted this week
+  if (alreadyCompleted) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Weekly Check-In</Text>
+          <View style={styles.backButton} />
+        </View>
+
+        <View style={styles.completedContainer}>
+          <View style={styles.completedIconContainer}>
+            <Ionicons name="checkmark-circle" size={80} color={COLORS.SUCCESS[500]} />
+          </View>
+          <Text style={styles.completedTitle}>Already Completed!</Text>
+          <Text style={styles.completedText}>
+            You've already submitted your weekly check-in for this week.
+            Come back next week to share your progress again!
+          </Text>
+          <Button
+            title="Back to Dashboard"
+            onPress={() => router.back()}
+            style={styles.completedButton}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -179,7 +241,7 @@ export default function WeeklyAssessmentScreen() {
             placeholder="Enter your weight (kg)"
             value={weight}
             onChangeText={setWeight}
-            keyboardType="decimal-pad"
+            keyboardType="numeric"
             leftIcon={<Ionicons name="scale-outline" size={20} color={COLORS.SECONDARY[400]} />}
           />
         </View>
@@ -372,5 +434,34 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 32,
     backgroundColor: COLORS.PRIMARY[500],
+  },
+  // Already completed styles
+  completedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  completedIconContainer: {
+    marginBottom: 24,
+  },
+  completedTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SUCCESS[700],
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  completedText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  completedButton: {
+    backgroundColor: COLORS.PRIMARY[500],
+    paddingHorizontal: 40,
   },
 });

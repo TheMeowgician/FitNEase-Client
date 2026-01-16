@@ -59,6 +59,10 @@ export default function HomeScreen() {
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
   const [isRefreshingWorkouts, setIsRefreshingWorkouts] = useState(false);
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false); // Track if today's workout is done
+  const [weeklyAssessmentStatus, setWeeklyAssessmentStatus] = useState<{
+    completed_this_week: boolean;
+    this_week_assessment: { id: number; submitted_at: string; score: number } | null;
+  }>({ completed_this_week: false, this_week_assessment: null }); // Track weekly assessment status
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
   // 🎓 MENTOR NOTE: Mentors stay in tabs navigation and can access their dashboard via "My Members" card
@@ -76,9 +80,29 @@ export default function HomeScreen() {
         console.log('🔄 [DASHBOARD] Screen focused - refreshing progress from store');
         fetchAllProgressData(user.id);
         checkTodayWorkoutCompletion(); // Check if today's workout is completed
+        checkWeeklyAssessmentStatus(); // Check if weekly assessment is completed
       }
     }, [user, fetchAllProgressData])
   );
+
+  /**
+   * Check if user has completed weekly assessment this week
+   */
+  const checkWeeklyAssessmentStatus = async () => {
+    if (!user) return;
+
+    try {
+      console.log('📋 [DASHBOARD] Checking weekly assessment status...');
+      const status = await authService.getWeeklyAssessmentStatus();
+      setWeeklyAssessmentStatus({
+        completed_this_week: status.completed_this_week,
+        this_week_assessment: status.this_week_assessment,
+      });
+      console.log(`📋 [DASHBOARD] Weekly assessment completed this week: ${status.completed_this_week}`);
+    } catch (error) {
+      console.error('❌ [DASHBOARD] Failed to check weekly assessment status:', error);
+    }
+  };
 
   /**
    * Check if user has completed a workout TODAY
@@ -195,6 +219,9 @@ export default function HomeScreen() {
 
       // Check if today's workout is completed
       await checkTodayWorkoutCompletion();
+
+      // Check if weekly assessment is completed
+      await checkWeeklyAssessmentStatus();
 
       console.log(`📊 [DASHBOARD] Using ${recommendations?.length || 0} recommendations from store`);
       console.log('📊 [DASHBOARD] Weekly stats from store:', weeklyStats);
@@ -604,22 +631,44 @@ export default function HomeScreen() {
         </View>
 
         {/* Weekly Check-In Card */}
-        <TouchableOpacity
-          style={styles.weeklyCheckInCard}
-          onPress={() => router.push('/assessment/weekly')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.weeklyCheckInIcon}>
-            <Ionicons name="clipboard-outline" size={28} color={COLORS.PRIMARY[600]} />
+        {weeklyAssessmentStatus.completed_this_week ? (
+          // Completed state - show success message
+          <View style={styles.weeklyCheckInCardCompleted}>
+            <View style={styles.weeklyCheckInIconCompleted}>
+              <Ionicons name="checkmark-circle" size={28} color={COLORS.SUCCESS[600]} />
+            </View>
+            <View style={styles.weeklyCheckInContent}>
+              <Text style={styles.weeklyCheckInTitleCompleted}>Weekly Check-In Complete!</Text>
+              <Text style={styles.weeklyCheckInSubtitleCompleted}>
+                Thanks for your feedback. See you next week!
+              </Text>
+            </View>
+            <Ionicons name="trophy" size={24} color={COLORS.SUCCESS[500]} />
           </View>
-          <View style={styles.weeklyCheckInContent}>
-            <Text style={styles.weeklyCheckInTitle}>Weekly Check-In</Text>
-            <Text style={styles.weeklyCheckInSubtitle}>
-              Share your progress and get better recommendations
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color={COLORS.SECONDARY[400]} />
-        </TouchableOpacity>
+        ) : (
+          // Not completed - show prominent call to action
+          <TouchableOpacity
+            style={styles.weeklyCheckInCardRequired}
+            onPress={() => router.push('/assessment/weekly')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.weeklyCheckInIconRequired}>
+              <Ionicons name="clipboard-outline" size={28} color={COLORS.PRIMARY[600]} />
+            </View>
+            <View style={styles.weeklyCheckInContent}>
+              <View style={styles.weeklyCheckInTitleRow}>
+                <Text style={styles.weeklyCheckInTitleRequired}>Weekly Check-In</Text>
+                <View style={styles.weeklyCheckInBadge}>
+                  <Text style={styles.weeklyCheckInBadgeText}>Required</Text>
+                </View>
+              </View>
+              <Text style={styles.weeklyCheckInSubtitle}>
+                Share your progress and get better recommendations
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color={COLORS.PRIMARY[600]} />
+          </TouchableOpacity>
+        )}
 
         {/* Mentor tip - remind mentors they can do workouts too */}
         {user?.role === 'mentor' && (
@@ -1460,6 +1509,89 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[600],
     lineHeight: 18,
   },
+  // Weekly Check-In Required State (not completed)
+  weeklyCheckInCardRequired: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginHorizontal: 24,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY[300],
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  weeklyCheckInIconRequired: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.PRIMARY[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  weeklyCheckInTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  weeklyCheckInTitleRequired: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[700],
+    marginRight: 8,
+  },
+  weeklyCheckInBadge: {
+    backgroundColor: COLORS.PRIMARY[600],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  weeklyCheckInBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  // Weekly Check-In Completed State
+  weeklyCheckInCardCompleted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[50],
+    marginHorizontal: 24,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.SUCCESS[200],
+  },
+  weeklyCheckInIconCompleted: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.SUCCESS[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  weeklyCheckInTitleCompleted: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SUCCESS[700],
+    marginBottom: 4,
+  },
+  weeklyCheckInSubtitleCompleted: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SUCCESS[600],
+    lineHeight: 18,
+  },
   mentorQuickAccessCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1526,7 +1658,7 @@ const styles = StyleSheet.create({
   },
   mentorTipText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[700],
     flex: 1,
   },

@@ -913,6 +913,38 @@ export class AuthService {
       throw new Error((error as any).message || 'Failed to update fitness assessment');
     }
   }
+
+  // Check if user has submitted weekly assessment this week
+  public async getWeeklyAssessmentStatus(): Promise<{
+    completed_this_week: boolean;
+    week_start: string;
+    week_end: string;
+    this_week_assessment: {
+      id: number;
+      submitted_at: string;
+      score: number;
+    } | null;
+    last_assessment: {
+      id: number;
+      submitted_at: string;
+      score: number;
+    } | null;
+  }> {
+    try {
+      const response = await apiClient.get('auth', '/api/weekly-assessment-status');
+      return response.data;
+    } catch (error) {
+      console.warn('⚠️ Could not get weekly assessment status:', error);
+      // Return default status if check fails
+      return {
+        completed_this_week: false,
+        week_start: new Date().toISOString(),
+        week_end: new Date().toISOString(),
+        this_week_assessment: null,
+        last_assessment: null,
+      };
+    }
+  }
 }
 
 export const authService = new AuthService();
