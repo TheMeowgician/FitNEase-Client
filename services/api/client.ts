@@ -47,9 +47,20 @@ export class APIClient {
   private isRefreshing = false;
   private refreshPromise: Promise<string | null> | null = null;
 
+  // Rate limit retry configuration
+  private readonly MAX_RETRIES = 3;
+  private readonly INITIAL_RETRY_DELAY = 1000; // 1 second
+
   constructor(configs: APIClientConfig) {
     this.configs = configs;
     this.initializeClients();
+  }
+
+  /**
+   * Delay execution with exponential backoff
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private initializeClients(): void {
@@ -109,7 +120,7 @@ export class APIClient {
     client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+        const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
 
         // Check if this is an auth endpoint that should NOT trigger token refresh
         const authExcludedEndpoints = [
@@ -125,6 +136,28 @@ export class APIClient {
         const isAuthExcluded = authExcludedEndpoints.some(endpoint =>
           originalRequest.url?.includes(endpoint)
         );
+
+        // Handle rate limiting (429) with exponential backoff retry
+        if (error.response?.status === 429) {
+          const retryCount = originalRequest._retryCount || 0;
+
+          if (retryCount < this.MAX_RETRIES) {
+            originalRequest._retryCount = retryCount + 1;
+
+            // Get retry-after header or calculate exponential backoff
+            const retryAfter = error.response.headers['retry-after'];
+            const delayMs = retryAfter
+              ? parseInt(retryAfter) * 1000
+              : this.INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
+
+            console.log(`⏳ [${serviceName}] Rate limited (429), retrying in ${delayMs}ms (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
+
+            await this.delay(delayMs);
+            return client(originalRequest);
+          } else {
+            console.error(`❌ [${serviceName}] Rate limit retry exhausted after ${this.MAX_RETRIES} attempts`);
+          }
+        }
 
         if (error.response?.status === 401 && !originalRequest._retry && !isAuthExcluded) {
           console.log(`🔄 [${serviceName}] Got 401, attempting token refresh...`);
