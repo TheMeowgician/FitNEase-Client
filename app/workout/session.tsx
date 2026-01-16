@@ -976,6 +976,7 @@ export default function WorkoutSessionScreen() {
           workoutId: sessionId,
           userId: Number(user.id),
           sessionType: type === 'group_tabata' ? 'group' : 'individual',
+          groupId: groupId ? Number(groupId) : null, // Include group ID for group workouts
           startTime: sessionStartTime,
           endTime: new Date(),
           duration: actualDurationMinutes,
@@ -1087,6 +1088,7 @@ export default function WorkoutSessionScreen() {
         workoutId: sessionId,
         userId: Number(user.id),
         sessionType: type === 'group_tabata' ? 'group' : 'individual',
+        groupId: groupId ? Number(groupId) : null, // Include group ID for group workouts
         startTime: sessionStartTime,
         endTime: new Date(),
         duration: finalDurationMinutes,

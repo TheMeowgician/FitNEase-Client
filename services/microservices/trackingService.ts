@@ -385,6 +385,7 @@ export class TrackingService {
     workoutId: string;
     userId: number;
     sessionType?: 'individual' | 'group';
+    groupId?: number | null; // Group ID for group workouts
     startTime: Date;
     endTime?: Date;
     duration: number;
@@ -394,7 +395,7 @@ export class TrackingService {
   }): Promise<WorkoutSession> {
     try {
       // Backend expects specific field names
-      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/workout-session', {
+      const payload: any = {
         user_id: sessionData.userId,
         workout_id: 1, // Temporary: We don't have real workout IDs yet for Tabata sessions
         session_type: sessionData.sessionType || 'individual',
@@ -405,7 +406,14 @@ export class TrackingService {
         completion_percentage: sessionData.completed ? 100 : 50,
         calories_burned: sessionData.caloriesBurned,
         user_notes: sessionData.notes,
-      });
+      };
+
+      // Include group_id if this is a group workout
+      if (sessionData.groupId) {
+        payload.group_id = sessionData.groupId;
+      }
+
+      const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/workout-session', payload);
       return response.data.data;
     } catch (error) {
       console.warn('Tracking service unavailable - session saved locally:', error);

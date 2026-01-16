@@ -367,32 +367,36 @@ export class SocialService {
       const rawData = response.data.data || response.data;
 
       // Transform Laravel response to frontend format
-      const transformedGroups: Group[] = (rawData.data || []).map((group: any) => ({
-        id: group.group_id?.toString(),
-        name: group.group_name,
-        description: group.description,
-        type: group.is_private ? 'private' : 'public',
-        category: 'fitness',
-        memberCount: group.current_member_count || 0,
-        maxMembers: group.max_members,
-        isActive: group.is_active,
-        createdBy: group.created_by?.toString(),
-        moderators: [],
-        tags: [],
-        groupImage: group.group_image,
-        groupCode: group.group_code,
-        achievements: [],
-        stats: {
-          totalWorkouts: 0,
-          totalMinutes: 0,
-          averageWeeklyActivity: 0,
-          mostActiveDay: '',
-          popularWorkoutTypes: [],
-          memberProgress: { improving: 0, maintaining: 0, declining: 0 }
-        },
-        createdAt: group.created_at,
-        updatedAt: group.updated_at
-      }));
+      const transformedGroups: Group[] = (rawData.data || []).map((group: any) => {
+        // Use actual stats from backend if available
+        const backendStats = group.stats || {};
+        return {
+          id: group.group_id?.toString(),
+          name: group.group_name,
+          description: group.description,
+          type: group.is_private ? 'private' : 'public',
+          category: 'fitness',
+          memberCount: group.current_member_count || 0,
+          maxMembers: group.max_members,
+          isActive: group.is_active,
+          createdBy: group.created_by?.toString(),
+          moderators: [],
+          tags: [],
+          groupImage: group.group_image,
+          groupCode: group.group_code,
+          achievements: [],
+          stats: {
+            totalWorkouts: backendStats.total_workouts || 0,
+            totalMinutes: backendStats.total_minutes || 0,
+            averageWeeklyActivity: backendStats.weekly_average || 0,
+            mostActiveDay: '',
+            popularWorkoutTypes: [],
+            memberProgress: { improving: 0, maintaining: 0, declining: 0 }
+          },
+          createdAt: group.created_at,
+          updatedAt: group.updated_at
+        };
+      });
 
       return {
         groups: transformedGroups,
@@ -419,6 +423,9 @@ export class SocialService {
         has_group_code: !!rawGroup.group_code
       });
 
+      // Use actual stats from backend if available, otherwise default to zeros
+      const backendStats = rawGroup.stats || {};
+
       const transformedGroup: Group = {
         id: rawGroup.group_id?.toString(),
         name: rawGroup.group_name,
@@ -435,9 +442,9 @@ export class SocialService {
         groupCode: rawGroup.group_code,
         achievements: [],
         stats: {
-          totalWorkouts: 0,
-          totalMinutes: 0,
-          averageWeeklyActivity: 0,
+          totalWorkouts: backendStats.total_workouts || 0,
+          totalMinutes: backendStats.total_minutes || 0,
+          averageWeeklyActivity: backendStats.weekly_average || 0,
           mostActiveDay: '',
           popularWorkoutTypes: [],
           memberProgress: { improving: 0, maintaining: 0, declining: 0 }
@@ -445,6 +452,8 @@ export class SocialService {
         createdAt: rawGroup.created_at,
         updatedAt: rawGroup.updated_at
       };
+
+      console.log('📊 Group Stats from Backend:', backendStats);
 
       return transformedGroup;
     } catch (error) {
