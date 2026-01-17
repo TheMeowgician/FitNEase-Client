@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -52,43 +51,42 @@ export default function MentorDashboardScreen() {
       console.log('🎓 [MENTOR] Groups response:', response);
 
       // Filter to only groups owned by this mentor
-      const mentorGroups = response.groups.filter(
-        (group) => group.createdBy === user?.id?.toString()
-      );
+      const mentorGroupIds = response.groups
+        .filter((group) => group.createdBy === user?.id?.toString())
+        .map((group) => group.id);
 
-      console.log('🎓 [MENTOR] Filtered mentor groups:', mentorGroups.length);
+      console.log('🎓 [MENTOR] Filtered mentor group IDs:', mentorGroupIds.length);
 
-      // Initialize groups with empty members and loading state
-      const groupsWithMembers: TrainingGroup[] = mentorGroups.map((group) => ({
-        ...group,
-        members: [],
-        loadingMembers: true,
-      }));
+      // Initialize with empty state
+      const groupsWithMembers: TrainingGroup[] = [];
 
-      setTrainingGroups(groupsWithMembers);
-
-      // Load members for each group
-      for (const group of mentorGroups) {
+      // Load full details for each group (includes stats from tracking service)
+      for (const groupId of mentorGroupIds) {
         try {
-          const membersResponse = await socialService.getGroupMembers(group.id);
-          console.log(`🎓 [MENTOR] Members for group ${group.name}:`, membersResponse.members.length);
+          // Fetch full group details which includes stats
+          const fullGroup = await socialService.getGroup(groupId);
+          console.log(`🎓 [MENTOR] Full group details for ${fullGroup.name}:`, {
+            stats: fullGroup.stats
+          });
 
-          setTrainingGroups((prev) =>
-            prev.map((g) =>
-              g.id === group.id
-                ? { ...g, members: membersResponse.members, loadingMembers: false }
-                : g
-            )
-          );
+          // Fetch members
+          const membersResponse = await socialService.getGroupMembers(groupId);
+          console.log(`🎓 [MENTOR] Members for group ${fullGroup.name}:`, membersResponse.members.length);
+
+          groupsWithMembers.push({
+            ...fullGroup,
+            members: membersResponse.members,
+            loadingMembers: false,
+          });
+
+          // Update state incrementally for better UX
+          setTrainingGroups([...groupsWithMembers]);
         } catch (error) {
-          console.error(`Error loading members for group ${group.id}:`, error);
-          setTrainingGroups((prev) =>
-            prev.map((g) =>
-              g.id === group.id ? { ...g, loadingMembers: false } : g
-            )
-          );
+          console.error(`Error loading group ${groupId}:`, error);
         }
       }
+
+      setTrainingGroups(groupsWithMembers);
     } catch (error) {
       console.error('Error loading training groups:', error);
       Alert.alert('Error', 'Failed to load training groups. Please try again.');
@@ -116,13 +114,12 @@ export default function MentorDashboardScreen() {
   };
 
   const navigateToMemberDetail = (member: GroupMember) => {
-    // Navigate to member detail view (can be implemented later)
+    // Navigate to member detail view
     console.log('View member:', member);
-    Alert.alert(
-      member.username,
-      `Member since: ${new Date(member.joinedAt).toLocaleDateString()}\nRole: ${member.role}`,
-      [{ text: 'OK' }]
-    );
+    router.push({
+      pathname: '/mentor/member/[id]',
+      params: { id: member.userId, username: member.username }
+    });
   };
 
   const handleCreateTrainingGroup = () => {
@@ -305,7 +302,9 @@ export default function MentorDashboardScreen() {
           </View>
           <View style={styles.statCard}>
             <Ionicons name="fitness" size={24} color={COLORS.WARNING[500]} />
-            <Text style={styles.statValue}>-</Text>
+            <Text style={styles.statValue}>
+              {trainingGroups.reduce((sum, g) => sum + (g.stats?.totalWorkouts || 0), 0)}
+            </Text>
             <Text style={styles.statLabel}>Sessions</Text>
           </View>
         </View>

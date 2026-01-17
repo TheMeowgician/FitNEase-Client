@@ -945,6 +945,66 @@ export class AuthService {
       };
     }
   }
+
+  // Get member profile by ID (for mentor dashboard)
+  public async getMemberProfile(userId: string): Promise<User | null> {
+    try {
+      const response = await apiClient.get('auth', `/api/auth/user-profile/${userId}`);
+      const rawData = response.data;
+
+      console.log('📋 Raw getMemberProfile response:', rawData);
+
+      // Transform user data from snake_case to camelCase
+      const transformedUser: User = {
+        id: rawData.user_id?.toString() || '',
+        email: rawData.email,
+        username: rawData.username,
+        firstName: rawData.first_name,
+        lastName: rawData.last_name,
+        isEmailVerified: !!rawData.email_verified_at,
+        onboardingCompleted: !!rawData.onboarding_completed,
+        profilePicture: rawData.profile_picture,
+        dateOfBirth: rawData.date_of_birth,
+        gender: rawData.gender,
+        height: rawData.height,
+        weight: rawData.weight,
+        fitnessLevel: rawData.fitness_level,
+        goals: rawData.fitness_goals || [],
+        role: rawData.role,
+        createdAt: rawData.created_at,
+        updatedAt: rawData.updated_at,
+        targetMuscleGroups: rawData.target_muscle_groups || [],
+        availableEquipment: rawData.available_equipment || [],
+        timeConstraints: rawData.time_constraints_minutes,
+        activityLevel: rawData.activity_level,
+        workoutExperience: rawData.workout_experience_years,
+        phoneNumber: rawData.phone_number,
+        workoutDays: rawData.preferred_workout_days || [],
+        totalWorkoutsCompleted: rawData.total_workouts_completed,
+        totalWorkoutMinutes: rawData.total_workout_minutes,
+        activeDays: rawData.active_days,
+        currentStreakDays: rawData.current_streak_days,
+        longestStreakDays: rawData.longest_streak_days,
+      };
+
+      return transformedUser;
+    } catch (error) {
+      console.error('❌ getMemberProfile failed:', error);
+      return null;
+    }
+  }
+
+  // Get member's fitness assessments (for mentor dashboard)
+  public async getMemberAssessments(userId: string): Promise<any[]> {
+    try {
+      const response = await apiClient.get('auth', `/api/users/${userId}/assessments`);
+      console.log('📋 Raw getMemberAssessments response:', response.data);
+      return response.data?.data || response.data || [];
+    } catch (error) {
+      console.error('❌ getMemberAssessments failed:', error);
+      return [];
+    }
+  }
 }
 
 export const authService = new AuthService();

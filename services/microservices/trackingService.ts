@@ -970,6 +970,82 @@ export class TrackingService {
       throw new Error((error as any).message || 'Failed to export data');
     }
   }
+
+  // Get member session stats (for mentor dashboard)
+  public async getMemberSessionStats(userId: string): Promise<{
+    totalSessions: number;
+    completedSessions: number;
+    totalMinutes: number;
+    totalCalories: number;
+    averageSessionDuration: number;
+    averageCaloriesPerSession: number;
+    currentStreak: number;
+    longestStreak: number;
+    lastSessionDate: string | null;
+  }> {
+    try {
+      const response = await apiClient.get('tracking', `/api/session-stats/${userId}`);
+      console.log('📊 getMemberSessionStats response:', response.data);
+
+      const stats = response.data?.data || response.data || {};
+      return {
+        totalSessions: stats.total_sessions || 0,
+        completedSessions: stats.completed_sessions || 0,
+        totalMinutes: stats.total_minutes || 0,
+        totalCalories: stats.total_calories || 0,
+        averageSessionDuration: stats.average_session_duration || 0,
+        averageCaloriesPerSession: stats.average_calories_per_session || 0,
+        currentStreak: stats.current_streak || 0,
+        longestStreak: stats.longest_streak || 0,
+        lastSessionDate: stats.last_session_date || null,
+      };
+    } catch (error) {
+      console.error('❌ getMemberSessionStats failed:', error);
+      return {
+        totalSessions: 0,
+        completedSessions: 0,
+        totalMinutes: 0,
+        totalCalories: 0,
+        averageSessionDuration: 0,
+        averageCaloriesPerSession: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastSessionDate: null,
+      };
+    }
+  }
+
+  // Get member weekly summary (for mentor dashboard)
+  public async getMemberWeeklySummary(userId: string): Promise<{
+    workoutsThisWeek: number;
+    minutesThisWeek: number;
+    caloriesThisWeek: number;
+    weeklyGoalProgress: number;
+    daysActive: number;
+  }> {
+    try {
+      const response = await apiClient.get('tracking', `/api/weekly-summary/${userId}`);
+      console.log('📊 getMemberWeeklySummary response:', response.data);
+
+      const summary = response.data?.data || response.data || {};
+      return {
+        workoutsThisWeek: summary.workouts_this_week || 0,
+        minutesThisWeek: summary.minutes_this_week || 0,
+        caloriesThisWeek: summary.calories_this_week || 0,
+        weeklyGoalProgress: summary.weekly_goal_progress || 0,
+        daysActive: summary.days_active || 0,
+      };
+    } catch (error) {
+      console.error('❌ getMemberWeeklySummary failed:', error);
+      return {
+        workoutsThisWeek: 0,
+        minutesThisWeek: 0,
+        caloriesThisWeek: 0,
+        weeklyGoalProgress: 0,
+        daysActive: 0,
+      };
+    }
+  }
 }
 
 export const trackingService = new TrackingService();
