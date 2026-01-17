@@ -151,7 +151,9 @@ export default function MemberDetailScreen() {
             <Text style={styles.infoLabel}>Fitness Level</Text>
             <View style={[styles.levelBadge, { backgroundColor: getFitnessLevelColor(member?.fitnessLevel) + '20' }]}>
               <Text style={[styles.levelText, { color: getFitnessLevelColor(member?.fitnessLevel) }]}>
-                {member?.fitnessLevel?.charAt(0).toUpperCase() + member?.fitnessLevel?.slice(1) || 'Not set'}
+                {member?.fitnessLevel
+                  ? member.fitnessLevel.charAt(0).toUpperCase() + member.fitnessLevel.slice(1)
+                  : 'Not set'}
               </Text>
             </View>
           </View>
@@ -474,7 +476,7 @@ const styles = StyleSheet.create({
   },
   roleText: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
     textTransform: 'capitalize',
   },
@@ -497,7 +499,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[500],
   },
   activeTabText: {
@@ -540,7 +542,7 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
   levelBadge: {
@@ -590,7 +592,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[700],
     marginTop: 12,
   },
@@ -630,7 +632,7 @@ const styles = StyleSheet.create({
   },
   assessmentTypeText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
   assessmentDate: {
@@ -674,7 +676,7 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[700],
   },
 });

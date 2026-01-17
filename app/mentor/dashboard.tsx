@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -572,7 +573,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
   },
   actionButtonTextSecondary: {
@@ -607,7 +608,7 @@ const styles = StyleSheet.create({
   },
   noMembersText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
     marginTop: 8,
   },
@@ -646,7 +647,7 @@ const styles = StyleSheet.create({
   },
   memberName: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
   memberRole: {
@@ -722,7 +723,7 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[700],
     textAlign: 'center',
   },
