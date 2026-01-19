@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -52,42 +52,43 @@ export default function MentorDashboardScreen() {
       console.log('🎓 [MENTOR] Groups response:', response);
 
       // Filter to only groups owned by this mentor
-      const mentorGroupIds = response.groups
-        .filter((group) => group.createdBy === user?.id?.toString())
-        .map((group) => group.id);
+      const mentorGroups = response.groups.filter(
+        (group) => group.createdBy === user?.id?.toString()
+      );
 
-      console.log('🎓 [MENTOR] Filtered mentor group IDs:', mentorGroupIds.length);
+      console.log('🎓 [MENTOR] Filtered mentor groups:', mentorGroups.length);
 
-      // Initialize with empty state
-      const groupsWithMembers: TrainingGroup[] = [];
-
-      // Load full details for each group (includes stats from tracking service)
-      for (const groupId of mentorGroupIds) {
-        try {
-          // Fetch full group details which includes stats
-          const fullGroup = await socialService.getGroup(groupId);
-          console.log(`🎓 [MENTOR] Full group details for ${fullGroup.name}:`, {
-            stats: fullGroup.stats
-          });
-
-          // Fetch members
-          const membersResponse = await socialService.getGroupMembers(groupId);
-          console.log(`🎓 [MENTOR] Members for group ${fullGroup.name}:`, membersResponse.members.length);
-
-          groupsWithMembers.push({
-            ...fullGroup,
-            members: membersResponse.members,
-            loadingMembers: false,
-          });
-
-          // Update state incrementally for better UX
-          setTrainingGroups([...groupsWithMembers]);
-        } catch (error) {
-          console.error(`Error loading group ${groupId}:`, error);
-        }
-      }
+      // Initialize groups with empty members and loading state
+      const groupsWithMembers: TrainingGroup[] = mentorGroups.map((group) => ({
+        ...group,
+        members: [],
+        loadingMembers: true,
+      }));
 
       setTrainingGroups(groupsWithMembers);
+
+      // Load members for each group
+      for (const group of mentorGroups) {
+        try {
+          const membersResponse = await socialService.getGroupMembers(group.id);
+          console.log(`🎓 [MENTOR] Members for group ${group.name}:`, membersResponse.members.length);
+
+          setTrainingGroups((prev) =>
+            prev.map((g) =>
+              g.id === group.id
+                ? { ...g, members: membersResponse.members, loadingMembers: false }
+                : g
+            )
+          );
+        } catch (error) {
+          console.error(`Error loading members for group ${group.id}:`, error);
+          setTrainingGroups((prev) =>
+            prev.map((g) =>
+              g.id === group.id ? { ...g, loadingMembers: false } : g
+            )
+          );
+        }
+      }
     } catch (error) {
       console.error('Error loading training groups:', error);
       Alert.alert('Error', 'Failed to load training groups. Please try again.');
@@ -114,12 +115,17 @@ export default function MentorDashboardScreen() {
     });
   };
 
-  const navigateToMemberDetail = (member: GroupMember) => {
+  const navigateToMemberDetail = (member: GroupMember, group: TrainingGroup) => {
     // Navigate to member detail view
-    console.log('View member:', member);
+    console.log('View member:', member.userId, 'from group:', group.name);
     router.push({
       pathname: '/mentor/member/[id]',
-      params: { id: member.userId, username: member.username }
+      params: {
+        id: member.userId,
+        username: member.username,
+        groupId: group.id,
+        groupName: group.name,
+      },
     });
   };
 
@@ -136,11 +142,11 @@ export default function MentorDashboardScreen() {
     router.push(`/groups/${group.id}`);
   };
 
-  const renderMemberCard = (member: GroupMember, index: number) => (
+  const renderMemberCard = (member: GroupMember, index: number, group: TrainingGroup) => (
     <TouchableOpacity
       key={member.id}
       style={styles.memberCard}
-      onPress={() => navigateToMemberDetail(member)}
+      onPress={() => navigateToMemberDetail(member, group)}
       activeOpacity={0.7}
     >
       <View style={styles.memberAvatar}>
@@ -233,7 +239,7 @@ export default function MentorDashboardScreen() {
               </View>
             ) : (
               <View style={styles.membersList}>
-                {group.members.map((member, index) => renderMemberCard(member, index))}
+                {group.members.map((member, index) => renderMemberCard(member, index, group))}
               </View>
             )}
           </View>

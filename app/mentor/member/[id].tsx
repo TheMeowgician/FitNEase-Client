@@ -42,6 +42,16 @@ interface Assessment {
   assessment_data: any;
 }
 
+interface SessionHistory {
+  id: string;
+  workoutName: string;
+  duration: number;
+  caloriesBurned: number;
+  completionPercentage: number;
+  status: 'completed' | 'in-progress' | 'paused' | 'cancelled';
+  date: string;
+}
+
 export default function MemberDetailScreen() {
   const { id, username } = useLocalSearchParams<{ id: string; username?: string }>();
 
@@ -49,6 +59,7 @@ export default function MemberDetailScreen() {
   const [stats, setStats] = useState<MemberStats | null>(null);
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [sessions, setSessions] = useState<SessionHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'assessments' | 'sessions'>('overview');
@@ -69,22 +80,36 @@ export default function MemberDetailScreen() {
       console.log('Loading member data for ID:', id);
 
       // Load all data in parallel
-      const [memberProfile, memberStats, memberWeekly, memberAssessments] = await Promise.all([
+      const [memberProfile, memberStats, memberWeekly, memberAssessments, memberSessions] = await Promise.all([
         authService.getMemberProfile(id),
         trackingService.getMemberSessionStats(id),
         trackingService.getMemberWeeklySummary(id),
         authService.getMemberAssessments(id),
+        trackingService.getSessions({ userId: id, limit: 50 }),
       ]);
 
       console.log('Member profile:', memberProfile);
       console.log('Member stats:', memberStats);
       console.log('Member weekly:', memberWeekly);
       console.log('Member assessments:', memberAssessments);
+      console.log('Member sessions:', memberSessions);
 
       setMember(memberProfile);
       setStats(memberStats);
       setWeeklySummary(memberWeekly);
       setAssessments(memberAssessments || []);
+
+      // Transform sessions to SessionHistory format
+      const transformedSessions: SessionHistory[] = (memberSessions?.sessions || []).map((s: any) => ({
+        id: s.id,
+        workoutName: s.workoutName || 'Tabata Workout',
+        duration: s.duration || 0,
+        caloriesBurned: s.actualCaloriesBurned || 0,
+        completionPercentage: s.completionPercentage || 0,
+        status: s.status || 'completed',
+        date: s.createdAt || s.startTime,
+      }));
+      setSessions(transformedSessions);
     } catch (error) {
       console.error('Error loading member data:', error);
     } finally {
@@ -316,6 +341,70 @@ export default function MemberDetailScreen() {
     </View>
   );
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return COLORS.SUCCESS[500];
+      case 'in-progress':
+        return COLORS.WARNING[500];
+      case 'paused':
+        return COLORS.SECONDARY[400];
+      case 'cancelled':
+        return COLORS.ERROR[500];
+      default:
+        return COLORS.SECONDARY[400];
+    }
+  };
+
+  const renderSessionsTab = () => (
+    <View style={styles.tabContent}>
+      {sessions.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="fitness-outline" size={48} color={COLORS.SECONDARY[300]} />
+          <Text style={styles.emptyText}>No workout sessions yet</Text>
+          <Text style={styles.emptySubtext}>
+            This member hasn't completed any workout sessions
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.sessionsList}>
+          {sessions.map((session) => (
+            <View key={session.id} style={styles.sessionCard}>
+              <View style={styles.sessionHeader}>
+                <View style={styles.sessionInfo}>
+                  <Ionicons name="fitness" size={20} color={COLORS.PRIMARY[600]} />
+                  <Text style={styles.sessionName}>{session.workoutName}</Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(session.status) + '20' }]}>
+                  <Text style={[styles.statusText, { color: getStatusColor(session.status) }]}>
+                    {session.status.charAt(0).toUpperCase() + session.status.slice(1).replace('-', ' ')}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.sessionBody}>
+                <View style={styles.sessionMetrics}>
+                  <View style={styles.sessionMetric}>
+                    <Ionicons name="time-outline" size={16} color={COLORS.SECONDARY[500]} />
+                    <Text style={styles.metricValue}>{session.duration} min</Text>
+                  </View>
+                  <View style={styles.sessionMetric}>
+                    <Ionicons name="flame-outline" size={16} color={COLORS.WARNING[500]} />
+                    <Text style={styles.metricValue}>{Math.round(session.caloriesBurned)} kcal</Text>
+                  </View>
+                  <View style={styles.sessionMetric}>
+                    <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.SUCCESS[500]} />
+                    <Text style={styles.metricValue}>{Math.round(session.completionPercentage)}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.sessionDate}>{formatDate(session.date)}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -381,11 +470,20 @@ export default function MemberDetailScreen() {
               Assessments
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
+            onPress={() => setActiveTab('sessions')}
+          >
+            <Text style={[styles.tabText, activeTab === 'sessions' && styles.activeTabText]}>
+              Sessions
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Tab Content */}
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'assessments' && renderAssessmentsTab()}
+        {activeTab === 'sessions' && renderSessionsTab()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -678,5 +776,70 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[700],
+  },
+  sessionsList: {
+    gap: 12,
+  },
+  sessionCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  sessionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: COLORS.NEUTRAL[50],
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.NEUTRAL[200],
+  },
+  sessionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sessionName: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+  },
+  sessionBody: {
+    padding: 14,
+  },
+  sessionMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sessionMetric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metricValue: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+  },
+  sessionDate: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    textAlign: 'right',
   },
 });
