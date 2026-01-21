@@ -49,20 +49,20 @@ export default function RootLayout() {
           <NetworkProvider>
             <AuthProvider>
               <UserProvider>
-                <ReverbProvider>
-                  <LobbyProvider>
-                    <NotificationProvider>
-                      <WebSocketProvider>
-                        <AlertProvider>
+                <AlertProvider>
+                  <ReverbProvider>
+                    <LobbyProvider>
+                      <NotificationProvider>
+                        <WebSocketProvider>
                           <StatusBar style="auto" />
                           <View style={{ flex: 1 }}>
                             <Slot />
                           </View>
-                        </AlertProvider>
-                      </WebSocketProvider>
-                    </NotificationProvider>
-                  </LobbyProvider>
-                </ReverbProvider>
+                        </WebSocketProvider>
+                      </NotificationProvider>
+                    </LobbyProvider>
+                  </ReverbProvider>
+                </AlertProvider>
               </UserProvider>
             </AuthProvider>
           </NetworkProvider>
