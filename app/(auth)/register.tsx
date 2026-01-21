@@ -15,18 +15,15 @@ export default function RegisterScreen() {
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
     alert.success(
       'Registration Successful!',
-      requiresEmailVerification
-        ? 'Please check your email to verify your account.'
-        : 'Your account has been created successfully.',
+      'Please review our health disclaimer before continuing.',
       () => {
-        if (requiresEmailVerification) {
-          router.push({
-            pathname: '/(auth)/verify-email',
-            params: { email: userEmail }
-          });
-        } else {
-          router.replace('/(tabs)');
-        }
+        // Navigate to disclaimer screen, passing email for later verification
+        router.push({
+          pathname: '/(auth)/disclaimer',
+          params: {
+            email: requiresEmailVerification ? userEmail : undefined,
+          }
+        });
       }
     );
   };

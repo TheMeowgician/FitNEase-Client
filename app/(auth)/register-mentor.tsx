@@ -15,18 +15,15 @@ export default function RegisterMentorScreen() {
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
     alert.success(
       'Mentor Registration Successful!',
-      requiresEmailVerification
-        ? 'Please check your email to verify your account. Your mentor application will be reviewed by our team.'
-        : 'Your mentor account has been created successfully and is pending approval.',
+      'Please review our health disclaimer before continuing. Your mentor application will be reviewed by our team.',
       () => {
-        if (requiresEmailVerification) {
-          router.push({
-            pathname: '/(auth)/verify-email',
-            params: { email: userEmail }
-          });
-        } else {
-          router.replace('/(auth)/login');
-        }
+        // Navigate to disclaimer screen, passing email for later verification
+        router.push({
+          pathname: '/(auth)/disclaimer',
+          params: {
+            email: requiresEmailVerification ? userEmail : undefined,
+          }
+        });
       }
     );
   };
