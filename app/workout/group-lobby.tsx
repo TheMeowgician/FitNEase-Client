@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Modal,
   StatusBar,
   Platform,
@@ -16,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { useAlert } from '../../contexts/AlertContext';
 import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMembersReady, selectIsLobbyInitiator, selectUnreadMessageCount } from '../../stores/lobbyStore';
 import { useConnectionStore, selectIsConnected, selectConnectionState } from '../../stores/connectionStore';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,6 +53,7 @@ export default function GroupLobbyScreen() {
 
   // Auth & Lobby Context
   const { user: currentUser } = useAuth();
+  const alert = useAlert();
   const { saveLobbySession, clearActiveLobbyLocal } = useLobby();
 
   // Safe area insets for modal
@@ -338,8 +339,7 @@ export default function GroupLobbyScreen() {
       hasJoinedRef.current = true;
     } catch (error) {
       console.error('❌ Error initializing lobby:', error);
-      Alert.alert('Error', 'Failed to join lobby. Please try again.');
-      router.back();
+      alert.error('Error', 'Failed to join lobby. Please try again.', () => router.back());
     } finally {
       setLoading(false);
     }
@@ -455,7 +455,7 @@ export default function GroupLobbyScreen() {
             dataFromEvent: data,
             freshLobbyState: freshLobbyState
           });
-          Alert.alert('Error', 'No workout data available. Please try generating exercises first.');
+          alert.error('Error', 'No workout data available. Please try generating exercises first.');
           return;
         }
 
@@ -510,9 +510,10 @@ export default function GroupLobbyScreen() {
       },
       onLobbyDeleted: (data: any) => {
         console.log('🗑️ Lobby deleted:', data.reason);
-        Alert.alert('Lobby Closed', data.reason || 'The lobby has been closed.');
-        cleanup();
-        router.back();
+        alert.info('Lobby Closed', data.reason || 'The lobby has been closed.', () => {
+          cleanup();
+          router.back();
+        });
       },
       onMemberKicked: (data: any) => {
         console.log('⚠️ [REAL-TIME] Member kicked:', data);
@@ -585,18 +586,13 @@ export default function GroupLobbyScreen() {
         userChannelRef.current = reverbService.subscribeToUserChannel(currentUser.id, {
           onMemberKicked: (data: any) => {
             console.log('🚫 YOU HAVE BEEN KICKED from lobby:', data);
-            Alert.alert(
+            alert.warning(
               'Removed from Lobby',
               data.message || 'You have been removed from the lobby.',
-              [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    cleanup();
-                    router.back();
-                  }
-                }
-              ]
+              () => {
+                cleanup();
+                router.back();
+              }
             );
           },
         });
@@ -627,7 +623,7 @@ export default function GroupLobbyScreen() {
       }
     } catch (error) {
       console.error('❌ Error updating status:', error);
-      Alert.alert('Error', 'Failed to update status. Please try again.');
+      alert.error('Error', 'Failed to update status. Please try again.');
     }
   };
 
@@ -635,19 +631,15 @@ export default function GroupLobbyScreen() {
    * Leave lobby
    */
   const handleLeaveLobby = () => {
-    Alert.alert(
+    alert.confirm(
       'Leave Lobby',
       'Are you sure you want to leave the lobby?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            await leaveLobby();
-          },
-        },
-      ]
+      async () => {
+        await leaveLobby();
+      },
+      undefined,
+      'Leave',
+      'Cancel'
     );
   };
 
@@ -692,7 +684,7 @@ export default function GroupLobbyScreen() {
       }
     } catch (error) {
       console.error('❌ Error loading group members:', error);
-      Alert.alert('Error', 'Failed to load group members.');
+      alert.error('Error', 'Failed to load group members.');
     } finally {
       setIsLoadingMembers(false);
     }
@@ -843,7 +835,7 @@ export default function GroupLobbyScreen() {
    */
   const handleSendInvitations = async () => {
     if (selectedMembers.size === 0) {
-      Alert.alert('No Members Selected', 'Please select at least one member to invite.');
+      alert.warning('No Members Selected', 'Please select at least one member to invite.');
       return;
     }
 
@@ -884,12 +876,14 @@ export default function GroupLobbyScreen() {
       // Show appropriate message
       if (successful.length === selectedMembers.size) {
         // All succeeded
-        Alert.alert(
+        alert.success(
           'Invitations Sent',
-          `Successfully invited ${successful.length} member(s) to the lobby.`
+          `Successfully invited ${successful.length} member(s) to the lobby.`,
+          () => {
+            setIsInviteModalOpen(false);
+            setSelectedMembers(new Set());
+          }
         );
-        setIsInviteModalOpen(false);
-        setSelectedMembers(new Set());
       } else if (successful.length > 0) {
         // Some succeeded, some failed
         const failedUsers = failed.map((f: any) => f.value?.userName || `User ${f.value?.userId}`).join(', ');
@@ -897,20 +891,15 @@ export default function GroupLobbyScreen() {
           f.value?.error?.includes('already in another lobby')
         );
 
-        Alert.alert(
+        alert.warning(
           'Partial Success',
           `${successful.length} invitation(s) sent successfully.\n\n` +
           `Failed to invite: ${failedUsers}\n\n` +
           `${hasLobbyError ? 'Note: Some users may have a stale lobby session. Ask them to restart their app if they\'re not actually in a lobby.' : ''}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setIsInviteModalOpen(false);
-                setSelectedMembers(new Set());
-              }
-            }
-          ]
+          () => {
+            setIsInviteModalOpen(false);
+            setSelectedMembers(new Set());
+          }
         );
       } else {
         // All failed
@@ -918,7 +907,7 @@ export default function GroupLobbyScreen() {
         const hasLobbyError = firstError.includes('already in another lobby');
         const failedUserNames = failed.map((f: any) => f.value?.userName || `User ${f.value?.userId}`).join(', ');
 
-        Alert.alert(
+        alert.error(
           'Invitation Failed',
           hasLobbyError
             ? `Unable to invite ${failedUserNames}.\n\nThe backend reports they are in another lobby. This may be a stale session.\n\nSolution: Ask them to:\n1. Restart their app\n2. Check if they're actually in a lobby and leave it first`
@@ -927,7 +916,7 @@ export default function GroupLobbyScreen() {
       }
     } catch (error) {
       console.error('❌ Error sending invitations:', error);
-      Alert.alert('Error', 'Failed to send invitations. Please try again.');
+      alert.error('Error', 'Failed to send invitations. Please try again.');
     } finally {
       setIsInviting(false);
     }
@@ -947,29 +936,25 @@ export default function GroupLobbyScreen() {
   const handleTransferRole = (userId: number, userName: string) => {
     if (!isInitiator) return;
 
-    Alert.alert(
+    alert.confirm(
       'Transfer Leader Role',
       `Transfer the leader role to ${userName}? You will become a regular member.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Transfer',
-          style: 'default',
-          onPress: async () => {
-            try {
-              console.log('👑 Transferring initiator role to:', userName);
-              await socialService.transferInitiatorRoleV2(sessionId, userId);
+      async () => {
+        try {
+          console.log('👑 Transferring initiator role to:', userName);
+          await socialService.transferInitiatorRoleV2(sessionId, userId);
 
-              // Real-time updates will be handled by WebSocket listener
-              // No need to manually update state - the broadcast will trigger it
-              console.log('✅ Role transfer initiated successfully');
-            } catch (error) {
-              console.error('❌ Error transferring role:', error);
-              Alert.alert('Error', 'Failed to transfer leader role. Please try again.');
-            }
-          },
-        },
-      ]
+          // Real-time updates will be handled by WebSocket listener
+          // No need to manually update state - the broadcast will trigger it
+          console.log('✅ Role transfer initiated successfully');
+        } catch (error) {
+          console.error('❌ Error transferring role:', error);
+          alert.error('Error', 'Failed to transfer leader role. Please try again.');
+        }
+      },
+      undefined,
+      'Transfer',
+      'Cancel'
     );
   };
 
@@ -979,29 +964,25 @@ export default function GroupLobbyScreen() {
   const handleKickMember = (userId: number, userName: string) => {
     if (!isInitiator) return;
 
-    Alert.alert(
+    alert.confirm(
       'Remove Member',
       `Remove ${userName} from the lobby?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🚫 Removing member from lobby:', userName);
-              await socialService.kickMemberFromLobbyV2(sessionId, userId);
+      async () => {
+        try {
+          console.log('🚫 Removing member from lobby:', userName);
+          await socialService.kickMemberFromLobbyV2(sessionId, userId);
 
-              // Real-time updates will be handled by WebSocket listener
-              // The member will be removed from the list automatically via broadcast
-              console.log('✅ Member removed successfully');
-            } catch (error) {
-              console.error('❌ Error kicking member:', error);
-              Alert.alert('Error', 'Failed to remove member. Please try again.');
-            }
-          },
-        },
-      ]
+          // Real-time updates will be handled by WebSocket listener
+          // The member will be removed from the list automatically via broadcast
+          console.log('✅ Member removed successfully');
+        } catch (error) {
+          console.error('❌ Error kicking member:', error);
+          alert.error('Error', 'Failed to remove member. Please try again.');
+        }
+      },
+      undefined,
+      'Remove',
+      'Cancel'
     );
   };
 
@@ -1047,7 +1028,7 @@ export default function GroupLobbyScreen() {
       }
     } catch (error) {
       console.error('❌ Error auto-generating exercises:', error);
-      Alert.alert('Notice', 'Could not generate personalized workout. Please try again later.');
+      alert.warning('Notice', 'Could not generate personalized workout. Please try again later.');
     } finally {
       setIsGenerating(false);
     }
@@ -1071,7 +1052,7 @@ export default function GroupLobbyScreen() {
       // WorkoutStarted event will trigger navigation
     } catch (error) {
       console.error('❌ Error starting workout:', error);
-      Alert.alert('Error', 'Failed to start workout. Please try again.');
+      alert.error('Error', 'Failed to start workout. Please try again.');
       setIsStarting(false);
     }
   };

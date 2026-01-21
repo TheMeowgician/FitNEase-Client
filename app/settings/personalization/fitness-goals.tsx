@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { useSmartBack } from '../../../hooks/useSmartBack';
 
@@ -21,6 +22,7 @@ const GOALS = [
 export default function FitnessGoalsSettingsScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
+  const alert = useAlert();
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -34,17 +36,17 @@ export default function FitnessGoalsSettingsScreen() {
 
   const handleSave = async () => {
     if (selectedGoals.length === 0) {
-      Alert.alert('Selection Required', 'Please select at least one fitness goal.', [{ text: 'OK' }]);
+      alert.warning('Selection Required', 'Please select at least one fitness goal.');
       return;
     }
     setIsSaving(true);
     try {
       await authService.updateUserProfile({ fitness_goals: selectedGoals });
       await refreshUser();
-      Alert.alert('Success', 'Your fitness goals have been updated!', [{ text: 'OK', onPress: () => goBack() }]);
+      alert.success('Success', 'Your fitness goals have been updated!', () => goBack());
     } catch (error) {
       console.error('Error saving fitness goals:', error);
-      Alert.alert('Error', 'Failed to save your preferences. Please try again.');
+      alert.error('Error', 'Failed to save your preferences. Please try again.');
     } finally {
       setIsSaving(false);
     }

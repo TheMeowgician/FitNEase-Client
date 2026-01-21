@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { workoutNotificationScheduler, NotificationSettings } from '../../services/workoutNotificationScheduler';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
@@ -22,6 +23,7 @@ const MORNING_TIMES = [
 
 export default function NotificationSettingsScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const [isLoading, setIsLoading] = useState(false);
   const [isEnabled, setIsEnabled] = useState(true);
   const [morningTime, setMorningTime] = useState('08:00');
@@ -55,28 +57,19 @@ export default function NotificationSettingsScreen() {
     setHasPermission(granted);
 
     if (!granted) {
-      Alert.alert(
-        'Permission Required',
-        'Please enable notifications in your device settings to receive workout reminders.',
-        [
-          { text: 'OK', style: 'cancel' },
-        ]
-      );
+      alert.warning('Permission Required', 'Please enable notifications in your device settings to receive workout reminders.');
     }
   };
 
   const saveSettings = async () => {
     if (!user?.workoutDays || user.workoutDays.length === 0) {
-      Alert.alert(
+      alert.confirm(
         'No Workout Days Set',
         'Please set your preferred workout days first in the Weekly Plan settings.',
-        [
-          {
-            text: 'Set Workout Days',
-            onPress: () => router.push('/settings/personalization/workout-days'),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]
+        () => router.push('/settings/personalization/workout-days'),
+        undefined,
+        'Set Workout Days',
+        'Cancel'
       );
       return;
     }
@@ -95,22 +88,19 @@ export default function NotificationSettingsScreen() {
       // Schedule notifications if enabled
       if (isEnabled && hasPermission) {
         await workoutNotificationScheduler.scheduleWorkoutReminders(user.workoutDays, settings);
-        Alert.alert(
-          'Settings Saved! ✅',
-          `You'll receive workout reminders on ${user.workoutDays.join(', ')} at ${formatTime(morningTime)}.`
-        );
+        alert.success('Settings Saved!', `You'll receive workout reminders on ${user.workoutDays.join(', ')} at ${formatTime(morningTime)}.`);
       } else if (isEnabled && !hasPermission) {
         await requestPermission();
       } else {
         // Disabled - cancel all notifications
         await workoutNotificationScheduler.cancelAllNotifications();
-        Alert.alert('Notifications Disabled', 'All workout reminders have been cancelled.');
+        alert.info('Notifications Disabled', 'All workout reminders have been cancelled.');
       }
 
       router.back();
     } catch (error) {
       console.error('Error saving notification settings:', error);
-      Alert.alert('Error', 'Failed to save settings. Please try again.');
+      alert.error('Error', 'Failed to save settings. Please try again.');
     } finally {
       setIsLoading(false);
     }

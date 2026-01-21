@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, ViewStyle, TouchableOpacity } from 'react-native';
+import { View, Text, ViewStyle, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { DatePicker } from '../ui/DatePicker';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { calculateAge, formatDateToISO, parseISODate, getDateLimits } from '../../utils/dateUtils';
 import { logServiceStatus } from '../../utils/serviceDebug';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
@@ -21,6 +22,7 @@ export const RegisterMentorForm: React.FC<RegisterMentorFormProps> = ({
   style,
 }) => {
   const { register } = useAuth();
+  const alert = useAlert();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -173,18 +175,13 @@ export const RegisterMentorForm: React.FC<RegisterMentorFormProps> = ({
       console.log('Mentor registration successful:', response);
 
       // Handle successful registration
-      Alert.alert(
-        'Mentor Registration Successful! 🎉',
+      alert.success(
+        'Mentor Registration Successful!',
         'Your application has been submitted and is pending approval. ' +
         (response.requiresEmailVerification
           ? 'Please check your email to verify your account.'
           : 'You will be notified once your mentor application is reviewed.'),
-        [
-          {
-            text: 'Continue',
-            onPress: () => onSuccess(response.requiresEmailVerification, formData.email)
-          }
-        ]
+        () => onSuccess(response.requiresEmailVerification, formData.email)
       );
 
     } catch (error: any) {
@@ -205,7 +202,7 @@ export const RegisterMentorForm: React.FC<RegisterMentorFormProps> = ({
         }
       }
 
-      Alert.alert('Registration Failed', errorMessage);
+      alert.error('Registration Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }

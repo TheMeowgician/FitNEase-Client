@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { useSmartBack } from '../../../hooks/useSmartBack';
 
@@ -20,6 +21,7 @@ interface PreferenceOption {
 export default function MuscleGroupsSettingsScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
+  const alert = useAlert();
   const [targetMuscleGroups, setTargetMuscleGroups] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -50,11 +52,7 @@ export default function MuscleGroupsSettingsScreen() {
 
   const handleSave = async () => {
     if (targetMuscleGroups.length === 0) {
-      Alert.alert(
-        'Selection Required',
-        'Please select at least one muscle group.',
-        [{ text: 'OK' }]
-      );
+      alert.warning('Selection Required', 'Please select at least one muscle group.');
       return;
     }
 
@@ -66,19 +64,10 @@ export default function MuscleGroupsSettingsScreen() {
 
       await refreshUser();
 
-      Alert.alert(
-        'Success',
-        'Your muscle group preferences have been updated!',
-        [
-          {
-            text: 'OK',
-            onPress: () => goBack(),
-          },
-        ]
-      );
+      alert.success('Success', 'Your muscle group preferences have been updated!', () => goBack());
     } catch (error) {
       console.error('Error saving muscle groups:', error);
-      Alert.alert('Error', 'Failed to save your preferences. Please try again.');
+      alert.error('Error', 'Failed to save your preferences. Please try again.');
     } finally {
       setIsSaving(false);
     }

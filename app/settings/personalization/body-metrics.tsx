@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { calculateAge } from '../../../utils/dateUtils';
 import { useSmartBack } from '../../../hooks/useSmartBack';
@@ -19,6 +20,7 @@ interface PhysicalStats {
 export default function BodyMetricsSettingsScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
+  const alert = useAlert();
   const [isSaving, setIsSaving] = useState(false);
 
   const userAge = user?.dateOfBirth ? calculateAge(user.dateOfBirth) : 25;
@@ -67,19 +69,10 @@ export default function BodyMetricsSettingsScreen() {
     try {
       // Note: Backend needs to support weight and height fields
       // For now, we'll just show success and navigate back
-      Alert.alert(
-        'Success',
-        'Your body metrics have been updated!',
-        [
-          {
-            text: 'OK',
-            onPress: () => goBack(),
-          },
-        ]
-      );
+      alert.success('Success', 'Your body metrics have been updated!', () => goBack());
     } catch (error) {
       console.error('Error saving body metrics:', error);
-      Alert.alert('Error', 'Failed to save your metrics. Please try again.');
+      alert.error('Error', 'Failed to save your metrics. Please try again.');
     } finally {
       setIsSaving(false);
     }

@@ -8,11 +8,11 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/colors';
 import { socialService } from '../../services/microservices/socialService';
+import { useAlert } from '../../contexts/AlertContext';
 
 interface CreateGroupData {
   group_name: string;
@@ -33,6 +33,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const alert = useAlert();
   const [formData, setFormData] = useState<CreateGroupData>({
     group_name: '',
     description: '',
@@ -46,35 +47,30 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const handleCreate = async () => {
     // Validation
     if (!formData.group_name.trim()) {
-      Alert.alert('Missing Name', 'Please enter a group name.');
+      alert.warning('Missing Name', 'Please enter a group name.');
       return;
     }
 
     if (!formData.description.trim()) {
-      Alert.alert('Missing Description', 'Please enter a group description.');
+      alert.warning('Missing Description', 'Please enter a group description.');
       return;
     }
 
     if (formData.max_members && (formData.max_members < 2 || formData.max_members > 50)) {
-      Alert.alert('Invalid Max Members', 'Max members must be between 2 and 50.');
+      alert.warning('Invalid Max Members', 'Max members must be between 2 and 50.');
       return;
     }
 
     setIsCreating(true);
     try {
       await socialService.createGroup(formData);
-      Alert.alert('Success', 'Group created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            resetForm();
-            onSuccess();
-            onClose();
-          },
-        },
-      ]);
+      alert.success('Success', 'Group created successfully!', () => {
+        resetForm();
+        onSuccess();
+        onClose();
+      });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create group. Please try again.');
+      alert.error('Error', error.message || 'Failed to create group. Please try again.');
     } finally {
       setIsCreating(false);
     }

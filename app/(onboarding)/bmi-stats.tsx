@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { PageIndicator } from '../../components/ui/PageIndicator';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { calculateAge } from '../../utils/dateUtils';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 
@@ -23,6 +24,7 @@ interface PhysicalStats {
 export default function BMIStatsScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
+  const alert = useAlert();
   const fitnessLevel = params.fitnessLevel as string;
 
   // Build preferences object from params (coming from workout-duration page)
@@ -187,7 +189,7 @@ export default function BMIStatsScreen() {
       });
     } catch (error) {
       console.error('Navigation error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      alert.error('Error', 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }

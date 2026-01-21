@@ -1,35 +1,33 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/fonts';
 
 import { RegisterMentorForm } from '../../components/auth/RegisterMentorForm';
+import { useAlert } from '../../contexts/AlertContext';
 import { COLORS } from '../../constants/colors';
 
 export default function RegisterMentorScreen() {
+  const alert = useAlert();
+
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
-    Alert.alert(
+    alert.success(
       'Mentor Registration Successful!',
       requiresEmailVerification
         ? 'Please check your email to verify your account. Your mentor application will be reviewed by our team.'
         : 'Your mentor account has been created successfully and is pending approval.',
-      [
-        {
-          text: 'Continue',
-          onPress: () => {
-            if (requiresEmailVerification) {
-              router.push({
-                pathname: '/(auth)/verify-email',
-                params: { email: userEmail }
-              });
-            } else {
-              router.replace('/(auth)/login');
-            }
-          }
+      () => {
+        if (requiresEmailVerification) {
+          router.push({
+            pathname: '/(auth)/verify-email',
+            params: { email: userEmail }
+          });
+        } else {
+          router.replace('/(auth)/login');
         }
-      ]
+      }
     );
   };
 

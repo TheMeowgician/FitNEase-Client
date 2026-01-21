@@ -15,6 +15,7 @@ import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { LobbyProvider } from '../contexts/LobbyContext';
 import { ReverbProvider } from '../contexts/ReverbProvider';
+import { AlertProvider } from '../contexts/AlertContext';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -52,10 +53,12 @@ export default function RootLayout() {
                   <LobbyProvider>
                     <NotificationProvider>
                       <WebSocketProvider>
-                        <StatusBar style="auto" />
-                        <View style={{ flex: 1 }}>
-                          <Slot />
-                        </View>
+                        <AlertProvider>
+                          <StatusBar style="auto" />
+                          <View style={{ flex: 1 }}>
+                            <Slot />
+                          </View>
+                        </AlertProvider>
                       </WebSocketProvider>
                     </NotificationProvider>
                   </LobbyProvider>

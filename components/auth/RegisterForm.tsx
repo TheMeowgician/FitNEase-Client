@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, ViewStyle, TouchableOpacity } from 'react-native';
+import { View, Text, ViewStyle, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { DatePicker } from '../ui/DatePicker';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { calculateAge, formatDateToISO, parseISODate, getDateLimits } from '../../utils/dateUtils';
 import { logServiceStatus } from '../../utils/serviceDebug';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
@@ -22,6 +23,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   style,
 }) => {
   const { register } = useAuth();
+  const alert = useAlert();
   const { selectedRole } = useLocalSearchParams<{ selectedRole?: string }>();
   const [formData, setFormData] = useState({
     email: '',
@@ -166,17 +168,12 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       console.log('Registration successful:', response);
 
       // Handle successful registration
-      Alert.alert(
-        'Registration Successful! 🎉',
+      alert.success(
+        'Registration Successful!',
         response.requiresEmailVerification
           ? 'Please check your email to verify your account before logging in.'
           : 'Your account has been created successfully!',
-        [
-          {
-            text: 'Continue',
-            onPress: () => onSuccess(response.requiresEmailVerification, formData.email)
-          }
-        ]
+        () => onSuccess(response.requiresEmailVerification, formData.email)
       );
 
     } catch (error: any) {
@@ -197,7 +194,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         }
       }
 
-      Alert.alert('Registration Failed', errorMessage);
+      alert.error('Registration Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }

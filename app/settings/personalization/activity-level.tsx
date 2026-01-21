@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { useSmartBack } from '../../../hooks/useSmartBack';
 
@@ -22,6 +23,7 @@ interface ActivityLevelOption {
 export default function ActivityLevelSettingsScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
+  const alert = useAlert();
   const [selectedLevel, setSelectedLevel] = useState<'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | ''>('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -96,11 +98,7 @@ export default function ActivityLevelSettingsScreen() {
 
   const handleSave = async () => {
     if (!selectedLevel) {
-      Alert.alert(
-        'Selection Required',
-        'Please select your current activity level.',
-        [{ text: 'OK' }]
-      );
+      alert.warning('Selection Required', 'Please select your current activity level.');
       return;
     }
 
@@ -112,19 +110,10 @@ export default function ActivityLevelSettingsScreen() {
 
       await refreshUser();
 
-      Alert.alert(
-        'Success',
-        'Your activity level has been updated!',
-        [
-          {
-            text: 'OK',
-            onPress: () => goBack(),
-          },
-        ]
-      );
+      alert.success('Success', 'Your activity level has been updated!', () => goBack());
     } catch (error) {
       console.error('Error saving activity level:', error);
-      Alert.alert('Error', 'Failed to save your preference. Please try again.');
+      alert.error('Error', 'Failed to save your preference. Please try again.');
     } finally {
       setIsSaving(false);
     }

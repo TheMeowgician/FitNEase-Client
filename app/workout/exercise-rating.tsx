@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { COLORS, FONTS } from '../../constants/colors';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 import { ratingService } from '../../services/microservices/ratingService';
@@ -50,6 +50,7 @@ interface ExerciseRating {
 
 export default function ExerciseRatingScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const { refreshAfterWorkout } = useProgressStore();
   const params = useLocalSearchParams();
 
@@ -121,7 +122,7 @@ export default function ExerciseRatingScreen() {
   const handleNext = () => {
     // Validate current rating
     if (!currentRating || currentRating.rating_value === 0) {
-      Alert.alert('Rating Required', 'Please rate this exercise before continuing.');
+      alert.warning('Rating Required', 'Please rate this exercise before continuing.');
       return;
     }
 
@@ -173,10 +174,10 @@ export default function ExerciseRatingScreen() {
       setShowProgressModal(true);
     } catch (error) {
       console.error('❌ [RATING] Failed to submit ratings:', error);
-      Alert.alert(
+      alert.warning(
         'Submission Failed',
         'Failed to save your ratings, but your workout was saved.',
-        [{ text: 'Continue Anyway', onPress: navigateToProgressModal }]
+        navigateToProgressModal
       );
     } finally {
       setSubmitting(false);

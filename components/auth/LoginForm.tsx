@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, Alert, ViewStyle, TouchableOpacity } from 'react-native';
+import { View, Text, ViewStyle, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { authService } from '../../services/microservices/authService';
 import { validateEmail } from '../../utils/validation/authValidation';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
@@ -32,6 +33,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
 
   const { login, user } = useAuth();
+  const alert = useAlert();
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -93,7 +95,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         }
       }
 
-      Alert.alert('Login Failed', errorMessage);
+      alert.error('Login Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }

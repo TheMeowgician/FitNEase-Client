@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -16,11 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { socialService, Group } from '../../services/microservices/socialService';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 
 export default function GroupsScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [myGroups, setMyGroups] = useState<Group[]>([]);
@@ -105,7 +106,7 @@ export default function GroupsScreen() {
       setPublicGroups(filteredPublicGroups || []);
     } catch (error) {
       console.error('❌ Error loading groups:', error);
-      Alert.alert('Error', 'Failed to load groups. Please try again.');
+      alert.error('Error', 'Failed to load groups. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -123,7 +124,7 @@ export default function GroupsScreen() {
 
   const handleJoinByCode = async () => {
     if (!groupCode.trim()) {
-      Alert.alert('Invalid Code', 'Please enter a group code.');
+      alert.warning('Invalid Code', 'Please enter a group code.');
       return;
     }
 
@@ -131,15 +132,13 @@ export default function GroupsScreen() {
     try {
       // Call join with code endpoint (expects 8-character code)
       await socialService.joinGroupWithCode(groupCode.trim().toUpperCase());
-      Alert.alert('Success', 'You have joined the group!', [
-        { text: 'OK', onPress: () => {
-          setShowJoinModal(false);
-          setGroupCode('');
-          loadGroups();
-        }}
-      ]);
+      alert.success('Welcome!', 'You have successfully joined the group!', () => {
+        setShowJoinModal(false);
+        setGroupCode('');
+        loadGroups();
+      });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to join group. Please check the code and try again.');
+      alert.error('Error', error.message || 'Failed to join group. Please check the code and try again.');
     } finally {
       setIsJoining(false);
     }
@@ -149,15 +148,14 @@ export default function GroupsScreen() {
     try {
       // Create a join request instead of directly joining
       await socialService.createJoinRequest(group.id);
-      Alert.alert(
+      alert.success(
         'Request Sent!',
-        `Your request to join "${group.name}" has been sent to the group owner for approval.`,
-        [{ text: 'OK' }]
+        `Your request to join "${group.name}" has been sent to the group owner for approval.`
       );
       // Remove from public groups list since request is pending
       setPublicGroups(publicGroups.filter(g => g.id !== group.id));
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to send join request.');
+      alert.error('Error', error.message || 'Failed to send join request.');
     }
   };
 

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Share,
   RefreshControl,
@@ -18,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { useLobby } from '../../contexts/LobbyContext';
 import { useReverb } from '../../contexts/ReverbProvider';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
@@ -31,6 +31,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function GroupDetailsScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
+  const alert = useAlert();
   const { goBack } = useSmartBack();
   const { getGroupWorkoutRecommendations } = useMLService();
   const { activeLobby, saveLobbySession, checkForActiveLobby: refreshLobbyState, forceCleanupAllLobbies } = useLobby();
@@ -168,7 +169,7 @@ export default function GroupDetailsScreen() {
       setUserRole(userMember?.role || null);
     } catch (error) {
       console.error('Error loading group details:', error);
-      Alert.alert('Error', 'Failed to load group details.');
+      alert.error('Error', 'Failed to load group details.');
     } finally {
       setIsLoading(false);
     }
@@ -199,16 +200,16 @@ export default function GroupDetailsScreen() {
 
   const handleCopyCode = () => {
     if (!group?.groupCode) {
-      Alert.alert('Error', 'No group code available');
+      alert.error('Error', 'No group code available');
       return;
     }
 
     try {
       Clipboard.setString(group.groupCode);
-      Alert.alert('Copied!', 'Group code copied to clipboard');
+      alert.success('Copied!', 'Group code copied to clipboard');
     } catch (error) {
       console.error('Error copying group code:', error);
-      Alert.alert('Error', 'Failed to copy group code');
+      alert.error('Error', 'Failed to copy group code');
     }
   };
 
@@ -228,52 +229,40 @@ export default function GroupDetailsScreen() {
   const handleLeaveGroup = () => {
     if (!group) return;
 
-    Alert.alert(
+    alert.confirm(
       'Leave Group',
       `Are you sure you want to leave "${group.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await socialService.leaveGroup(group.id);
-              Alert.alert('Success', 'You have left the group.', [
-                { text: 'OK', onPress: () => router.push('/(tabs)/groups') }
-              ]);
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to leave group.');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await socialService.leaveGroup(group.id);
+          alert.success('Success', 'You have left the group.', () => router.push('/(tabs)/groups'));
+        } catch (error: any) {
+          alert.error('Error', error.message || 'Failed to leave group.');
+        }
+      },
+      undefined,
+      'Leave',
+      'Cancel'
     );
   };
 
   const handleDeleteGroup = () => {
     if (!group) return;
 
-    Alert.alert(
+    alert.confirm(
       'Delete Group',
       `Are you sure you want to permanently delete "${group.name}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await socialService.deleteGroup(group.id);
-              Alert.alert('Success', 'Group deleted successfully.', [
-                { text: 'OK', onPress: () => router.push('/(tabs)/groups') }
-              ]);
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete group.');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await socialService.deleteGroup(group.id);
+          alert.success('Success', 'Group deleted successfully.', () => router.push('/(tabs)/groups'));
+        } catch (error: any) {
+          alert.error('Error', error.message || 'Failed to delete group.');
+        }
+      },
+      undefined,
+      'Delete',
+      'Cancel'
     );
   };
 
@@ -284,32 +273,28 @@ export default function GroupDetailsScreen() {
   const handleKickMember = (member: GroupMember) => {
     if (!group || member.userId === user?.id) return;
 
-    Alert.alert(
+    alert.confirm(
       'Kick Member',
       `Are you sure you want to kick ${member.username} from the group?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Kick',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await socialService.removeGroupMember(id as string, member.userId);
-              Alert.alert('Success', `${member.username} has been kicked from the group.`);
-              // Refresh members list
-              await loadGroupDetails();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to kick member.');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await socialService.removeGroupMember(id as string, member.userId);
+          alert.success('Success', `${member.username} has been kicked from the group.`);
+          // Refresh members list
+          await loadGroupDetails();
+        } catch (error: any) {
+          alert.error('Error', error.message || 'Failed to kick member.');
+        }
+      },
+      undefined,
+      'Kick',
+      'Cancel'
     );
   };
 
   const handleInviteByUsername = async () => {
     if (!usernameInput.trim()) {
-      Alert.alert('Error', 'Please enter a username');
+      alert.warning('Error', 'Please enter a username');
       return;
     }
 
@@ -320,24 +305,15 @@ export default function GroupDetailsScreen() {
       // The backend will handle the username lookup and validation
       await socialService.inviteUser(id as string, usernameInput.trim());
 
-      Alert.alert(
-        'Invitation Sent!',
-        `Successfully invited ${usernameInput.trim()} to join the group.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setShowInviteModal(false);
-              setUsernameInput('');
-              // Refresh group details to show new member if they accepted
-              setTimeout(() => loadGroupDetails(), 1000);
-            },
-          },
-        ]
-      );
+      alert.success('Invitation Sent!', `Successfully invited ${usernameInput.trim()} to join the group.`, () => {
+        setShowInviteModal(false);
+        setUsernameInput('');
+        // Refresh group details to show new member if they accepted
+        setTimeout(() => loadGroupDetails(), 1000);
+      });
     } catch (error: any) {
       console.error('Error inviting user:', error);
-      Alert.alert('Error', error.message || 'Failed to invite user. Please try again.');
+      alert.error('Error', error.message || 'Failed to invite user. Please try again.');
     } finally {
       setIsInviting(false);
     }
@@ -345,7 +321,7 @@ export default function GroupDetailsScreen() {
 
   const handleGenerateGroupWorkout = async () => {
     if (!group || !members || members.length === 0) {
-      Alert.alert('No Members', 'Cannot create lobby for an empty group. Please add members first.');
+      alert.warning('No Members', 'Cannot create lobby for an empty group. Please add members first.');
       return;
     }
 
@@ -400,19 +376,16 @@ export default function GroupDetailsScreen() {
 
             // Even after nuclear cleanup, if it still fails, it's a backend issue
             // Provide user with options
-            Alert.alert(
+            alert.confirm(
               'Unable to Create Lobby',
               'We performed emergency cleanup but the backend is still reporting you\'re in a lobby. This is a backend issue.\n\nOptions:\n1. Wait 1 minute and try again\n2. Contact support if issue persists',
-              [
-                { text: 'OK', style: 'cancel' },
-                {
-                  text: 'Try Again',
-                  onPress: () => {
-                    // User can manually retry by clicking the button again
-                    console.log('User will try again manually');
-                  }
-                }
-              ]
+              () => {
+                // User can manually retry by clicking the button again
+                console.log('User will try again manually');
+              },
+              undefined,
+              'Try Again',
+              'OK'
             );
             throw retryError;
           }
@@ -441,10 +414,7 @@ export default function GroupDetailsScreen() {
       });
     } catch (error: any) {
       console.error('❌ Error creating lobby:', error);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to create lobby. Please try again.'
-      );
+      alert.error('Error', error.message || 'Failed to create lobby. Please try again.');
     } finally {
       setIsGeneratingWorkout(false);
     }
@@ -884,7 +854,7 @@ export default function GroupDetailsScreen() {
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Group Information</Text>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Edit group name feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Edit group name feature coming soon')}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="create-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Edit Group Name</Text>
@@ -892,7 +862,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Edit description feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Edit description feature coming soon')}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="document-text-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Edit Description</Text>
@@ -900,7 +870,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Change privacy feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Change privacy feature coming soon')}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name={group?.type === 'public' ? 'globe' : 'lock-closed'} size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Privacy Settings</Text>
@@ -942,7 +912,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Manage roles feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Manage roles feature coming soon')}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="shield-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Manage Member Roles</Text>
@@ -952,7 +922,7 @@ export default function GroupDetailsScreen() {
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
-                  Alert.alert('Info', 'You can kick members by tapping the X icon next to their name in the members list.');
+                  alert.info('Info', 'You can kick members by tapping the X icon next to their name in the members list.');
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="remove-circle-outline" size={22} color="#EF4444" />
@@ -966,7 +936,7 @@ export default function GroupDetailsScreen() {
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Group Content</Text>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Group announcements coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Group announcements coming soon')}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="megaphone-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Post Announcement</Text>
@@ -974,7 +944,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => Alert.alert('Coming Soon', 'Group rules feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Group rules feature coming soon')}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="list-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Set Group Rules</Text>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -14,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
@@ -21,6 +21,7 @@ import FitnessLevelBadge from '../../components/FitnessLevelBadge';
 
 export default function ProfileScreen() {
   const { user, logout, isLoading } = useAuth();
+  const alert = useAlert();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
 
@@ -109,10 +110,7 @@ export default function ProfileScreen() {
           title: 'Custom Workouts',
           subtitle: 'Create your own routines',
           onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Custom workouts will be available soon!'
-            );
+            alert.info('Coming Soon', 'Custom workouts will be available soon!');
           },
         },
         {
@@ -120,10 +118,7 @@ export default function ProfileScreen() {
           title: 'Find Instructors',
           subtitle: 'Connect with trainers',
           onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Instructor finder will be available soon!'
-            );
+            alert.info('Coming Soon', 'Instructor finder will be available soon!');
           },
         },
       ],
@@ -144,10 +139,7 @@ export default function ProfileScreen() {
           title: 'Language',
           subtitle: 'Change app language',
           onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Language settings will be available soon!'
-            );
+            alert.info('Coming Soon', 'Language settings will be available soon!');
           },
         },
         {
@@ -155,7 +147,7 @@ export default function ProfileScreen() {
           title: 'Dark Mode',
           subtitle: 'Toggle theme',
           onPress: () => {
-            Alert.alert('Coming Soon', 'Dark mode will be available soon!');
+            alert.info('Coming Soon', 'Dark mode will be available soon!');
           },
         },
       ],
@@ -168,7 +160,7 @@ export default function ProfileScreen() {
           title: 'Help & FAQ',
           subtitle: 'Get assistance',
           onPress: () => {
-            Alert.alert('Coming Soon', 'Help section will be available soon!');
+            alert.info('Coming Soon', 'Help section will be available soon!');
           },
         },
         {
@@ -176,10 +168,7 @@ export default function ProfileScreen() {
           title: 'Contact Support',
           subtitle: 'Reach out to us',
           onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Support contact will be available soon!'
-            );
+            alert.info('Coming Soon', 'Support contact will be available soon!');
           },
         },
         {
@@ -187,7 +176,7 @@ export default function ProfileScreen() {
           title: 'Rate App',
           subtitle: 'Share your feedback',
           onPress: () => {
-            Alert.alert('Coming Soon', 'App rating will be available soon!');
+            alert.info('Coming Soon', 'App rating will be available soon!');
           },
         },
       ],
@@ -195,20 +184,13 @@ export default function ProfileScreen() {
   ];
 
   const handleLogout = () => {
-    Alert.alert(
+    alert.confirm(
       'Sign Out',
       'Are you sure you want to sign out of your account?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: performLogout,
-        },
-      ]
+      performLogout,
+      undefined,
+      'Sign Out',
+      'Cancel'
     );
   };
 
@@ -225,10 +207,7 @@ export default function ProfileScreen() {
       router.replace('/(auth)/splash');
     } catch (error) {
       console.error('❌ Profile - Logout failed:', error);
-      Alert.alert(
-        'Logout Failed',
-        'There was an error signing you out. Please try again.'
-      );
+      alert.error('Logout Failed', 'There was an error signing you out. Please try again.');
     } finally {
       setIsLoggingOut(false);
     }

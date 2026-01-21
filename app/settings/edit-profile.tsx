@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { authService } from '../../services/microservices/authService';
 import { formatDateToISO, parseISODate } from '../../utils/dateUtils';
 import { useSmartBack } from '../../hooks/useSmartBack';
@@ -15,6 +16,7 @@ import { useSmartBack } from '../../hooks/useSmartBack';
 export default function EditProfileScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
+  const alert = useAlert();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -64,10 +66,10 @@ export default function EditProfileScreen() {
 
       await authService.updateUserProfile(updateData);
       await refreshUser();
-      Alert.alert('Success', 'Your profile has been updated!', [{ text: 'OK', onPress: () => goBack() }]);
+      alert.success('Success', 'Your profile has been updated!', () => goBack());
     } catch (error) {
       console.error('Error saving profile:', error);
-      Alert.alert('Error', 'Failed to save your profile. Please try again.');
+      alert.error('Error', 'Failed to save your profile. Please try again.');
     } finally {
       setIsSaving(false);
     }

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { planningService } from '../../../services/microservices/planningService';
 import { useSmartBack } from '../../../hooks/useSmartBack';
@@ -18,6 +19,7 @@ interface DayOfWeek {
 
 export default function WorkoutDaysSettingsScreen() {
   const { user, refreshUser } = useAuth();
+  const alert = useAlert();
   const { goBack } = useSmartBack();
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,7 +49,7 @@ export default function WorkoutDaysSettingsScreen() {
 
   const handleSave = async () => {
     if (selectedDays.length === 0) {
-      Alert.alert('Selection Required', 'Please select at least one workout day.', [{ text: 'OK' }]);
+      alert.warning('Selection Required', 'Please select at least one workout day.');
       return;
     }
 
@@ -72,10 +74,11 @@ export default function WorkoutDaysSettingsScreen() {
 
       // Step 3: If plan exists and days changed, show intelligent alert
       if (weeklyPlan && hasChanges) {
-        Alert.alert(
-          'Update Your Weekly Plan?',
-          `You've changed your workout days.\n\nOld: ${oldDays.join(', ')}\nNew: ${newDays.join(', ')}\n\nWould you like to update this week's plan to match your new schedule?`,
-          [
+        alert.showAlert({
+          type: 'confirm',
+          title: 'Update Your Weekly Plan?',
+          message: `You've changed your workout days.\n\nOld: ${oldDays.join(', ')}\nNew: ${newDays.join(', ')}\n\nWould you like to update this week's plan to match your new schedule?`,
+          buttons: [
             {
               text: 'Keep Old Plan',
               style: 'cancel',
@@ -84,12 +87,10 @@ export default function WorkoutDaysSettingsScreen() {
                   // Just update profile, don't touch weekly plan
                   await authService.updateUserProfile({ preferred_workout_days: newDays });
                   await refreshUser();
-                  Alert.alert('Success', 'Your workout days have been updated!', [
-                    { text: 'OK', onPress: () => goBack() },
-                  ]);
+                  alert.success('Success', 'Your workout days have been updated!', () => goBack());
                 } catch (error) {
                   console.error('Error saving workout days:', error);
-                  Alert.alert('Error', 'Failed to save your preferences. Please try again.');
+                  alert.error('Error', 'Failed to save your preferences. Please try again.');
                 } finally {
                   setIsSaving(false);
                 }
@@ -97,6 +98,7 @@ export default function WorkoutDaysSettingsScreen() {
             },
             {
               text: 'Update Plan',
+              style: 'default',
               onPress: async () => {
                 try {
                   // Update profile
@@ -112,41 +114,34 @@ export default function WorkoutDaysSettingsScreen() {
                     adaptation_strategy: 'reallocate',
                   });
 
-                  Alert.alert(
+                  alert.success(
                     'Success',
                     'Your workout days and weekly plan have been smartly adapted! Exercises from removed days have been moved to your new schedule.',
-                    [
-                      {
-                        text: 'View Plan',
-                        onPress: () => {
-                          goBack();
-                          setTimeout(() => router.push('/(tabs)/weekly-plan'), 100);
-                        },
-                      },
-                    ]
+                    () => {
+                      goBack();
+                      setTimeout(() => router.push('/(tabs)/weekly-plan'), 100);
+                    }
                   );
                 } catch (error) {
                   console.error('Error adapting plan:', error);
-                  Alert.alert('Error', 'Failed to adapt your plan. Please try again.');
+                  alert.error('Error', 'Failed to adapt your plan. Please try again.');
                 } finally {
                   setIsSaving(false);
                 }
               },
             },
           ]
-        );
+        });
       } else {
         // No plan exists or no changes - simple update
         await authService.updateUserProfile({ preferred_workout_days: newDays });
         await refreshUser();
-        Alert.alert('Success', 'Your workout days have been updated!', [
-          { text: 'OK', onPress: () => goBack() },
-        ]);
+        alert.success('Success', 'Your workout days have been updated!', () => goBack());
         setIsSaving(false);
       }
     } catch (error) {
       console.error('Error in handleSave:', error);
-      Alert.alert('Error', 'Failed to save your preferences. Please try again.');
+      alert.error('Error', 'Failed to save your preferences. Please try again.');
       setIsSaving(false);
     }
   };

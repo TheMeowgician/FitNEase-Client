@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,30 +7,27 @@ import { FONTS } from '../../constants/fonts';
 
 import { RegisterForm } from '../../components/auth/RegisterForm';
 import { COLORS } from '../../constants/colors';
+import { useAlert } from '../../contexts/AlertContext';
 
 export default function RegisterScreen() {
   const { selectedRole } = useLocalSearchParams<{ selectedRole?: string }>();
+  const alert = useAlert();
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
-    Alert.alert(
+    alert.success(
       'Registration Successful!',
       requiresEmailVerification
         ? 'Please check your email to verify your account.'
         : 'Your account has been created successfully.',
-      [
-        {
-          text: 'Continue',
-          onPress: () => {
-            if (requiresEmailVerification) {
-              router.push({
-                pathname: '/(auth)/verify-email',
-                params: { email: userEmail }
-              });
-            } else {
-              router.replace('/(tabs)');
-            }
-          }
+      () => {
+        if (requiresEmailVerification) {
+          router.push({
+            pathname: '/(auth)/verify-email',
+            params: { email: userEmail }
+          });
+        } else {
+          router.replace('/(tabs)');
         }
-      ]
+      }
     );
   };
 

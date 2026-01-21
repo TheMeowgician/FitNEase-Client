@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
@@ -35,6 +35,7 @@ const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKO
 
 export default function WorkoutsScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const { getTodayExercises } = usePlanningService();
 
   // State for today's exercises from backend weekly plan
@@ -150,13 +151,13 @@ export default function WorkoutsScreen() {
       console.error('❌ [WORKOUTS] Fatal error loading workout data:', error);
 
       // Show error to user
-      Alert.alert(
+      alert.confirm(
         'Error Loading Workouts',
         'An unexpected error occurred while loading your workout plan. Please try again.',
-        [
-          { text: 'Retry', onPress: () => loadWorkoutData() },
-          { text: 'Cancel', style: 'cancel' }
-        ]
+        () => loadWorkoutData(),
+        undefined,
+        'Retry',
+        'Cancel'
       );
     } finally {
       setIsLoading(false);
@@ -171,10 +172,7 @@ export default function WorkoutsScreen() {
 
   const handleViewWorkoutSet = () => {
     if (!mlRecommendations || mlRecommendations.length === 0) {
-      Alert.alert(
-        'No Recommendations',
-        'Please wait while we load your workout recommendations.'
-      );
+      alert.info('No Recommendations', 'Please wait while we load your workout recommendations.');
       return;
     }
 
@@ -230,26 +228,23 @@ export default function WorkoutsScreen() {
 
   const handleStartTabataExercise = (recommendation: any) => {
     const difficultyText = getDifficultyText(recommendation.difficulty_level);
-    Alert.alert(
+    alert.confirm(
       'Start Tabata Exercise',
       `Ready to start "${recommendation.exercise_name}"? This is a ${difficultyText} level exercise.\n\nConfidence: ${Math.round(recommendation.recommendation_score * 100)}%\n\nReason: ${recommendation.recommendation_reason}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start Exercise',
-          onPress: () => {
-            // Navigate to workout session screen
-            router.push({
-              pathname: '/workout/session',
-              params: {
-                workoutId: recommendation.workout_id.toString(),
-                exerciseId: recommendation.exercise_id.toString(),
-                type: 'individual'
-              }
-            });
+      () => {
+        // Navigate to workout session screen
+        router.push({
+          pathname: '/workout/session',
+          params: {
+            workoutId: recommendation.workout_id.toString(),
+            exerciseId: recommendation.exercise_id.toString(),
+            type: 'individual'
           }
-        }
-      ]
+        });
+      },
+      undefined,
+      'Start Exercise',
+      'Cancel'
     );
   };
 
@@ -265,7 +260,7 @@ export default function WorkoutsScreen() {
       console.log('🔄 [WORKOUTS] Refreshed with', todayExercises?.length || 0, 'exercises from backend plan');
     } catch (error) {
       console.error('❌ [WORKOUTS] Error refreshing:', error);
-      Alert.alert('Error', 'Failed to refresh workouts. Please try again.');
+      alert.error('Error', 'Failed to refresh workouts. Please try again.');
     } finally {
       setIsLoading(false);
       console.log('🔄 [WORKOUTS] REFRESH completed');
@@ -274,14 +269,18 @@ export default function WorkoutsScreen() {
 
   // Add missing function definitions
   const handleCreateGroup = () => {
-    Alert.alert('Coming Soon', 'Group creation feature coming soon!');
+    alert.info('Coming Soon', 'Group creation feature coming soon!');
   };
 
   const handleJoinGroup = (group: any) => {
-    Alert.alert('Join Group', `Join ${group.name}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Join', onPress: () => Alert.alert('Joined!', `You've joined ${group.name}`) }
-    ]);
+    alert.confirm(
+      'Join Group',
+      `Join ${group.name}?`,
+      () => alert.success('Joined!', `You've joined ${group.name}`),
+      undefined,
+      'Join',
+      'Cancel'
+    );
   };
 
   // Mock data for groups (since they're referenced but not defined)
@@ -292,10 +291,9 @@ export default function WorkoutsScreen() {
     const duration = recommendation.default_duration_seconds || 0;
     const durationText = duration >= 60 ? `${Math.floor(duration / 60)} minutes` : `${duration} seconds`;
 
-    Alert.alert(
+    alert.info(
       recommendation.exercise_name || 'Exercise',
-      `Confidence: ${Math.round((recommendation.recommendation_score || 0) * 100)}%\nTarget: ${formatMuscleGroup(recommendation.target_muscle_group || 'N/A')}\nDuration: ${durationText}\nCalories: ~${recommendation.estimated_calories_burned || 0}\nEquipment: ${recommendation.equipment_needed || 'Not specified'}\n\n${recommendation.recommendation_reason || 'ML recommended'}`,
-      [{ text: 'Close' }]
+      `Confidence: ${Math.round((recommendation.recommendation_score || 0) * 100)}%\nTarget: ${formatMuscleGroup(recommendation.target_muscle_group || 'N/A')}\nDuration: ${durationText}\nCalories: ~${recommendation.estimated_calories_burned || 0}\nEquipment: ${recommendation.equipment_needed || 'Not specified'}\n\n${recommendation.recommendation_reason || 'ML recommended'}`
     );
   };
 
@@ -399,7 +397,7 @@ export default function WorkoutsScreen() {
 
       <TouchableOpacity
         style={styles.quickActionButton}
-        onPress={() => Alert.alert('How It Works', 'FitNEase analyzes your:\n\n• Fitness level and goals\n• Workout history\n• Exercise preferences\n• Community patterns\n\nTo create personalized Tabata workouts that match your needs!')}
+        onPress={() => alert.info('How It Works', 'FitNEase analyzes your:\n\n• Fitness level and goals\n• Workout history\n• Exercise preferences\n• Community patterns\n\nTo create personalized Tabata workouts that match your needs!')}
         activeOpacity={0.7}
       >
         <View style={[styles.quickActionIcon, { backgroundColor: '#3B82F6' }]}>
@@ -564,7 +562,7 @@ export default function WorkoutsScreen() {
               {/* Individual Exercise List (Collapsed) */}
               <TouchableOpacity
                 style={styles.expandButton}
-                onPress={() => Alert.alert('Individual Exercises', 'Tap on any workout set above to see individual exercises in detail.')}
+                onPress={() => alert.info('Individual Exercises', 'Tap on any workout set above to see individual exercises in detail.')}
                 activeOpacity={0.7}
               >
                 <Ionicons name="list-outline" size={20} color="#6B7280" />
@@ -588,7 +586,7 @@ export default function WorkoutsScreen() {
 
         <TouchableOpacity
           style={styles.groupActionButton}
-          onPress={() => Alert.alert('Coming Soon', 'Join public workout coming soon!')}
+          onPress={() => alert.info('Coming Soon', 'Join public workout coming soon!')}
           activeOpacity={0.7}
         >
           <Ionicons name="globe" size={24} color={COLORS.PRIMARY[600]} />

@@ -8,13 +8,13 @@ import {
   Dimensions,
   ActivityIndicator,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useInvitationStore, selectCurrentInvitation, selectInvitationCount } from '../../stores/invitationStore';
 import { useLobby } from '../../contexts/LobbyContext';
+import { useAlert } from '../../contexts/AlertContext';
 
 const { width } = Dimensions.get('window');
 
@@ -39,6 +39,7 @@ export default function InvitationQueueModal() {
 
   // Access lobby context to check for active lobby
   const { activeLobby, clearActiveLobby } = useLobby();
+  const alert = useAlert();
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -81,22 +82,18 @@ export default function InvitationQueueModal() {
 
     // Check if user is already in a lobby
     if (activeLobby) {
-      Alert.alert(
+      alert.confirm(
         'Already in Lobby',
         `You're currently in a lobby for "${activeLobby.groupName}". Leave that lobby first before accepting this invitation.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Leave & Accept',
-            style: 'destructive',
-            onPress: async () => {
-              console.log('🔄 Leaving current lobby before accepting invitation');
-              await clearActiveLobby();
-              // Now accept the invitation
-              await acceptInvitationInternal();
-            }
-          }
-        ]
+        async () => {
+          console.log('🔄 Leaving current lobby before accepting invitation');
+          await clearActiveLobby();
+          // Now accept the invitation
+          await acceptInvitationInternal();
+        },
+        undefined,
+        'Leave & Accept',
+        'Cancel'
       );
       return;
     }
@@ -135,19 +132,11 @@ export default function InvitationQueueModal() {
         });
       } else {
         console.error('❌ Failed to accept invitation:', result.error);
-        Alert.alert(
-          'Failed to Join',
-          result.error || 'Could not accept invitation. The lobby may have been deleted or is full.',
-          [{ text: 'OK' }]
-        );
+        alert.error('Failed to Join', result.error || 'Could not accept invitation. The lobby may have been deleted or is full.');
       }
     } catch (error: any) {
       console.error('❌ Error accepting invitation:', error);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to accept invitation. Please try again.',
-        [{ text: 'OK' }]
-      );
+      alert.error('Error', error.message || 'Failed to accept invitation. Please try again.');
     } finally {
       setIsProcessing(false);
     }

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   Image,
   StatusBar,
@@ -20,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { VerificationCodeInput, VerificationCodeInputRef } from '../../components/auth/VerificationCodeInput';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
@@ -36,6 +36,7 @@ export default function VerifyEmailScreen() {
 
   const { email } = useLocalSearchParams<{ email?: string }>();
   const { user, verifyEmail, resendVerification } = useAuth();
+  const alert = useAlert();
   const verificationInputRef = useRef<VerificationCodeInputRef>(null);
 
   // Get status bar height for Android
@@ -115,18 +116,13 @@ export default function VerifyEmailScreen() {
 
       // Email verified successfully! Backend automatically logged in the user
       // Show success message and redirect to onboarding
-      Alert.alert(
-        'Email Verified Successfully!',
+      alert.success(
+        'Email Verified!',
         'Welcome to FitNEase! Let\'s personalize your workout experience.',
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              // Redirect to onboarding welcome page
-              router.replace('/(onboarding)/welcome');
-            }
-          }
-        ]
+        () => {
+          // Redirect to onboarding welcome page
+          router.replace('/(onboarding)/welcome');
+        }
       );
 
     } catch (error: any) {
@@ -147,14 +143,14 @@ export default function VerifyEmailScreen() {
     try {
       const userEmail = user?.email || email;
       await resendVerification(userEmail);
-      Alert.alert(
-        'New Code Sent! ✅',
-        'We&apos;ve sent a new 6-digit verification code to your email. Please check your inbox.'
+      alert.success(
+        'New Code Sent!',
+        'We\'ve sent a new 6-digit verification code to your email. Please check your inbox.'
       );
       setCountdown(60);
       setCanResend(false);
     } catch (error: any) {
-      Alert.alert('Resend Failed', error.message || 'Failed to resend email. Please try again.');
+      alert.error('Resend Failed', error.message || 'Failed to resend email. Please try again.');
     } finally {
       setIsResending(false);
     }
@@ -163,46 +159,43 @@ export default function VerifyEmailScreen() {
   const handleGetDebugCode = async () => {
     const userEmail = user?.email || email;
     if (!userEmail) {
-      Alert.alert('Error', 'No email address available');
+      alert.error('Error', 'No email address available');
       return;
     }
 
     try {
       const debugResponse = await authService.getVerificationCodeForDebug(userEmail);
-      Alert.alert(
-        'Debug Code',
-        `Verification code: ${debugResponse.verification_code}\nExpires: ${debugResponse.expires_at}\nIs expired: ${debugResponse.is_expired}`,
-        [
+      alert.showAlert({
+        type: 'info',
+        title: 'Debug Code',
+        message: `Verification code: ${debugResponse.verification_code}\nExpires: ${debugResponse.expires_at}\nIs expired: ${debugResponse.is_expired}`,
+        buttons: [
           {
             text: 'Use Code',
+            style: 'default',
             onPress: () => {
               setEnteredCode(debugResponse.verification_code);
               verificationInputRef.current?.setValue?.(debugResponse.verification_code);
             }
           },
-          { text: 'OK' }
+          { text: 'OK', style: 'cancel' }
         ]
-      );
+      });
     } catch (error: any) {
       // If user is already verified, try to get status and offer reset
       if (error.message.includes('already verified')) {
-        Alert.alert(
-          'User Already Verified',
-          'This user appears to be already verified. Check status or reset verification?',
-          [
-            {
-              text: 'Check Status',
-              onPress: () => handleCheckUserStatus()
-            },
-            {
-              text: 'Reset Verification',
-              onPress: () => handleResetVerification()
-            },
+        alert.showAlert({
+          type: 'warning',
+          title: 'User Already Verified',
+          message: 'This user appears to be already verified. Check status or reset verification?',
+          buttons: [
+            { text: 'Check Status', style: 'default', onPress: () => handleCheckUserStatus() },
+            { text: 'Reset', style: 'default', onPress: () => handleResetVerification() },
             { text: 'Cancel', style: 'cancel' }
           ]
-        );
+        });
       } else {
-        Alert.alert('Debug Error', error.message || 'Failed to get debug code');
+        alert.error('Debug Error', error.message || 'Failed to get debug code');
       }
     }
   };
@@ -213,12 +206,12 @@ export default function VerifyEmailScreen() {
 
     try {
       const status = await authService.getUserStatusForDebug(userEmail);
-      Alert.alert(
+      alert.info(
         'User Status',
         `Email: ${status.email}\nUsername: ${status.username}\nVerified: ${status.is_verified}\nHas Code: ${status.has_verification_code}\nCode: ${status.verification_code || 'None'}\nExpired: ${status.code_is_expired}\nCreated: ${status.created_at}`
       );
     } catch (error: any) {
-      Alert.alert('Status Error', error.message || 'Failed to get user status');
+      alert.error('Status Error', error.message || 'Failed to get user status');
     }
   };
 
@@ -228,62 +221,52 @@ export default function VerifyEmailScreen() {
 
     try {
       const resetResponse = await authService.resetVerificationForDebug(userEmail);
-      Alert.alert(
-        'Verification Reset',
-        `${resetResponse.message}\nNew code: ${resetResponse.new_verification_code}`,
-        [
+      alert.showAlert({
+        type: 'success',
+        title: 'Verification Reset',
+        message: `${resetResponse.message}\nNew code: ${resetResponse.new_verification_code}`,
+        buttons: [
           {
             text: 'Use New Code',
+            style: 'default',
             onPress: () => {
               setEnteredCode(resetResponse.new_verification_code);
               verificationInputRef.current?.setValue?.(resetResponse.new_verification_code);
             }
           },
-          { text: 'OK' }
+          { text: 'OK', style: 'cancel' }
         ]
-      );
+      });
     } catch (error: any) {
-      Alert.alert('Reset Error', error.message || 'Failed to reset verification');
+      alert.error('Reset Error', error.message || 'Failed to reset verification');
     }
   };
 
   const handleSkipVerification = () => {
-    Alert.alert(
+    alert.confirm(
       'Skip Verification?',
       'You can verify your email later in settings. Some features may be limited.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Skip',
-          onPress: () => {
-            Keyboard.dismiss();
-            router.replace('/(tabs)');
-          },
-        },
-      ]
+      () => {
+        Keyboard.dismiss();
+        router.replace('/(tabs)');
+      },
+      undefined,
+      'Skip',
+      'Cancel'
     );
   };
 
   const handleBackPress = () => {
-    Alert.alert(
+    alert.confirm(
       'Go Back?',
-      'You&apos;ll need to sign up again if you go back now.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Go Back',
-          onPress: () => {
-            Keyboard.dismiss();
-            router.back();
-          },
-        },
-      ]
+      'You\'ll need to sign up again if you go back now.',
+      () => {
+        Keyboard.dismiss();
+        router.back();
+      },
+      undefined,
+      'Go Back',
+      'Cancel'
     );
   };
 

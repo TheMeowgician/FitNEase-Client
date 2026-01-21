@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +13,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
@@ -26,6 +26,7 @@ interface TrainingGroup extends Group {
 
 export default function MentorDashboardScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const [trainingGroups, setTrainingGroups] = useState<TrainingGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,7 +92,7 @@ export default function MentorDashboardScreen() {
       }
     } catch (error) {
       console.error('Error loading training groups:', error);
-      Alert.alert('Error', 'Failed to load training groups. Please try again.');
+      alert.error('Error', 'Failed to load training groups. Please try again.');
     } finally {
       setIsLoading(false);
     }

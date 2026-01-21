@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { PageIndicator } from '../../components/ui/PageIndicator';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 
 const { width } = Dimensions.get('window');
@@ -16,6 +17,7 @@ const { width } = Dimensions.get('window');
 export default function WorkoutDurationScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
+  const alert = useAlert();
   const fitnessLevel = params.fitnessLevel as string;
   const targetMuscleGroups = params.targetMuscleGroups ? JSON.parse(params.targetMuscleGroups as string) : [];
 
@@ -52,7 +54,7 @@ export default function WorkoutDurationScreen() {
       });
     } catch (error) {
       console.error('Navigation error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      alert.error('Error', 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   BackHandler,
   StatusBar,
   Vibration,
@@ -24,6 +23,7 @@ import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { useReverb } from '../../contexts/ReverbProvider';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
 import { trackingService } from '../../services/microservices/trackingService';
@@ -54,6 +54,7 @@ interface SessionState {
 
 export default function WorkoutSessionScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const { refreshGroupSubscriptions } = useReverb();
   const { refreshAfterWorkout } = useProgressStore();
   const params = useLocalSearchParams();
@@ -299,8 +300,7 @@ export default function WorkoutSessionScreen() {
 
       // Fallback to old workout ID format
       if (!workoutId) {
-        Alert.alert('Error', 'No workout specified');
-        router.back();
+        alert.error('Error', 'No workout specified', () => router.back());
         return;
       }
 
@@ -312,13 +312,11 @@ export default function WorkoutSessionScreen() {
           totalTime: workoutData.total_duration_minutes * 60,
         }));
       } else {
-        Alert.alert('Error', 'Workout not found');
-        router.back();
+        alert.error('Error', 'Workout not found', () => router.back());
       }
     } catch (error) {
       console.error('Error loading workout:', error);
-      Alert.alert('Error', 'Failed to load workout');
-      router.back();
+      alert.error('Error', 'Failed to load workout', () => router.back());
     }
   };
 
@@ -500,20 +498,17 @@ export default function WorkoutSessionScreen() {
 
           // Show alert after navigation (non-blocking)
           setTimeout(() => {
-            Alert.alert(
+            alert.info(
               'Workout Ended',
-              `The workout has been stopped by ${data.stopped_by_name}.`,
-              [{ text: 'OK' }]
+              `The workout has been stopped by ${data.stopped_by_name}.`
             );
           }, 500);
         } else if (eventName === 'MemberLeftSession') {
           console.log(`👋 Member left session: ${data.member_name}`);
           // Show toast notification that member left
-          Alert.alert(
+          alert.info(
             'Member Left',
-            `${data.member_name} has left the workout session.`,
-            [{ text: 'OK' }],
-            { cancelable: true }
+            `${data.member_name} has left the workout session.`
           );
         } else if (eventName === 'WorkoutCompleted') {
           console.log(`✅ Workout finished by ${data.initiatorName}`);
@@ -591,26 +586,26 @@ export default function WorkoutSessionScreen() {
       // For group workouts, only initiator can pause - skip pause for non-initiators
       if (type === 'group_tabata' && !isInitiator) {
         // Non-initiator trying to exit - show confirm dialog without pausing
-        Alert.alert(
+        alert.confirm(
           'Leave Workout',
           'Are you sure you want to leave this workout? You will exit the session.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Leave', style: 'destructive', onPress: exitSession }
-          ]
+          exitSession,
+          undefined,
+          'Leave',
+          'Cancel'
         );
         return true;
       }
 
       // Solo workout or group initiator - pause then show exit dialog
       pauseSession();
-      Alert.alert(
+      alert.confirm(
         'Exit Workout',
         'Are you sure you want to exit this workout? Your progress will be lost.',
-        [
-          { text: 'Continue', onPress: resumeSession },
-          { text: 'Exit', style: 'destructive', onPress: exitSession }
-        ]
+        exitSession,
+        resumeSession,
+        'Exit',
+        'Continue'
       );
       return true;
     }
@@ -850,7 +845,7 @@ export default function WorkoutSessionScreen() {
     // For group workouts, only initiator can pause
     if (type === 'group_tabata') {
       if (!isInitiator) {
-        Alert.alert('Notice', 'Only the workout initiator can pause the session.');
+        alert.info('Notice', 'Only the workout initiator can pause the session.');
         return;
       }
 
@@ -863,7 +858,7 @@ export default function WorkoutSessionScreen() {
           console.log('✅ [SERVER-AUTH] Pause request sent to server');
         } catch (error) {
           console.error('❌ [PAUSE] Failed to pause:', error);
-          Alert.alert('Error', 'Failed to pause workout');
+          alert.error('Error', 'Failed to pause workout');
         }
       }
     } else {
@@ -878,7 +873,7 @@ export default function WorkoutSessionScreen() {
     // For group workouts, only initiator can resume
     if (type === 'group_tabata') {
       if (!isInitiator) {
-        Alert.alert('Notice', 'Only the workout initiator can resume the session.');
+        alert.info('Notice', 'Only the workout initiator can resume the session.');
         return;
       }
 
@@ -891,7 +886,7 @@ export default function WorkoutSessionScreen() {
           console.log('✅ [SERVER-AUTH] Resume request sent to server');
         } catch (error) {
           console.error('❌ [RESUME] Failed to resume:', error);
-          Alert.alert('Error', 'Failed to resume workout');
+          alert.error('Error', 'Failed to resume workout');
         }
       }
     } else {
@@ -904,44 +899,40 @@ export default function WorkoutSessionScreen() {
   const stopGroupSession = async () => {
     console.log('🛑 [STOP] Stop button pressed');
     if (!isInitiator) {
-      Alert.alert('Notice', 'Only the workout initiator can stop the session for everyone.');
+      alert.info('Notice', 'Only the workout initiator can stop the session for everyone.');
       return;
     }
 
-    Alert.alert(
+    alert.confirm(
       'Stop Workout for All',
       'Are you sure you want to stop the workout for all members? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Stop for All',
-          style: 'destructive',
-          onPress: async () => {
-            // Broadcast stop to all members
-            if (tabataSession) {
-              try {
-                console.log('🛑 [STOP] Broadcasting stop to all members');
-                await socialService.stopWorkout(tabataSession.session_id);
-                console.log('✅ [STOP] Stop broadcasted successfully');
-              } catch (error) {
-                console.error('❌ [STOP] Failed to broadcast stop:', error);
-              }
-            }
-
-            // Clear local storage and state
-            await clearLobbyAndStorage();
-
-            // Navigate to group screen
-            if (groupId) {
-              console.log('🏠 [STOP] Navigating to group screen:', groupId);
-              router.replace(`/groups/${groupId}`);
-            } else {
-              console.log('🛑 [STOP] Exiting session for initiator');
-              router.back();
-            }
+      async () => {
+        // Broadcast stop to all members
+        if (tabataSession) {
+          try {
+            console.log('🛑 [STOP] Broadcasting stop to all members');
+            await socialService.stopWorkout(tabataSession.session_id);
+            console.log('✅ [STOP] Stop broadcasted successfully');
+          } catch (error) {
+            console.error('❌ [STOP] Failed to broadcast stop:', error);
           }
         }
-      ]
+
+        // Clear local storage and state
+        await clearLobbyAndStorage();
+
+        // Navigate to group screen
+        if (groupId) {
+          console.log('🏠 [STOP] Navigating to group screen:', groupId);
+          router.replace(`/groups/${groupId}`);
+        } else {
+          console.log('🛑 [STOP] Exiting session for initiator');
+          router.back();
+        }
+      },
+      undefined,
+      'Stop for All',
+      'Cancel'
     );
   };
 
@@ -1170,7 +1161,7 @@ export default function WorkoutSessionScreen() {
       console.error('❌ [COMPLETE] Error:', error);
 
       // On error, still try to navigate back
-      Alert.alert('Error', 'Failed to save workout. Please try again.');
+      alert.error('Error', 'Failed to save workout. Please try again.');
 
       // Refresh subscriptions and navigate
       try {
@@ -1216,7 +1207,7 @@ export default function WorkoutSessionScreen() {
   // Handler for enabling video call
   const handleEnableVideoCall = async () => {
     if (!tabataSession || !user) {
-      Alert.alert('Error', 'Cannot start video call - missing session or user data');
+      alert.error('Error', 'Cannot start video call - missing session or user data');
       return;
     }
 
@@ -1248,7 +1239,7 @@ export default function WorkoutSessionScreen() {
     } catch (error) {
       console.error('❌ [VIDEO] Failed to get Agora token:', error);
       setIsLoadingVideo(false);
-      Alert.alert('Error', 'Failed to start video call. Please try again.');
+      alert.error('Error', 'Failed to start video call. Please try again.');
     }
   };
 
@@ -1576,7 +1567,7 @@ export default function WorkoutSessionScreen() {
                     setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
                   } catch (error) {
                     console.error('❌ [AUTO FINISH] Failed to broadcast finish:', error);
-                    Alert.alert('Error', 'Failed to finish workout for all members');
+                    alert.error('Error', 'Failed to finish workout for all members');
                   }
                 } else {
                   // Solo workout - set status to completed, user must click COMPLETE

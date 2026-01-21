@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, StatusBar, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, StatusBar, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { WorkoutDayStatus } from '../../components/dashboard/WorkoutDayStatus';
 import ProgressionCard from '../../components/ProgressionCard';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { useMLService } from '../../hooks/api/useMLService';
 import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
@@ -35,6 +36,7 @@ const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKO
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
+  const alert = useAlert();
   const { getUserStats, getUserAchievements } = useEngagementService();
   const { unreadCount } = useNotifications();
   const { getTodayExercises } = usePlanningService();
@@ -188,13 +190,13 @@ export default function HomeScreen() {
         console.error('📊 [DASHBOARD] Error fetching today\'s exercises:', recError);
         // Only show alert if it's a critical error, not just empty results
         if (recError && (recError as any).message !== 'Empty response') {
-          Alert.alert(
+          alert.confirm(
             'Recommendation Error',
             'Unable to load exercise recommendations. Please check your internet connection and try again.',
-            [
-              { text: 'Retry', onPress: () => loadDashboardData() },
-              { text: 'OK', style: 'cancel' }
-            ]
+            () => loadDashboardData(),
+            undefined,
+            'Retry',
+            'OK'
           );
         }
       }
@@ -259,13 +261,13 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('📊 [DASHBOARD] Fatal error loading dashboard data:', error);
-      Alert.alert(
+      alert.confirm(
         'Error',
         'Failed to load dashboard. Please try restarting the app.',
-        [
-          { text: 'Retry', onPress: () => loadDashboardData() },
-          { text: 'OK', style: 'cancel' }
-        ]
+        () => loadDashboardData(),
+        undefined,
+        'Retry',
+        'OK'
       );
     } finally {
       setIsLoading(false);
@@ -299,11 +301,7 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('🔄 [DASHBOARD] Error refreshing recommendations:', error);
-      Alert.alert(
-        'Refresh Failed',
-        'Unable to refresh workout recommendations. Please try again.',
-        [{ text: 'OK' }]
-      );
+      alert.error('Refresh Failed', 'Unable to refresh workout recommendations. Please try again.');
     } finally {
       setIsRefreshingWorkouts(false);
     }
@@ -311,10 +309,7 @@ export default function HomeScreen() {
 
   const handleViewWorkoutSet = () => {
     if (recommendations.length === 0) {
-      Alert.alert(
-        'No Recommendations',
-        'Please wait while we load your personalized workout recommendations.'
-      );
+      alert.info('No Recommendations', 'Please wait while we load your personalized workout recommendations.');
       return;
     }
 
@@ -344,21 +339,13 @@ export default function HomeScreen() {
     try {
       // Check if we have enough recommendations
       if (recommendations.length === 0) {
-        Alert.alert(
-          'No Recommendations',
-          'Please wait while we load your personalized workout recommendations.',
-          [{ text: 'OK' }]
-        );
+        alert.info('No Recommendations', 'Please wait while we load your personalized workout recommendations.');
         return;
       }
 
       // Check if we have enough exercises for the user's fitness level
       if (!hasEnoughExercises(recommendations, fitnessLevel)) {
-        Alert.alert(
-          'Insufficient Exercises',
-          `You need more exercise recommendations for a proper ${fitnessLevel} level workout session. Please try again later.`,
-          [{ text: 'OK' }]
-        );
+        alert.warning('Insufficient Exercises', `You need more exercise recommendations for a proper ${fitnessLevel} level workout session. Please try again later.`);
         return;
       }
 
@@ -378,7 +365,7 @@ export default function HomeScreen() {
       });
     } catch (error) {
       console.error('Error starting workout:', error);
-      Alert.alert('Error', 'Failed to start workout. Please try again.');
+      alert.error('Error', 'Failed to start workout. Please try again.');
     }
   };
 
@@ -391,20 +378,13 @@ export default function HomeScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
+    alert.confirm(
       'Sign Out',
       'Are you sure you want to sign out of your account?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: performLogout,
-        },
-      ]
+      performLogout,
+      undefined,
+      'Sign Out',
+      'Cancel'
     );
   };
 
@@ -414,10 +394,7 @@ export default function HomeScreen() {
       await logout();
     } catch (error) {
       console.error('Logout failed:', error);
-      Alert.alert(
-        'Logout Failed',
-        'There was an error signing you out. Please try again.'
-      );
+      alert.error('Logout Failed', 'There was an error signing you out. Please try again.');
     } finally {
       setIsLoggingOut(false);
     }

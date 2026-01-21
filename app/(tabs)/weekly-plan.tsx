@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAlert } from '@/contexts/AlertContext';
 import { router, useFocusEffect } from 'expo-router';
 import { planningService, WeeklyWorkoutPlan, Exercise } from '@/services/microservices/planningService';
 import { trackingService } from '@/services/microservices/trackingService';
@@ -38,6 +38,7 @@ interface DayData {
 
 export default function WeeklyPlanScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const { getRecommendations } = useMLService();
 
   // Use centralized progress store (same as Dashboard)
@@ -181,7 +182,7 @@ export default function WeeklyPlanScreen() {
       setWeeklyPlan(plan);
     } catch (error) {
       console.error('Failed to load weekly plan:', error);
-      Alert.alert('Error', 'Failed to load weekly workout plan');
+      alert.error('Error', 'Failed to load weekly workout plan');
     } finally {
       setLoading(false);
     }
@@ -217,16 +218,13 @@ export default function WeeklyPlanScreen() {
 
     // Check if user has set workout days
     if (!hasWorkoutDays) {
-      Alert.alert(
+      alert.confirm(
         'Set Your Workout Days First',
         'Please configure your preferred workout days in Settings → Personalization → Workout Days before generating a plan.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Go to Settings',
-            onPress: () => router.push('/settings/personalization/workout-days'),
-          },
-        ]
+        () => router.push('/settings/personalization/workout-days'),
+        undefined,
+        'Go to Settings',
+        'Cancel'
       );
       return;
     }
@@ -239,14 +237,10 @@ export default function WeeklyPlanScreen() {
       });
       const plan = (response.data as any)?.plan || response.data;
       setWeeklyPlan(plan);
-      Alert.alert(
-        'Success',
-        regenerate ? 'New weekly plan generated!' : 'Your weekly plan is ready!',
-        [{ text: 'OK' }]
-      );
+      alert.success('Success', regenerate ? 'New weekly plan generated!' : 'Your weekly plan is ready!');
     } catch (error) {
       console.error('Failed to generate plan:', error);
-      Alert.alert('Error', 'Failed to generate weekly plan. Please try again.');
+      alert.error('Error', 'Failed to generate weekly plan. Please try again.');
     } finally {
       setGeneratingPlan(false);
     }
@@ -261,14 +255,14 @@ export default function WeeklyPlanScreen() {
       setWeeklyPlan(plan);
 
       if (!silent) {
-        Alert.alert('Great Job!', `${dayFullNames[day]}'s workout completed!`);
+        alert.success('Great Job!', `${dayFullNames[day]}'s workout completed!`);
       } else {
         console.log(`✅ [WEEKLY_PLAN] ${dayFullNames[day]}'s workout auto-completed`);
       }
     } catch (error) {
       console.error('Failed to complete day:', error);
       if (!silent) {
-        Alert.alert('Error', 'Failed to mark workout as complete');
+        alert.error('Error', 'Failed to mark workout as complete');
       }
     }
   };

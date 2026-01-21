@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,11 +8,13 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
 export default function WeeklyAssessmentScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [alreadyCompleted, setAlreadyCompleted] = useState(false);
@@ -43,7 +45,7 @@ export default function WeeklyAssessmentScreen() {
 
   const handleSubmit = async () => {
     if (!weight || workoutRating === 0 || !difficultyLevel) {
-      Alert.alert('Missing Information', 'Please fill in all required fields (weight, workout rating, and difficulty level).');
+      alert.warning('Missing Information', 'Please fill in all required fields (weight, workout rating, and difficulty level).');
       return;
     }
 
@@ -64,19 +66,10 @@ export default function WeeklyAssessmentScreen() {
         score: workoutRating,
       });
 
-      Alert.alert(
-        'Assessment Saved! 🎉',
-        'Thank you for your feedback. This helps us improve your workout recommendations.',
-        [
-          {
-            text: 'Done',
-            onPress: () => router.back(),
-          },
-        ]
-      );
+      alert.success('Assessment Saved!', 'Thank you for your feedback. This helps us improve your workout recommendations.', () => router.back());
     } catch (error) {
       console.error('Error saving weekly assessment:', error);
-      Alert.alert('Error', 'Failed to save assessment. Please try again.');
+      alert.error('Error', 'Failed to save assessment. Please try again.');
     } finally {
       setIsLoading(false);
     }

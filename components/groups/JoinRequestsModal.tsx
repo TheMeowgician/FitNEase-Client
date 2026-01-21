@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { socialService } from '../../services/microservices/socialService';
+import { useAlert } from '../../contexts/AlertContext';
 
 interface JoinRequest {
   request_id: number;
@@ -37,6 +37,7 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
   groupName,
   onRequestHandled,
 }) => {
+  const alert = useAlert();
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -54,7 +55,7 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
       setRequests(response.data?.requests || []);
     } catch (error) {
       console.error('Failed to load join requests:', error);
-      Alert.alert('Error', 'Failed to load join requests');
+      alert.error('Error', 'Failed to load join requests');
     } finally {
       setIsLoading(false);
     }
@@ -64,42 +65,38 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
     try {
       setProcessingId(requestId);
       await socialService.approveJoinRequest(groupId, requestId);
-      Alert.alert('Success', `${username} has been added to the group`);
+      alert.success('Success', `${username} has been added to the group`);
       setRequests(requests.filter(r => r.request_id !== requestId));
       onRequestHandled?.();
     } catch (error) {
       console.error('Failed to approve request:', error);
-      Alert.alert('Error', 'Failed to approve request');
+      alert.error('Error', 'Failed to approve request');
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleReject = async (requestId: number, username: string) => {
-    Alert.alert(
+    alert.confirm(
       'Decline Request',
       `Are you sure you want to decline ${username}'s request?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Decline',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setProcessingId(requestId);
-              await socialService.rejectJoinRequest(groupId, requestId);
-              Alert.alert('Done', `${username}'s request has been declined`);
-              setRequests(requests.filter(r => r.request_id !== requestId));
-              onRequestHandled?.();
-            } catch (error) {
-              console.error('Failed to reject request:', error);
-              Alert.alert('Error', 'Failed to decline request');
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          setProcessingId(requestId);
+          await socialService.rejectJoinRequest(groupId, requestId);
+          alert.info('Done', `${username}'s request has been declined`);
+          setRequests(requests.filter(r => r.request_id !== requestId));
+          onRequestHandled?.();
+        } catch (error) {
+          console.error('Failed to reject request:', error);
+          alert.error('Error', 'Failed to decline request');
+        } finally {
+          setProcessingId(null);
+        }
+      },
+      undefined,
+      'Decline',
+      'Cancel'
     );
   };
 

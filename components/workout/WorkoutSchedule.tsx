@@ -5,13 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { planningService, WorkoutScheduleRequest, WorkoutPlanSchedule } from '../../services/microservices/planningService';
 import { authService } from '../../services/microservices/authService';
 import { Button } from '../ui/Button';
@@ -43,6 +43,7 @@ interface WorkoutScheduleProps {
 
 export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAssessment }: WorkoutScheduleProps) {
   const { user } = useAuth();
+  const alert = useAlert();
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedWorkoutTypes, setSelectedWorkoutTypes] = useState<string[]>(['tabata']);
   const [sessionsPerWeek, setSessionsPerWeek] = useState(3);
@@ -154,7 +155,7 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
 
   const handleSaveSchedule = async () => {
     if (selectedDays.length === 0) {
-      Alert.alert('No Days Selected', 'Please select at least one workout day.');
+      alert.warning('No Days Selected', 'Please select at least one workout day.');
       return;
     }
 
@@ -206,19 +207,10 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
         console.log('✅ Fitness assessment updated with all settings');
       }
 
-      Alert.alert(
-        'Schedule Saved!',
-        `Your workout schedule has been created with ${selectedDays.length} workout days per week.`,
-        [
-          { text: 'OK', onPress: onClose }
-        ]
-      );
+      alert.success('Schedule Saved!', `Your workout schedule has been created with ${selectedDays.length} workout days per week.`, onClose);
     } catch (error) {
       console.error('❌ Error saving schedule:', error);
-      Alert.alert(
-        'Schedule Error',
-        'Could not save your workout schedule. Please try again.'
-      );
+      alert.error('Schedule Error', 'Could not save your workout schedule. Please try again.');
     } finally {
       setIsLoading(false);
     }

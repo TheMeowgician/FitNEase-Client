@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +15,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { commsService } from '../../services/microservices/commsService';
 import { socialService } from '../../services/microservices/socialService';
@@ -35,6 +35,7 @@ interface Notification {
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
+  const alert = useAlert();
   const { markAsRead: markAsReadInContext, refreshUnreadCount, addNotificationListener } = useNotifications();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,11 +55,7 @@ export default function NotificationsScreen() {
       console.log('📬 [NOTIFICATIONS SCREEN] Added new notification to list');
 
       // Show a brief alert
-      Alert.alert(
-        notification.title,
-        notification.message,
-        [{ text: 'OK' }]
-      );
+      alert.info(notification.title, notification.message);
     });
 
     console.log('✅ [NOTIFICATIONS SCREEN] Notification listener setup complete');
@@ -79,7 +76,7 @@ export default function NotificationsScreen() {
       setNotifications(response.data || []);
     } catch (error) {
       console.error('Error loading notifications:', error);
-      Alert.alert('Error', 'Failed to load notifications');
+      alert.error('Error', 'Failed to load notifications');
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +110,7 @@ export default function NotificationsScreen() {
 
   const handleAcceptGroupInvitation = async (notification: Notification) => {
     if (!notification.action_data?.group_code) {
-      Alert.alert('Error', 'Invalid invitation data');
+      alert.error('Error', 'Invalid invitation data');
       return;
     }
 
@@ -133,53 +130,39 @@ export default function NotificationsScreen() {
         );
       }
 
-      Alert.alert(
-        'Success',
-        `You've joined ${notification.action_data.group_name}!`,
-        [
-          {
-            text: 'View Group',
-            onPress: () => router.push(`/groups/${notification.action_data.group_id}`),
-          },
-          { text: 'OK' },
-        ]
-      );
+      alert.success('Success', `You've joined ${notification.action_data.group_name}!`, () => router.push(`/groups/${notification.action_data.group_id}`));
     } catch (error: any) {
       console.error('Error accepting invitation:', error);
-      Alert.alert('Error', error.message || 'Failed to join group');
+      alert.error('Error', error.message || 'Failed to join group');
     }
   };
 
   const handleDeclineGroupInvitation = async (notification: Notification) => {
-    Alert.alert(
+    alert.confirm(
       'Decline Invitation',
       `Are you sure you want to decline the invitation to ${notification.action_data?.group_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Decline',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Mark as read
-              await handleMarkAsRead(notification.notification_id);
+      async () => {
+        try {
+          // Mark as read
+          await handleMarkAsRead(notification.notification_id);
 
-              // Notify the inviter that their invitation was declined
-              if (notification.action_data?.inviter_user_id && user) {
-                await commsService.sendGroupInvitationDeclined(
-                  notification.action_data.inviter_user_id,
-                  notification.action_data.group_name,
-                  Number(user.id)
-                );
-              }
+          // Notify the inviter that their invitation was declined
+          if (notification.action_data?.inviter_user_id && user) {
+            await commsService.sendGroupInvitationDeclined(
+              notification.action_data.inviter_user_id,
+              notification.action_data.group_name,
+              Number(user.id)
+            );
+          }
 
-              Alert.alert('Declined', 'Invitation declined');
-            } catch (error) {
-              console.error('Error declining invitation:', error);
-            }
-          },
-        },
-      ]
+          alert.info('Declined', 'Invitation declined');
+        } catch (error) {
+          console.error('Error declining invitation:', error);
+        }
+      },
+      undefined,
+      'Decline',
+      'Cancel'
     );
   };
 
@@ -197,46 +180,42 @@ export default function NotificationsScreen() {
       console.log('✅ [NOTIFICATIONS SCREEN] Notification deleted successfully');
     } catch (error) {
       console.error('❌ [NOTIFICATIONS SCREEN] Error deleting notification:', error);
-      Alert.alert('Error', 'Failed to delete notification');
+      alert.error('Error', 'Failed to delete notification');
     }
   };
 
   const handleClearAllNotifications = async () => {
     if (notifications.length === 0) {
-      Alert.alert('No Notifications', 'You have no notifications to clear.');
+      alert.info('No Notifications', 'You have no notifications to clear.');
       return;
     }
 
-    Alert.alert(
+    alert.confirm(
       'Clear All Notifications',
       `Are you sure you want to delete all ${notifications.length} notification${notifications.length > 1 ? 's' : ''}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (!user) return;
+      async () => {
+        try {
+          if (!user) return;
 
-              // Delete all from backend
-              const response = await commsService.deleteAllNotifications(Number(user.id));
+          // Delete all from backend
+          const response = await commsService.deleteAllNotifications(Number(user.id));
 
-              // Clear local state
-              setNotifications([]);
+          // Clear local state
+          setNotifications([]);
 
-              // Refresh unread count
-              await refreshUnreadCount();
+          // Refresh unread count
+          await refreshUnreadCount();
 
-              console.log(`✅ [NOTIFICATIONS SCREEN] Cleared ${response.deleted_count} notifications`);
-              Alert.alert('Success', `${response.deleted_count} notification${response.deleted_count > 1 ? 's' : ''} cleared`);
-            } catch (error) {
-              console.error('❌ [NOTIFICATIONS SCREEN] Error clearing all notifications:', error);
-              Alert.alert('Error', 'Failed to clear all notifications');
-            }
-          },
-        },
-      ]
+          console.log(`✅ [NOTIFICATIONS SCREEN] Cleared ${response.deleted_count} notifications`);
+          alert.success('Success', `${response.deleted_count} notification${response.deleted_count > 1 ? 's' : ''} cleared`);
+        } catch (error) {
+          console.error('❌ [NOTIFICATIONS SCREEN] Error clearing all notifications:', error);
+          alert.error('Error', 'Failed to clear all notifications');
+        }
+      },
+      undefined,
+      'Clear All',
+      'Cancel'
     );
   };
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { PageIndicator } from '../../components/ui/PageIndicator';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAlert } from '../../contexts/AlertContext';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 
 const { width } = Dimensions.get('window');
@@ -28,6 +29,7 @@ interface PreferenceOption {
 export default function PreferencesScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
+  const alert = useAlert();
   const fitnessLevel = params.fitnessLevel as string;
 
   const [targetMuscleGroups, setTargetMuscleGroups] = useState<string[]>([]);
@@ -49,11 +51,7 @@ export default function PreferencesScreen() {
 
   const handleContinue = async () => {
     if (targetMuscleGroups.length === 0) {
-      Alert.alert(
-        'Selection Required',
-        'Please select at least one muscle group to continue.',
-        [{ text: 'OK' }]
-      );
+      alert.warning('Selection Required', 'Please select at least one muscle group to continue.');
       return;
     }
 
@@ -70,7 +68,7 @@ export default function PreferencesScreen() {
       });
     } catch (error) {
       console.error('Navigation error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      alert.error('Error', 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
