@@ -670,12 +670,11 @@ const styles = StyleSheet.create({
     color: 'white',
   },
 
-  // Header - Consistent with Dashboard
+  // Header - Consistent with other pages
   header: {
     backgroundColor: 'white',
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingVertical: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

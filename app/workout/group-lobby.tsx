@@ -27,6 +27,7 @@ import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
 import LobbyChat from '../../components/groups/LobbyChat';
 import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
+import { AnimatedExerciseReveal } from '../../components/lobby/AnimatedExerciseReveal';
 
 /**
  * Group Lobby Screen
@@ -1316,7 +1317,7 @@ export default function GroupLobbyScreen() {
         <View style={styles.workoutSection}>
           <View style={styles.workoutHeader}>
             <Text style={styles.sectionTitle}>
-              Workout Plan {hasExercises ? `(${currentLobby?.workout_data?.exercises?.length || 0} exercises)` : ''}
+              Workout Plan
             </Text>
             {hasExercises && (
               <View style={styles.workoutBadge}>
@@ -1327,81 +1328,10 @@ export default function GroupLobbyScreen() {
           </View>
 
           <ScrollView style={styles.exercisesScrollView} showsVerticalScrollIndicator={false}>
-            {isGenerating ? (
-              <View style={styles.generatingContainer}>
-                <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
-                <Text style={styles.generatingText}>Generating personalized workout...</Text>
-              </View>
-            ) : hasExercises ? (
-              <>
-                {/* Workout Info Banner */}
-                <View style={styles.workoutInfoBanner}>
-                  <View style={styles.infoBannerItem}>
-                    <Ionicons name="timer-outline" size={20} color={COLORS.SUCCESS[600]} />
-                    <Text style={styles.infoBannerText}>{Math.round((currentLobby?.workout_data?.exercises?.length || 0) * 4)} min</Text>
-                  </View>
-                  <View style={styles.infoBannerDivider} />
-                  <View style={styles.infoBannerItem}>
-                    <Ionicons name="flame-outline" size={20} color={COLORS.WARNING[600]} />
-                    <Text style={styles.infoBannerText}>~{Math.round((currentLobby?.workout_data?.exercises?.length || 0) * 15)} cal</Text>
-                  </View>
-                  <View style={styles.infoBannerDivider} />
-                  <View style={styles.infoBannerItem}>
-                    <Ionicons name="repeat-outline" size={20} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.infoBannerText}>8 rounds</Text>
-                  </View>
-                </View>
-
-                {/* Exercise Cards */}
-                {currentLobby?.workout_data?.exercises?.map((exercise: any, index: number) => (
-                  <View key={`exercise-${exercise.exercise_id}-${index}`} style={styles.exerciseCard}>
-                    <View style={styles.exerciseCardHeader}>
-                      <View style={styles.exerciseNumber}>
-                        <Text style={styles.exerciseNumberText}>{index + 1}</Text>
-                      </View>
-                      <View style={styles.exerciseHeaderRight}>
-                        <Text style={styles.exerciseName} numberOfLines={2}>
-                          {exercise.exercise_name}
-                        </Text>
-                        {/* Difficulty Stars */}
-                        <View style={styles.difficultyStars}>
-                          {[...Array(3)].map((_, i) => {
-                            const difficultyLevel = Number(exercise.difficulty_level || 2);
-                            return (
-                              <Ionicons
-                                key={`diff-${i}`}
-                                name={i < difficultyLevel ? "star" : "star-outline"}
-                                size={12}
-                                color={i < difficultyLevel ? COLORS.WARNING[500] : COLORS.SECONDARY[300]}
-                              />
-                            );
-                          })}
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.exerciseCardBody}>
-                      <Text style={styles.exerciseDetailsLine}>
-                        {exercise.target_muscle_group?.replace(/_/g, ' ') || 'Full Body'}
-                      </Text>
-                      <View style={styles.exerciseDetailDivider} />
-                      <Text style={styles.exerciseDetailsLine}>
-                        20s work • 10s rest
-                      </Text>
-                      <View style={styles.exerciseDetailDivider} />
-                      <Text style={styles.exerciseDetailsLine}>
-                        8 rounds
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </>
-            ) : (
-              <View style={styles.emptyWorkoutContainer}>
-                <Ionicons name="barbell-outline" size={64} color={COLORS.SECONDARY[300]} />
-                <Text style={styles.emptyWorkoutText}>No workout generated yet</Text>
-                <Text style={styles.emptyWorkoutSubtext}>Waiting for the host to start</Text>
-              </View>
-            )}
+            <AnimatedExerciseReveal
+              exercises={currentLobby?.workout_data?.exercises || []}
+              isGenerating={isGenerating}
+            />
           </ScrollView>
         </View>
       </View>
