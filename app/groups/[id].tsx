@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Clipboard,
   Modal,
   TextInput,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import { socialService, Group, GroupMember } from '../../services/microservices/
 import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
 import { JoinRequestsModal } from '../../components/groups/JoinRequestsModal';
+import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import reverbService from '../../services/reverbService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -62,6 +64,40 @@ export default function GroupDetailsScreen() {
   // Join requests modal state
   const [showJoinRequestsModal, setShowJoinRequestsModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+
+  // Member profile preview state
+  const [selectedMember, setSelectedMember] = useState<GroupMember | null>(null);
+  const [showMemberPreview, setShowMemberPreview] = useState(false);
+
+  // Animation values for smooth modal fade in/out
+  const inviteModalFade = useRef(new Animated.Value(0)).current;
+  const inviteModalScale = useRef(new Animated.Value(0.9)).current;
+  const settingsModalFade = useRef(new Animated.Value(0)).current;
+  const settingsModalScale = useRef(new Animated.Value(0.9)).current;
+
+  // Animate invite modal
+  useEffect(() => {
+    if (showInviteModal) {
+      inviteModalFade.setValue(0);
+      inviteModalScale.setValue(0.9);
+      Animated.parallel([
+        Animated.timing(inviteModalFade, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(inviteModalScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [showInviteModal]);
+
+  // Animate settings modal
+  useEffect(() => {
+    if (showSettingsModal) {
+      settingsModalFade.setValue(0);
+      settingsModalScale.setValue(0.9);
+      Animated.parallel([
+        Animated.timing(settingsModalFade, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(settingsModalScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [showSettingsModal]);
 
   useEffect(() => {
     loadGroupDetails();
@@ -185,7 +221,7 @@ export default function GroupDetailsScreen() {
   const loadPendingRequestsCount = async () => {
     try {
       const response = await socialService.getJoinRequestCount(id as string);
-      setPendingRequestsCount(response.data?.count || 0);
+      setPendingRequestsCount(response || 0);
     } catch (error) {
       console.error('Failed to load pending requests count:', error);
     }
@@ -667,7 +703,15 @@ export default function GroupDetailsScreen() {
                 globalOnlineUsers: Array.from(onlineUsers)
               });
               return (
-                <View key={member.id} style={styles.memberCard}>
+                <TouchableOpacity
+                  key={member.id}
+                  style={styles.memberCard}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setSelectedMember(member);
+                    setShowMemberPreview(true);
+                  }}
+                >
                   <View style={styles.memberAvatarContainer}>
                     <View style={styles.memberAvatar}>
                       <Ionicons name="person" size={24} color="white" />
@@ -706,12 +750,15 @@ export default function GroupDetailsScreen() {
                   {userRole === 'owner' && member.userId !== user?.id && (
                     <TouchableOpacity
                       style={styles.kickButton}
-                      onPress={() => handleKickMember(member)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleKickMember(member);
+                      }}
                     >
                       <Ionicons name="close-circle" size={24} color="#EF4444" />
                     </TouchableOpacity>
                   )}
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -780,12 +827,12 @@ export default function GroupDetailsScreen() {
       {/* Invite by Username Modal */}
       <Modal
         visible={showInviteModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowInviteModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.inviteModalContent}>
+          <Animated.View style={[styles.inviteModalContent, { opacity: inviteModalFade, transform: [{ scale: inviteModalScale }] }]}>
             <View style={styles.inviteModalHeader}>
               <Text style={styles.inviteModalTitle}>Invite by Username</Text>
               <TouchableOpacity onPress={() => {
@@ -829,19 +876,19 @@ export default function GroupDetailsScreen() {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
       {/* Group Settings Modal */}
       <Modal
         visible={showSettingsModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowSettingsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.settingsModalContent}>
+          <Animated.View style={[styles.settingsModalContent, { opacity: settingsModalFade, transform: [{ scale: settingsModalScale }] }]}>
             <View style={styles.settingsModalHeader}>
               <Text style={styles.settingsModalTitle}>Group Settings</Text>
               <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
@@ -969,9 +1016,27 @@ export default function GroupDetailsScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
+
+      {/* Member Profile Preview Modal */}
+      <UserProfilePreviewModal
+        visible={showMemberPreview}
+        onClose={() => {
+          setShowMemberPreview(false);
+          setSelectedMember(null);
+        }}
+        user={selectedMember ? {
+          userId: selectedMember.userId,
+          username: selectedMember.username,
+          userRole: selectedMember.userRole,
+          groupRole: selectedMember.role,
+          joinedAt: selectedMember.joinedAt,
+          isOnline: onlineUsers.has(selectedMember.userId),
+        } : null}
+        context="group"
+      />
     </SafeAreaView>
   );
 }

@@ -391,6 +391,7 @@ export class TrackingService {
     duration: number;
     caloriesBurned: number;
     completed: boolean;
+    completionPercentage?: number; // Actual completion percentage based on exercises/sets completed
     notes?: string;
   }): Promise<WorkoutSession> {
     try {
@@ -403,7 +404,8 @@ export class TrackingService {
         end_time: sessionData.endTime?.toISOString(),
         actual_duration_minutes: sessionData.duration,
         is_completed: sessionData.completed,
-        completion_percentage: sessionData.completed ? 100 : 50,
+        // Use provided completion percentage or calculate based on completed status
+        completion_percentage: sessionData.completionPercentage ?? (sessionData.completed ? 100 : 0),
         calories_burned: sessionData.caloriesBurned,
         user_notes: sessionData.notes,
       };
@@ -429,7 +431,7 @@ export class TrackingService {
         status: sessionData.completed ? 'completed' : 'cancelled',
         exercises: [],
         actualCaloriesBurned: sessionData.caloriesBurned,
-        completionPercentage: sessionData.completed ? 100 : 50,
+        completionPercentage: sessionData.completionPercentage ?? (sessionData.completed ? 100 : 0),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       } as WorkoutSession;

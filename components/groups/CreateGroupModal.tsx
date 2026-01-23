@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,15 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/colors';
 import { socialService } from '../../services/microservices/socialService';
 import { useAlert } from '../../contexts/AlertContext';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 interface CreateGroupData {
   group_name: string;
@@ -43,6 +47,49 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   });
 
   const [isCreating, setIsCreating] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+
+  // Separate animation values: overlay fades, content slides
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  // Animate in when modal becomes visible
+  useEffect(() => {
+    if (visible) {
+      setIsModalVisible(true);
+      overlayAnim.setValue(0);
+      slideAnim.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          friction: 9,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (isModalVisible) {
+      // Animate out
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setIsModalVisible(false);
+      });
+    }
+  }, [visible]);
 
   const handleCreate = async () => {
     // Validation
@@ -65,9 +112,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     try {
       await socialService.createGroup(formData);
       alert.success('Success', 'Group created successfully!', () => {
-        resetForm();
-        onSuccess();
-        onClose();
+        animateClose(onSuccess);
       });
     } catch (error: any) {
       alert.error('Error', error.message || 'Failed to create group. Please try again.');
@@ -86,15 +131,47 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     });
   };
 
+  const animateClose = (callback?: () => void) => {
+    Animated.parallel([
+      Animated.timing(overlayAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: SCREEN_HEIGHT,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsModalVisible(false);
+      resetForm();
+      onClose();
+      callback?.();
+    });
+  };
+
   const handleClose = () => {
-    resetForm();
-    onClose();
+    animateClose();
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={handleClose}>
+    <Modal visible={isModalVisible} animationType="none" transparent={true} onRequestClose={handleClose}>
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <Animated.View
+          style={[
+            styles.overlayBackground,
+            { opacity: overlayAnim },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.modalContent,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
           {/* Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create Group</Text>
@@ -212,7 +289,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -221,8 +298,11 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  overlayBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
     backgroundColor: 'white',

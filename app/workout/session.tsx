@@ -954,15 +954,25 @@ export default function WorkoutSessionScreen() {
         // CRITICAL: Ensure minimum 1 calorie for any workout (use Math.ceil to round up)
         const accurateCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
 
+        // Calculate actual completion percentage based on exercises and sets completed
+        const totalExercises = tabataSession ? tabataSession.exercises.length : (workout?.rounds.length || 1);
+        const totalSets = totalExercises * 8; // 8 sets per exercise in Tabata
+        const completedSets = sessionState.currentExercise * 8 + sessionState.currentSet;
+        const actualCompletionPercentage = Math.round((completedSets / totalSets) * 100);
+
         console.log('❌ [EXIT] Partial session stats:', {
           actualDurationSeconds,
           actualDurationMinutes,
           accurateCaloriesBurned,
           currentExercise: sessionState.currentExercise,
-          totalExercises: tabataSession?.exercises.length
+          currentSet: sessionState.currentSet,
+          totalExercises,
+          completedSets,
+          totalSets,
+          completionPercentage: actualCompletionPercentage
         });
 
-        // Save partial session data
+        // Save partial session data with ACTUAL completion percentage
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
           userId: Number(user.id),
@@ -973,7 +983,8 @@ export default function WorkoutSessionScreen() {
           duration: actualDurationMinutes,
           caloriesBurned: accurateCaloriesBurned,
           completed: false,
-          notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises completed` : 'Partial workout'} (${actualDurationMinutes}min)`
+          completionPercentage: actualCompletionPercentage, // Pass actual completion percentage
+          notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises, set ${sessionState.currentSet + 1}/8` : 'Partial workout'} (${actualCompletionPercentage}% complete, ${actualDurationMinutes}min)`
         });
       }
 
@@ -1085,6 +1096,7 @@ export default function WorkoutSessionScreen() {
         duration: finalDurationMinutes,
         caloriesBurned: finalCaloriesBurned,
         completed: true,
+        completionPercentage: 100, // Fully completed workout
         notes: tabataSession
           ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`
           : `Tabata workout completed - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`

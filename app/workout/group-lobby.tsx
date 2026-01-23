@@ -9,6 +9,7 @@ import {
   Modal,
   StatusBar,
   Platform,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +26,7 @@ import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
 import LobbyChat from '../../components/groups/LobbyChat';
+import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
 
 /**
  * Group Lobby Screen
@@ -89,6 +91,8 @@ export default function GroupLobbyScreen() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [selectedLobbyMember, setSelectedLobbyMember] = useState<any>(null);
+  const [showMemberPreview, setShowMemberPreview] = useState(false);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<Set<number>>(new Set());
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
@@ -1228,7 +1232,15 @@ export default function GroupLobbyScreen() {
               });
 
               return (
-                <View key={member.user_id} style={styles.memberCard}>
+                <TouchableOpacity
+                  key={member.user_id}
+                  style={styles.memberCard}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setSelectedLobbyMember(member);
+                    setShowMemberPreview(true);
+                  }}
+                >
                   {/* Left: Avatar + Info */}
                   <View style={styles.memberLeft}>
                     <View style={styles.memberAvatar}>
@@ -1294,7 +1306,7 @@ export default function GroupLobbyScreen() {
                       </Text>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </ScrollView>
@@ -1703,6 +1715,25 @@ export default function GroupLobbyScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Member Profile Preview Modal */}
+      <UserProfilePreviewModal
+        visible={showMemberPreview}
+        onClose={() => {
+          setShowMemberPreview(false);
+          setSelectedLobbyMember(null);
+        }}
+        user={selectedLobbyMember ? {
+          userId: selectedLobbyMember.user_id,
+          username: selectedLobbyMember.user_name,
+          userRole: selectedLobbyMember.user_role,
+          groupRole: selectedLobbyMember.user_id === currentLobby?.initiator_id ? 'owner' : 'member',
+          fitnessLevel: selectedLobbyMember.fitness_level,
+          isOnline: onlineUsers.has(selectedLobbyMember.user_id.toString()),
+          isReady: selectedLobbyMember.status === 'ready',
+        } : null}
+        context="lobby"
+      />
 
     </SafeAreaView>
   );

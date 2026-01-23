@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +35,22 @@ export default function GroupsScreen() {
   // Join by code
   const [groupCode, setGroupCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+
+  // Animation values for smooth modal fade in/out
+  const joinModalFade = useRef(new Animated.Value(0)).current;
+  const joinModalScale = useRef(new Animated.Value(0.9)).current;
+
+  // Animate join modal
+  useEffect(() => {
+    if (showJoinModal) {
+      joinModalFade.setValue(0);
+      joinModalScale.setValue(0.9);
+      Animated.parallel([
+        Animated.timing(joinModalFade, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(joinModalScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [showJoinModal]);
 
   useEffect(() => {
     loadGroups();
@@ -155,7 +172,19 @@ export default function GroupsScreen() {
       // Remove from public groups list since request is pending
       setPublicGroups(publicGroups.filter(g => g.id !== group.id));
     } catch (error: any) {
-      alert.error('Error', error.message || 'Failed to send join request.');
+      const errorMessage = error.message || '';
+      // Handle "already pending" gracefully - not an error, just info
+      if (errorMessage.toLowerCase().includes('already have a pending request') ||
+          errorMessage.toLowerCase().includes('already pending')) {
+        alert.info(
+          'Request Pending',
+          `You already have a pending request to join "${group.name}". Please wait for the group owner to approve your request.`
+        );
+        // Remove from public groups list since request is already pending
+        setPublicGroups(publicGroups.filter(g => g.id !== group.id));
+      } else {
+        alert.error('Error', errorMessage || 'Failed to send join request.');
+      }
     }
   };
 
@@ -346,12 +375,12 @@ export default function GroupsScreen() {
       {/* Join by Code Modal */}
       <Modal
         visible={showJoinModal}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         onRequestClose={() => setShowJoinModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <Animated.View style={[styles.modalContent, { opacity: joinModalFade, transform: [{ scale: joinModalScale }] }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Join by Code</Text>
               <TouchableOpacity onPress={() => setShowJoinModal(false)}>
@@ -393,7 +422,7 @@ export default function GroupsScreen() {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 

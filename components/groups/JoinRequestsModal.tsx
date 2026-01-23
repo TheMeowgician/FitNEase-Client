@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,15 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { socialService } from '../../services/microservices/socialService';
 import { useAlert } from '../../contexts/AlertContext';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 interface JoinRequest {
   request_id: number;
@@ -41,10 +45,48 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
+  // Separate animation values: overlay fades, content slides
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  // Animate in when modal becomes visible
   useEffect(() => {
     if (visible) {
+      setIsModalVisible(true);
+      overlayAnim.setValue(0);
+      slideAnim.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          friction: 9,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+      ]).start();
       loadRequests();
+    } else if (isModalVisible) {
+      // Animate out
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setIsModalVisible(false);
+      });
     }
   }, [visible, groupId]);
 
@@ -110,22 +152,53 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
     });
   };
 
+  const handleClose = () => {
+    Animated.parallel([
+      Animated.timing(overlayAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: SCREEN_HEIGHT,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsModalVisible(false);
+      onClose();
+    });
+  };
+
   return (
     <Modal
-      visible={visible}
-      animationType="slide"
+      visible={isModalVisible}
+      animationType="none"
       transparent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <Animated.View
+          style={[
+            styles.overlayBackground,
+            { opacity: overlayAnim },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
           {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Join Requests</Text>
               <Text style={styles.subtitle}>{groupName}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color={COLORS.SECONDARY[600]} />
             </TouchableOpacity>
           </View>
@@ -212,7 +285,7 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
               ))}
             </ScrollView>
           )}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -221,8 +294,11 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  overlayBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
     backgroundColor: COLORS.NEUTRAL.WHITE,

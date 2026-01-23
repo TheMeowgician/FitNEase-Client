@@ -8,6 +8,7 @@ import {
   Dimensions,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -44,6 +45,34 @@ export default function InvitationQueueModal() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const hasDeclinedRef = useRef(false);
+
+  // Animation values for smooth fade in/out
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  // Animate in when invitation appears
+  useEffect(() => {
+    if (currentInvitation) {
+      // Reset animation values
+      fadeAnim.setValue(0);
+      scaleAnim.setValue(0.9);
+
+      // Animate in with smooth ease-in-out
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [currentInvitation?.invitation_id]);
 
   // Calculate time left until expiration
   useEffect(() => {
@@ -197,11 +226,19 @@ export default function InvitationQueueModal() {
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={handleDecline}
     >
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerIcon}>
@@ -353,7 +390,7 @@ export default function InvitationQueueModal() {
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

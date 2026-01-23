@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,31 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const pan = useRef(new Animated.Value(0)).current;
+
+  // Animation values for smooth fade in/out
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  // Animate in when modal becomes visible
+  useEffect(() => {
+    if (visible) {
+      fadeAnim.setValue(0);
+      scaleAnim.setValue(0.9);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -108,7 +133,7 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
@@ -122,7 +147,8 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
           style={[
             styles.modalContainer,
             {
-              transform: [{ translateY: pan }],
+              opacity: fadeAnim,
+              transform: [{ translateY: pan }, { scale: scaleAnim }],
             },
           ]}
         >
