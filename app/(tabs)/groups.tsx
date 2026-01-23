@@ -27,6 +27,7 @@ export default function GroupsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [myGroups, setMyGroups] = useState<Group[]>([]);
   const [publicGroups, setPublicGroups] = useState<Group[]>([]);
+  const [pendingRequestGroupIds, setPendingRequestGroupIds] = useState<Set<string>>(new Set());
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -68,11 +69,21 @@ export default function GroupsScreen() {
 
       console.log('🔄 Loading groups for user:', user.id);
 
-      // Load user's groups and discover public groups
-      const [myGroupsData, publicGroupsData] = await Promise.all([
+      // Load user's groups, discover public groups, and get user's pending join requests
+      const [myGroupsData, publicGroupsData, userJoinRequests] = await Promise.all([
         socialService.getGroups({ user_id: parseInt(user.id) }), // Get groups where user is a member
         socialService.getGroups({ limit: 10 }), // Get public groups to discover
+        socialService.getUserJoinRequests().catch(() => ({ data: [] })), // Get user's pending requests
       ]);
+
+      // Extract group IDs with pending requests (convert to strings to match Group.id type)
+      const pendingGroupIds = new Set(
+        userJoinRequests.data
+          .filter(req => req.status === 'pending')
+          .map(req => String(req.group_id))
+      );
+      setPendingRequestGroupIds(pendingGroupIds);
+      console.log('✅ Pending join requests for groups:', Array.from(pendingGroupIds));
 
       console.log('✅ My Groups loaded:', myGroupsData.groups.length, 'groups');
       console.log('✅ Public Groups loaded:', publicGroupsData.groups.length, 'groups');
@@ -169,8 +180,8 @@ export default function GroupsScreen() {
         'Request Sent!',
         `Your request to join "${group.name}" has been sent to the group owner for approval.`
       );
-      // Remove from public groups list since request is pending
-      setPublicGroups(publicGroups.filter(g => g.id !== group.id));
+      // Add to pending requests set so the button changes to "Request Pending"
+      setPendingRequestGroupIds(prev => new Set(prev).add(group.id));
     } catch (error: any) {
       const errorMessage = error.message || '';
       // Handle "already pending" gracefully - not an error, just info
@@ -180,8 +191,8 @@ export default function GroupsScreen() {
           'Request Pending',
           `You already have a pending request to join "${group.name}". Please wait for the group owner to approve your request.`
         );
-        // Remove from public groups list since request is already pending
-        setPublicGroups(publicGroups.filter(g => g.id !== group.id));
+        // Add to pending set in case it wasn't loaded initially
+        setPendingRequestGroupIds(prev => new Set(prev).add(group.id));
       } else {
         alert.error('Error', errorMessage || 'Failed to send join request.');
       }
@@ -357,13 +368,20 @@ export default function GroupsScreen() {
                         <Text style={styles.groupTagText}>{group.category}</Text>
                       </View>
                     )}
-                    <TouchableOpacity
-                      style={styles.joinButton}
-                      onPress={() => handleJoinGroup(group)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.joinButtonText}>Request to Join</Text>
-                    </TouchableOpacity>
+                    {pendingRequestGroupIds.has(group.id) ? (
+                      <View style={styles.pendingBadge}>
+                        <Ionicons name="time-outline" size={14} color={COLORS.WARNING[700]} />
+                        <Text style={styles.pendingBadgeText}>Request Pending</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.joinButton}
+                        onPress={() => handleJoinGroup(group)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.joinButtonText}>Request to Join</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               ))}
@@ -639,6 +657,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
     color: 'white',
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.WARNING[100],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 'auto',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.WARNING[300],
+  },
+  pendingBadgeText: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.WARNING[700],
   },
   modalOverlay: {
     flex: 1,
