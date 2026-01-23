@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,69 +16,51 @@ import { useAlert } from '@/contexts/AlertContext';
 import { router, useFocusEffect } from 'expo-router';
 import { planningService, WeeklyWorkoutPlan, Exercise } from '@/services/microservices/planningService';
 import { trackingService } from '@/services/microservices/trackingService';
-import { format } from 'date-fns';
-import { COLORS, FONTS, FONT_SIZES, GRADIENTS } from '@/constants/colors';
-import { ExerciseCard } from '@/components/exercise/ExerciseCard';
-import { useMLService } from '@/hooks/api/useMLService';
-import { useProgressStore } from '../../stores/progressStore';
-import { useRecommendationStore } from '../../stores/recommendationStore';
-
-const { width } = Dimensions.get('window');
+import { format, startOfWeek, addDays, isSameDay, isToday as isDateToday, addWeeks, subWeeks } from 'date-fns';
+import { COLORS, FONTS, FONT_SIZES } from '@/constants/colors';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
 interface DayData {
-  name: string;
-  fullName: string;
+  date: Date;
+  dayName: DayOfWeek;
+  shortName: string;
   workouts: Exercise[];
   completed: boolean;
   isRestDay: boolean;
+  isToday: boolean;
 }
 
 export default function WeeklyPlanScreen() {
   const { user } = useAuth();
   const alert = useAlert();
-  const { getRecommendations } = useMLService();
-
-  // Use centralized progress store (same as Dashboard)
-  const {
-    weeklyStats,
-    recentWorkouts,
-    isLoading: isLoadingProgress,
-    fetchAllProgressData,
-    refreshAfterWorkout,
-  } = useProgressStore();
-
-  // Use centralized recommendation store for consistent exercises across all pages
-  const {
-    recommendations: todayRecommendations,
-    isLoading: isLoadingRecommendations,
-    fetchRecommendations,
-  } = useRecommendationStore();
 
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyWorkoutPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [expandedDay, setExpandedDay] = useState<DayOfWeek | null>(null);
+
+  // Week navigation state
+  const [currentWeekStart, setCurrentWeekStart] = useState(() =>
+    startOfWeek(new Date(), { weekStartsOn: 1 }) // Monday
+  );
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Track completed days based on actual workout sessions
-  const [completedDays, setCompletedDays] = useState<Set<DayOfWeek>>(new Set());
+  const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
 
-  // Track last completed workout count for auto-completion detection
-  const lastCompletedCountRef = useRef<number>(0);
-
-  const daysOfWeek: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  const dayNames = {
-    monday: 'Mon',
-    tuesday: 'Tue',
-    wednesday: 'Wed',
-    thursday: 'Thu',
-    friday: 'Fri',
-    saturday: 'Sat',
-    sunday: 'Sun',
+  const dayNameMap: Record<number, DayOfWeek> = {
+    0: 'sunday',
+    1: 'monday',
+    2: 'tuesday',
+    3: 'wednesday',
+    4: 'thursday',
+    5: 'friday',
+    6: 'saturday',
   };
-  const dayFullNames = {
+
+  const shortDayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const fullDayNames: Record<DayOfWeek, string> = {
     monday: 'Monday',
     tuesday: 'Tuesday',
     wednesday: 'Wednesday',
@@ -89,81 +70,77 @@ export default function WeeklyPlanScreen() {
     sunday: 'Sunday',
   };
 
+  // Helper function to format muscle group text (e.g., "lower_body" → "Lower Body")
+  const formatMuscleGroup = (text: string): string => {
+    if (!text) return 'Full body';
+    return text
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   const userWorkoutDays = user?.workoutDays || [];
   const hasWorkoutDays = userWorkoutDays.length > 0;
 
+  // Check if viewing current week
+  const isCurrentWeek = isSameDay(
+    currentWeekStart,
+    startOfWeek(new Date(), { weekStartsOn: 1 })
+  );
+
+  // Get user's account creation date for navigation limit
+  const accountCreatedDate = user?.createdAt ? new Date(user.createdAt) : null;
+  const earliestWeekStart = accountCreatedDate
+    ? startOfWeek(accountCreatedDate, { weekStartsOn: 1 })
+    : null;
+
+  // Check if can navigate to previous week (can't go before account creation)
+  const canNavigatePrev = earliestWeekStart
+    ? currentWeekStart > earliestWeekStart
+    : true;
+
   useEffect(() => {
     loadWeeklyPlan();
-    checkCompletedDays(); // Check which days have completed workouts
-  }, [user]);
+    checkCompletedDays();
+  }, [user, currentWeekStart]);
 
-  // Refresh progress data and check completed days when screen comes into focus
+  // Refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        console.log('🔄 [WEEKLY_PLAN] Screen focused - refreshing progress and checking completion');
-        fetchAllProgressData(user.id);
-        checkCompletedDays(); // Re-check completed days
+        checkCompletedDays();
       }
-    }, [user, fetchAllProgressData])
+    }, [user])
   );
 
-  /**
-   * Check which days this week have completed workouts
-   * Auto-detects workout completion without manual button press
-   */
   const checkCompletedDays = async () => {
     if (!user) return;
 
     try {
-      console.log('✅ [WEEKLY_PLAN] Checking completed workouts for this week...');
-
-      // Get all completed workout sessions
       const userId = String(user.id);
       const sessions = await trackingService.getSessions({
         userId,
         status: 'completed',
-        limit: 100, // Get recent sessions
+        limit: 100,
       });
 
-      // Get start and end of current week (Monday to Sunday)
-      const now = new Date();
-      const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ...
-      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust for Sunday
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() + mondayOffset);
-      weekStart.setHours(0, 0, 0, 0);
-
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
+      // Get week boundaries
+      const weekEnd = addDays(currentWeekStart, 6);
       weekEnd.setHours(23, 59, 59, 999);
 
-      console.log(`📅 [WEEKLY_PLAN] Week range: ${weekStart.toISOString()} to ${weekEnd.toISOString()}`);
-
-      // Filter sessions that occurred this week
-      const thisWeekSessions = sessions.sessions.filter((session: any) => {
+      // Filter sessions for this week and map to date strings
+      const completed = new Set<string>();
+      sessions.sessions.forEach((session: any) => {
         const sessionDate = new Date(session.createdAt);
-        return sessionDate >= weekStart && sessionDate <= weekEnd;
-      });
-
-      console.log(`✅ [WEEKLY_PLAN] Found ${thisWeekSessions.length} completed workouts this week`);
-
-      // Map each session to the day of week it was completed
-      const completed = new Set<DayOfWeek>();
-      const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-      thisWeekSessions.forEach((session: any) => {
-        const sessionDate = new Date(session.createdAt);
-        const dayIndex = sessionDate.getDay();
-        const dayName = dayMap[dayIndex] as DayOfWeek;
-        completed.add(dayName);
-        console.log(`✅ [WEEKLY_PLAN] ${dayName.toUpperCase()} marked as completed (session: ${session.id})`);
+        if (sessionDate >= currentWeekStart && sessionDate <= weekEnd) {
+          completed.add(format(sessionDate, 'yyyy-MM-dd'));
+        }
       });
 
       setCompletedDays(completed);
-      console.log(`✅ [WEEKLY_PLAN] Completed days:`, Array.from(completed));
     } catch (error) {
-      console.error('❌ [WEEKLY_PLAN] Failed to check completed days:', error);
+      console.error('Failed to check completed days:', error);
     }
   };
 
@@ -174,15 +151,9 @@ export default function WeeklyPlanScreen() {
       setLoading(true);
       const response = await planningService.getCurrentWeekPlan(parseInt(user.id));
       const plan = (response.data as any)?.plan || response.data;
-
-      console.log('📅 [WEEKLY_PLAN] Loaded plan:', plan);
-      console.log('📅 [WEEKLY_PLAN] Plan data:', plan?.plan_data);
-      console.log('📅 [WEEKLY_PLAN] Monday exercises:', plan?.plan_data?.monday?.exercises);
-
       setWeeklyPlan(plan);
     } catch (error) {
       console.error('Failed to load weekly plan:', error);
-      alert.error('Error', 'Failed to load weekly workout plan');
     } finally {
       setLoading(false);
     }
@@ -191,36 +162,17 @@ export default function WeeklyPlanScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadWeeklyPlan();
+    await checkCompletedDays();
     setRefreshing(false);
-  };
-
-  /**
-   * Detect if weekly plan is stale (workout days changed since plan generation)
-   * Returns true if user's current workout days don't match the plan's snapshot
-   */
-  const detectPlanStaleness = (plan: WeeklyWorkoutPlan): boolean => {
-    if (!user?.workoutDays || !plan.user_preferences_snapshot) return false;
-
-    const currentDays = [...user.workoutDays].sort();
-    const snapshotDays = [...(plan.user_preferences_snapshot.preferred_workout_days || [])].sort();
-
-    const isStale = JSON.stringify(currentDays) !== JSON.stringify(snapshotDays);
-
-    if (isStale) {
-      console.warn('[WEEKLY_PLAN] Plan is stale! Current days:', currentDays, 'Snapshot days:', snapshotDays);
-    }
-
-    return isStale;
   };
 
   const handleGeneratePlan = async (regenerate: boolean = false) => {
     if (!user?.id) return;
 
-    // Check if user has set workout days
     if (!hasWorkoutDays) {
       alert.confirm(
         'Set Your Workout Days First',
-        'Please configure your preferred workout days in Settings → Personalization → Workout Days before generating a plan.',
+        'Please configure your preferred workout days in Settings before generating a plan.',
         () => router.push('/settings/personalization/workout-days'),
         undefined,
         'Go to Settings',
@@ -246,102 +198,67 @@ export default function WeeklyPlanScreen() {
     }
   };
 
-  const handleCompleteDay = async (day: DayOfWeek, silent: boolean = false) => {
-    if (!weeklyPlan) return;
-
-    try {
-      const response = await planningService.completeDayWorkout(weeklyPlan.plan_id, day);
-      const plan = (response.data as any)?.plan || response.data;
-      setWeeklyPlan(plan);
-
-      if (!silent) {
-        alert.success('Great Job!', `${dayFullNames[day]}'s workout completed!`);
-      } else {
-        console.log(`✅ [WEEKLY_PLAN] ${dayFullNames[day]}'s workout auto-completed`);
-      }
-    } catch (error) {
-      console.error('Failed to complete day:', error);
-      if (!silent) {
-        alert.error('Error', 'Failed to mark workout as complete');
-      }
-    }
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    setCurrentWeekStart(prev =>
+      direction === 'next' ? addWeeks(prev, 1) : subWeeks(prev, 1)
+    );
   };
 
-  // Normalize exercise data to handle field name variations
-  const normalizeExercise = (exercise: any): Exercise => {
-    return {
-      workout_id: exercise.workout_id || 0,
-      exercise_id: exercise.exercise_id || exercise.id || 0,
-      exercise_name: exercise.exercise_name || exercise.name || 'Unknown Exercise',
-      target_muscle_group: exercise.target_muscle_group || exercise.muscle_group || 'core',
-      difficulty_level: exercise.difficulty_level || exercise.difficulty || 1,
-      equipment_needed: exercise.equipment_needed || exercise.equipment || 'none',
-      estimated_calories_burned: exercise.estimated_calories_burned || 28, // 4 min * 7 cal/min
-      default_duration_seconds: exercise.default_duration_seconds || exercise.duration_seconds || 240,
-      exercise_category: exercise.exercise_category || 'strength',
-    };
+  const goToToday = () => {
+    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+    setSelectedDate(new Date());
   };
 
-  const getDayData = (day: DayOfWeek): DayData => {
-    const isScheduledWorkoutDay = userWorkoutDays.includes(day);
-    const isTodayDay = isToday(day);
+  // Normalize exercise data
+  const normalizeExercise = (exercise: any): Exercise => ({
+    workout_id: exercise.workout_id || 0,
+    exercise_id: exercise.exercise_id || exercise.id || 0,
+    exercise_name: exercise.exercise_name || exercise.name || 'Unknown Exercise',
+    target_muscle_group: exercise.target_muscle_group || exercise.muscle_group || 'core',
+    difficulty_level: exercise.difficulty_level || exercise.difficulty || 1,
+    equipment_needed: exercise.equipment_needed || exercise.equipment || 'none',
+    estimated_calories_burned: exercise.estimated_calories_burned || 28,
+    default_duration_seconds: exercise.default_duration_seconds || exercise.duration_seconds || 240,
+    exercise_category: exercise.exercise_category || 'strength',
+  });
 
-    // 🎯 Use auto-detected completion status from completed workouts
-    const completed = completedDays.has(day);
+  // Generate week days data
+  const getWeekDays = (): DayData[] => {
+    const days: DayData[] = [];
 
-    // 🎯 LONG-TERM FIX: Use backend plan as single source of truth
-    const planData = (weeklyPlan as any)?.plan_data || {};
-    const dayData = planData[day] || {};
-    const rawExercises = dayData.exercises || [];
-    const workouts: Exercise[] = rawExercises.map(normalizeExercise);
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(currentWeekStart, i);
+      const dayName = dayNameMap[date.getDay()];
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const isScheduledWorkoutDay = userWorkoutDays.includes(dayName);
 
-    // DEBUG: Log first exercise ID for each day to verify uniqueness
-    if (workouts.length > 0) {
-      console.log(`📅 ${day.toUpperCase()}: ${workouts[0].exercise_name} (ID: ${workouts[0].exercise_id})${isTodayDay ? ' [TODAY]' : ''}${completed ? ' ✅' : ''}`);
+      // Get exercises from plan
+      const planData = (weeklyPlan as any)?.plan_data || {};
+      const dayData = planData[dayName] || {};
+      const rawExercises = dayData.exercises || [];
+      const workouts: Exercise[] = rawExercises.map(normalizeExercise);
+
+      days.push({
+        date,
+        dayName,
+        shortName: shortDayNames[i],
+        workouts,
+        completed: completedDays.has(dateStr),
+        isRestDay: !isScheduledWorkoutDay,
+        isToday: isDateToday(date),
+      });
     }
 
-    return {
-      name: dayNames[day],
-      fullName: dayFullNames[day],
-      workouts,
-      completed,
-      // Always use user's preferred workout days to determine rest days
-      isRestDay: !isScheduledWorkoutDay,
-    };
+    return days;
   };
 
-  const getTodayDay = (): DayOfWeek | null => {
-    const today = new Date().getDay();
-    const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return dayMap[today] as DayOfWeek;
-  };
+  const weekDays = getWeekDays();
+  const selectedDayData = weekDays.find(d => isSameDay(d.date, selectedDate)) || weekDays.find(d => d.isToday) || weekDays[0];
 
-  const isToday = (day: DayOfWeek): boolean => {
-    return day === getTodayDay();
-  };
-
-  const getWorkoutIcon = (category: string): any => {
-    const icons: Record<string, any> = {
-      strength: 'barbell-outline',
-      cardio: 'footsteps-outline',
-      flexibility: 'body-outline',
-      core: 'fitness-outline',
-      balance: 'git-compare-outline',
-    };
-    return icons[category?.toLowerCase()] || 'fitness-outline';
-  };
-
+  // Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.headerTitle}>Weekly Plan</Text>
-              <Text style={styles.headerSubtitle}>Your AI-powered workout schedule</Text>
-            </View>
-          </View>
-        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
           <Text style={styles.loadingText}>Loading your weekly plan...</Text>
@@ -350,44 +267,24 @@ export default function WeeklyPlanScreen() {
     );
   }
 
-  // Check if user has no workout days configured
+  // No workout days configured
   if (!hasWorkoutDays) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.headerTitle}>Weekly Plan</Text>
-              <Text style={styles.headerSubtitle}>Your AI-powered workout schedule</Text>
-            </View>
-          </View>
-        </View>
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name="calendar-outline" size={64} color={COLORS.WARNING[500]} />
-            </View>
-            <Text style={styles.emptyTitle}>Configure Your Workout Days</Text>
-            <Text style={styles.emptyDescription}>
-              To generate your personalized weekly plan, please set your preferred workout days first.
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.push('/settings/personalization/workout-days')}
-              style={styles.emptyButton}
-            >
-              <LinearGradient
-                colors={GRADIENTS.PRIMARY as [string, string]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.emptyButtonGradient}
-              >
-                <View style={styles.emptyButtonContent}>
-                  <Ionicons name="settings-outline" size={20} color="white" style={{ marginRight: 8 }} />
-                  <Text style={styles.emptyButtonText}>Set Workout Days</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+          <View style={styles.emptyIconWrapper}>
+            <Ionicons name="calendar-outline" size={48} color={COLORS.PRIMARY[500]} />
           </View>
+          <Text style={styles.emptyTitle}>Set Up Your Schedule</Text>
+          <Text style={styles.emptyDescription}>
+            Choose which days you want to work out to generate your personalized weekly plan.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => router.push('/settings/personalization/workout-days')}
+          >
+            <Text style={styles.primaryButtonText}>Set Workout Days</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -397,65 +294,129 @@ export default function WeeklyPlanScreen() {
   if (!weeklyPlan) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.headerTitle}>Weekly Plan</Text>
-              <Text style={styles.headerSubtitle}>Your AI-powered workout schedule</Text>
-            </View>
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconWrapper}>
+            <Ionicons name="sparkles-outline" size={48} color={COLORS.PRIMARY[500]} />
           </View>
+          <Text style={styles.emptyTitle}>Generate Your Plan</Text>
+          <Text style={styles.emptyDescription}>
+            Create an AI-powered weekly workout plan based on your fitness goals and preferences.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => handleGeneratePlan(false)}
+            disabled={generatingPlan}
+          >
+            {generatingPlan ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Generate Plan</Text>
+            )}
+          </TouchableOpacity>
         </View>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name="calendar-outline" size={64} color={COLORS.PRIMARY[500]} />
-            </View>
-            <Text style={styles.emptyTitle}>Generate Your Weekly Plan</Text>
-            <Text style={styles.emptyDescription}>
-              Create your personalized weekly workout plan powered by AI based on your preferences and goals.
-            </Text>
-            <TouchableOpacity
-              onPress={() => handleGeneratePlan(false)}
-              disabled={generatingPlan}
-              style={styles.emptyButton}
-            >
-              <LinearGradient
-                colors={GRADIENTS.PRIMARY as [string, string]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.emptyButtonGradient}
-              >
-                {generatingPlan ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <View style={styles.emptyButtonContent}>
-                    <Ionicons name="sparkles" size={20} color="white" style={{ marginRight: 8 }} />
-                    <Text style={styles.emptyButtonText}>Generate My Plan</Text>
-                  </View>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  const totalWorkouts = weeklyPlan.total_workouts || 0;
-  const completedWorkouts = weeklyPlan.completed_workouts || 0;
-  const completionPercentage = weeklyPlan.completion_percentage || 0;
+  // Calculate completion stats
+  const completedCount = weekDays.filter(d => d.completed && !d.isRestDay).length;
+  const workoutDaysCount = weekDays.filter(d => !d.isRestDay).length;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+      {/* Header - Consistent with Dashboard */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.headerTitle}>Weekly Plan</Text>
-            <Text style={styles.headerSubtitle}>
-              {format(new Date(weeklyPlan.week_start_date), 'MMM d')} - {format(new Date(weeklyPlan.week_end_date), 'MMM d, yyyy')}
-            </Text>
+        <Text style={styles.headerTitle}>Weekly Plan</Text>
+        {!isCurrentWeek && (
+          <TouchableOpacity style={styles.todayChip} onPress={goToToday}>
+            <Ionicons name="today-outline" size={16} color={COLORS.PRIMARY[600]} />
+            <Text style={styles.todayChipText}>Today</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Calendar Week Strip */}
+      <View style={styles.calendarSection}>
+        {/* Week Navigation Row */}
+        <View style={styles.weekNavigationRow}>
+          <TouchableOpacity
+            style={[styles.navButton, !canNavigatePrev && styles.navButtonDisabled]}
+            onPress={() => canNavigatePrev && navigateWeek('prev')}
+            disabled={!canNavigatePrev}
+          >
+            <Ionicons name="chevron-back" size={20} color={canNavigatePrev ? COLORS.SECONDARY[700] : COLORS.SECONDARY[300]} />
+          </TouchableOpacity>
+          <Text style={styles.weekLabel}>
+            {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d, yyyy')}
+          </Text>
+          <TouchableOpacity
+            style={styles.navButton}
+            onPress={() => navigateWeek('next')}
+          >
+            <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[700]} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.calendarStrip}>
+          {weekDays.map((day, index) => {
+            const isSelected = isSameDay(day.date, selectedDate);
+
+            return (
+              <TouchableOpacity
+                key={index}
+                style={styles.dayCell}
+                onPress={() => setSelectedDate(day.date)}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.dayName,
+                  isSelected && styles.dayNameSelected,
+                  day.isToday && !isSelected && styles.dayNameToday,
+                ]}>
+                  {day.shortName}
+                </Text>
+                <View style={[
+                  styles.dayNumberWrapper,
+                  isSelected && styles.dayNumberWrapperSelected,
+                  day.isToday && !isSelected && styles.dayNumberWrapperToday,
+                ]}>
+                  <Text style={[
+                    styles.dayNumber,
+                    isSelected && styles.dayNumberSelected,
+                    day.isToday && !isSelected && styles.dayNumberToday,
+                  ]}>
+                    {format(day.date, 'd')}
+                  </Text>
+                </View>
+
+                {/* Status indicator dot */}
+                <View style={styles.statusIndicator}>
+                  {day.completed ? (
+                    <View style={styles.completedDot} />
+                  ) : !day.isRestDay ? (
+                    <View style={styles.workoutDot} />
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Progress Summary - Minimal */}
+        <View style={styles.progressSummary}>
+          <Text style={styles.progressText}>
+            {completedCount}/{workoutDaysCount} completed
+          </Text>
+          <View style={styles.progressDotsContainer}>
+            {weekDays.filter(d => !d.isRestDay).map((day, idx) => (
+              <View
+                key={idx}
+                style={[
+                  styles.progressDot,
+                  day.completed && styles.progressDotCompleted,
+                ]}
+              />
+            ))}
           </View>
         </View>
       </View>
@@ -465,295 +426,177 @@ export default function WeeklyPlanScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.PRIMARY[600]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.PRIMARY[600]}
+          />
         }
       >
-        {/* Warning Banner: Stale Plan Detection */}
-        {weeklyPlan && detectPlanStaleness(weeklyPlan) && (
-          <View style={styles.warningBanner}>
-            <View style={styles.warningContent}>
-              <Ionicons name="warning" size={24} color={COLORS.WARNING[600]} />
-              <View style={styles.warningTextContainer}>
-                <Text style={styles.warningTitle}>Schedule Changed</Text>
-                <Text style={styles.warningDescription}>
-                  Your workout days have changed. This plan was created for your old schedule.
-                </Text>
+        {/* Selected Day Section Header */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {fullDayNames[selectedDayData.dayName]}
+          </Text>
+          <View style={styles.sectionBadges}>
+            {selectedDayData.isToday && (
+              <View style={styles.todayPill}>
+                <View style={styles.todayPillDot} />
+                <Text style={styles.todayPillText}>Today</Text>
               </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleGeneratePlan(true)}
-              style={styles.warningButton}
-            >
-              <LinearGradient
-                colors={[COLORS.WARNING[500], COLORS.WARNING[600]] as [string, string]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.warningButtonGradient}
-              >
-                <Text style={styles.warningButtonText}>Update Plan</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* This Week's Progress Stats (same as Dashboard) */}
-        <View style={styles.statsSection}>
-          <View style={styles.statsSectionHeader}>
-            <Text style={styles.sectionHeader}>This Week's Progress</Text>
-            <View style={styles.weekBadge}>
-              <Ionicons name="calendar-outline" size={12} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.weekBadgeText}>Week {(() => {
-                const now = new Date();
-                const start = new Date(now.getFullYear(), 0, 1);
-                const diff = now.getTime() - start.getTime();
-                const oneWeek = 1000 * 60 * 60 * 24 * 7;
-                return Math.ceil(diff / oneWeek);
-              })()}</Text>
-            </View>
-          </View>
-          <View style={styles.statsCard}>
-            <View style={styles.statRow}>
-              <View style={[styles.statIconCircle, { backgroundColor: '#10B981' + '15' }]}>
-                <Ionicons name="barbell" size={20} color="#10B981" />
+            )}
+            {selectedDayData.completed && (
+              <View style={styles.completedPill}>
+                <Ionicons name="checkmark" size={12} color={COLORS.SUCCESS[600]} />
+                <Text style={styles.completedPillText}>Completed</Text>
               </View>
-              <View style={styles.statContent}>
-                <Text style={styles.statLabel}>Workouts</Text>
-                <Text style={styles.statValue}>{weeklyStats?.this_week_sessions || 0} sessions</Text>
-              </View>
-            </View>
-            <View style={styles.statDividerHorizontal} />
-            <View style={styles.statRow}>
-              <View style={[styles.statIconCircle, { backgroundColor: '#F59E0B' + '15' }]}>
-                <Ionicons name="flame" size={20} color="#F59E0B" />
-              </View>
-              <View style={styles.statContent}>
-                <Text style={styles.statLabel}>Calories Burned</Text>
-                <Text style={styles.statValue}>{Math.round(weeklyStats?.total_calories_burned || 0).toLocaleString()} cal</Text>
-              </View>
-            </View>
-            <View style={styles.statDividerHorizontal} />
-            <View style={styles.statRow}>
-              <View style={[styles.statIconCircle, { backgroundColor: '#3B82F6' + '15' }]}>
-                <Ionicons name="time" size={20} color="#3B82F6" />
-              </View>
-              <View style={styles.statContent}>
-                <Text style={styles.statLabel}>Exercise Time</Text>
-                <Text style={styles.statValue}>
-                  {Math.floor((weeklyStats?.total_exercise_time || 0) / 60)}h {(weeklyStats?.total_exercise_time || 0) % 60}m
-                </Text>
-              </View>
-            </View>
+            )}
           </View>
         </View>
 
-        {/* Plan Completion Progress Card */}
-        <View style={styles.progressCard}>
-          <View style={styles.progressHeader}>
-            <Ionicons name="analytics" size={20} color={COLORS.PRIMARY[600]} />
-            <Text style={styles.progressTitle}>Weekly Progress</Text>
+        {/* Rest Day */}
+        {selectedDayData.isRestDay ? (
+          <View style={styles.restDayCard}>
+            <View style={styles.restDayIconWrapper}>
+              <Ionicons name="moon" size={28} color={COLORS.SECONDARY[400]} />
+            </View>
+            <View style={styles.restDayTextContainer}>
+              <Text style={styles.restDayTitle}>Rest & Recovery</Text>
+              <Text style={styles.restDayDescription}>
+                Your muscles grow stronger during rest. Take it easy today.
+              </Text>
+            </View>
           </View>
-          <View style={styles.progressStats}>
-            <Text style={styles.progressPercentage}>{Math.round(completionPercentage)}%</Text>
-            <Text style={styles.progressLabel}>
-              {completedWorkouts} of {totalWorkouts} days completed
-            </Text>
+        ) : selectedDayData.workouts.length === 0 ? (
+          <View style={styles.emptyWorkoutCard}>
+            <Ionicons name="calendar-outline" size={40} color={COLORS.SECONDARY[300]} />
+            <Text style={styles.emptyWorkoutText}>No exercises scheduled</Text>
           </View>
-          <View style={styles.progressBarContainer}>
-            <View style={[styles.progressBarFill, { width: `${completionPercentage}%` }]} />
-          </View>
-        </View>
-
-        {/* Workout Schedule Card - Circular Design */}
-        <View style={styles.scheduleCard}>
-          <View style={styles.scheduleHeaderRow}>
-            <Ionicons name="calendar-outline" size={20} color={COLORS.PRIMARY[600]} />
-            <Text style={styles.scheduleTitle}>Your Workout Schedule</Text>
-          </View>
-
-          {/* Circular Day Indicators */}
-          <View style={styles.weekContainer}>
-            {daysOfWeek.map((day) => {
-              const dayData = getDayData(day);
-              const isTodayDay = isToday(day);
-              const isScheduled = !dayData.isRestDay;
-              return (
-                <View key={day} style={styles.dayCircleWrapper}>
-                  <View
-                    style={[
-                      styles.dayCircle,
-                      isTodayDay && styles.dayCircleToday,
-                      isScheduled && !isTodayDay && styles.dayCircleScheduled,
-                      dayData.completed && styles.dayCircleCompleted,
-                    ]}
-                  >
-                    {dayData.completed ? (
-                      <Ionicons name="checkmark" size={14} color={COLORS.SUCCESS[600]} />
-                    ) : !isScheduled ? (
-                      <Ionicons name="moon" size={12} color={COLORS.SECONDARY[400]} />
-                    ) : null}
-                  </View>
-                  <Text style={[styles.dayCircleLabel, isTodayDay && styles.dayCircleLabelToday]}>
-                    {dayNames[day]}
-                  </Text>
+        ) : (
+          <>
+            {/* Quick Stats Row */}
+            <View style={styles.quickStatsRow}>
+              <View style={styles.quickStatItem}>
+                <View style={[styles.quickStatIcon, { backgroundColor: COLORS.PRIMARY[50] }]}>
+                  <Ionicons name="fitness" size={16} color={COLORS.PRIMARY[600]} />
                 </View>
-              );
-            })}
-          </View>
+                <Text style={styles.quickStatValue}>{selectedDayData.workouts.length}</Text>
+                <Text style={styles.quickStatLabel}>exercises</Text>
+              </View>
+              <View style={styles.quickStatItem}>
+                <View style={[styles.quickStatIcon, { backgroundColor: COLORS.WARNING[50] }]}>
+                  <Ionicons name="flame" size={16} color={COLORS.WARNING[600]} />
+                </View>
+                <Text style={styles.quickStatValue}>
+                  {selectedDayData.workouts.reduce((sum, e) => sum + (e.estimated_calories_burned || 28), 0)}
+                </Text>
+                <Text style={styles.quickStatLabel}>calories</Text>
+              </View>
+              <View style={styles.quickStatItem}>
+                <View style={[styles.quickStatIcon, { backgroundColor: COLORS.SUCCESS[50] }]}>
+                  <Ionicons name="time" size={16} color={COLORS.SUCCESS[600]} />
+                </View>
+                <Text style={styles.quickStatValue}>{Math.round(selectedDayData.workouts.length * 4)}</Text>
+                <Text style={styles.quickStatLabel}>minutes</Text>
+              </View>
+            </View>
 
-          <View style={styles.scheduleSummary}>
-            <Ionicons name="fitness-outline" size={16} color={COLORS.SECONDARY[600]} />
-            <Text style={styles.scheduleSummaryText}>
-              {userWorkoutDays.length} workout day{userWorkoutDays.length !== 1 ? 's' : ''} • {7 - userWorkoutDays.length} rest day{7 - userWorkoutDays.length !== 1 ? 's' : ''}
-            </Text>
-          </View>
-        </View>
-
-        {/* Days Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="calendar" size={20} color={COLORS.PRIMARY[600]} />
-            <Text style={styles.sectionTitle}>This Week</Text>
-          </View>
-
-          <View style={styles.daysContainer}>
-            {daysOfWeek.map((day) => {
-              const dayData = getDayData(day);
-              const isExpanded = expandedDay === day;
-              const isTodayDay = isToday(day);
-
-              // Rest day card
-              if (dayData.isRestDay) {
-                return (
-                  <View key={day} style={styles.dayWrapper}>
-                    <View style={[styles.dayCard, styles.restDayCard]}>
-                      <View style={styles.dayCardContent}>
-                        <View style={[styles.dayIndicator, styles.restDayIndicator]}>
-                          <Ionicons name="moon-outline" size={24} color={COLORS.SECONDARY[500]} />
-                        </View>
-
-                        <View style={styles.dayInfo}>
-                          <View style={styles.dayTitleRow}>
-                            <Text style={styles.dayTitle}>{dayData.fullName}</Text>
-                            {isTodayDay && (
-                              <View style={[styles.todayBadge, styles.restDayBadge]}>
-                                <Text style={styles.restDayBadgeText}>TODAY</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.dayMetaRow}>
-                            <Ionicons name="battery-charging-outline" size={14} color={COLORS.SECONDARY[500]} />
-                            <Text style={styles.restDayMeta}>Rest & Recovery Day</Text>
-                          </View>
-                        </View>
-                      </View>
+            {/* Modern Exercise List */}
+            <View style={styles.exercisesContainer}>
+              <Text style={styles.exercisesTitle}>Exercises</Text>
+              {selectedDayData.workouts.map((exercise, idx) => (
+                <View
+                  key={`${selectedDayData.dayName}-${exercise.exercise_id}-${idx}`}
+                  style={styles.exerciseItem}
+                >
+                  <View style={styles.exerciseNumberContainer}>
+                    <Text style={styles.exerciseNumber}>{idx + 1}</Text>
+                  </View>
+                  <View style={styles.exerciseInfo}>
+                    <Text style={styles.exerciseName} numberOfLines={1}>
+                      {exercise.exercise_name}
+                    </Text>
+                    <View style={styles.exerciseMeta}>
+                      <Text style={styles.exerciseMetaText}>
+                        {formatMuscleGroup(exercise.target_muscle_group || '')}
+                      </Text>
+                      <View style={styles.exerciseMetaDot} />
+                      <Text style={styles.exerciseMetaText}>4 min</Text>
                     </View>
                   </View>
-                );
-              }
-
-              // Workout day card
-              return (
-                <View key={day} style={styles.dayWrapper}>
-                  <TouchableOpacity
-                    onPress={() => setExpandedDay(isExpanded ? null : day)}
-                    style={[
-                      styles.dayCard,
-                      dayData.completed && styles.dayCardCompleted,
-                      isTodayDay && !dayData.completed && styles.dayCardToday,
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.dayCardContent}>
-                      <View style={[
-                        styles.dayIndicator,
-                        dayData.completed && styles.dayIndicatorCompleted,
-                        isTodayDay && !dayData.completed && styles.dayIndicatorToday,
-                      ]}>
-                        {dayData.completed ? (
-                          <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />
-                        ) : isTodayDay ? (
-                          <View style={styles.todayDot} />
-                        ) : (
-                          <Text style={styles.dayIndicatorText}>{dayData.name}</Text>
-                        )}
-                      </View>
-
-                      <View style={styles.dayInfo}>
-                        <View style={styles.dayTitleRow}>
-                          <Text style={styles.dayTitle}>{dayData.fullName}</Text>
-                          {isTodayDay && !dayData.completed && (
-                            <View style={styles.todayBadge}>
-                              <Text style={styles.todayBadgeText}>TODAY</Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.dayMetaRow}>
-                          <Ionicons name="fitness-outline" size={14} color={COLORS.SECONDARY[500]} />
-                          <Text style={styles.dayMeta}>
-                            {dayData.workouts.length} exercise{dayData.workouts.length !== 1 ? 's' : ''}
-                          </Text>
-                          {dayData.completed && (
-                            <>
-                              <Text style={styles.dayMetaDivider}>•</Text>
-                              <Text style={styles.dayMetaCompleted}>Completed</Text>
-                            </>
-                          )}
-                        </View>
-                      </View>
-
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={20}
-                        color={COLORS.SECONDARY[400]}
-                      />
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Expanded Content - Exercise List */}
-                  {isExpanded && dayData.workouts.length > 0 && (
-                    <View style={styles.exercisesContainer}>
-                      {dayData.workouts.map((exercise, idx) => (
-                        <ExerciseCard
-                          key={`${day}-${exercise.exercise_id}-${idx}`}
-                          exercise={exercise}
-                          index={idx}
-                          showCompletionIcon={true}
-                        />
-                      ))}
-
-                      {/* Completion Status - Auto-detected from completed workouts */}
-                      {dayData.completed ? (
-                        <View style={styles.completionStatusContainer}>
-                          <LinearGradient
-                            colors={['#10B981', '#059669']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.completionStatusGradient}
-                          >
-                            <Ionicons name="checkmark-circle" size={32} color="white" />
-                            <View style={styles.completionStatusText}>
-                              <Text style={styles.completionStatusTitle}>Workout Completed!</Text>
-                              <Text style={styles.completionStatusSubtitle}>Great job finishing your workout</Text>
-                            </View>
-                          </LinearGradient>
-                        </View>
-                      ) : (
-                        <View style={styles.incompletionStatusContainer}>
-                          <View style={styles.incompletionStatusContent}>
-                            <Ionicons name="time-outline" size={24} color={COLORS.SECONDARY[400]} />
-                            <Text style={styles.incompletionStatusText}>
-                              Complete your workout to mark this day as done
-                            </Text>
-                          </View>
-                        </View>
-                      )}
+                  {selectedDayData.completed && (
+                    <View style={styles.exerciseCheckmark}>
+                      <Ionicons name="checkmark" size={14} color="white" />
                     </View>
                   )}
                 </View>
-              );
-            })}
+              ))}
+            </View>
+
+            {/* Action Button */}
+            {selectedDayData.completed ? (
+              <View style={styles.completedBanner}>
+                <Ionicons name="trophy" size={20} color={COLORS.SUCCESS[600]} />
+                <Text style={styles.completedBannerText}>Workout completed!</Text>
+              </View>
+            ) : selectedDayData.isToday ? (
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={() => router.push('/workout')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.startButtonGradient}
+                >
+                  <Ionicons name="play" size={20} color="white" />
+                  <Text style={styles.startButtonText}>Start Workout</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.upcomingBanner}>
+                <Ionicons name="calendar-outline" size={18} color={COLORS.SECONDARY[400]} />
+                <Text style={styles.upcomingBannerText}>
+                  {selectedDayData.date < new Date() ? 'Missed workout' : 'Scheduled workout'}
+                </Text>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Legend */}
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: COLORS.SUCCESS[500] }]} />
+            <Text style={styles.legendText}>Completed</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: COLORS.PRIMARY[500] }]} />
+            <Text style={styles.legendText}>Workout</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: COLORS.SECONDARY[300] }]} />
+            <Text style={styles.legendText}>Rest</Text>
           </View>
         </View>
+
+        {/* Regenerate Plan Button */}
+        <TouchableOpacity
+          style={styles.regenerateButton}
+          onPress={() => handleGeneratePlan(true)}
+          disabled={generatingPlan}
+        >
+          {generatingPlan ? (
+            <ActivityIndicator color={COLORS.PRIMARY[600]} size="small" />
+          ) : (
+            <>
+              <Ionicons name="refresh-outline" size={18} color={COLORS.PRIMARY[600]} />
+              <Text style={styles.regenerateText}>Regenerate Plan</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -766,119 +609,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.NEUTRAL[50],
   },
-  header: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.NEUTRAL[200],
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.XXL,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  headerSubtitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    marginTop: 2,
-  },
-  refreshButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.PRIMARY[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  // This Week's Progress Stats Section (same styles as Dashboard)
-  statsSection: {
-    marginBottom: 20,
-  },
-  statsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionHeader: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  weekBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY[50],
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  weekBadgeText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[700],
-  },
-  statsCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  statRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  statIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  statContent: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    marginBottom: 2,
-  },
-  statValue: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  statDividerHorizontal: {
-    height: 1,
-    backgroundColor: COLORS.NEUTRAL[200],
-    marginHorizontal: 0,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
   },
   loadingText: {
     fontSize: FONT_SIZES.BASE,
@@ -886,29 +620,18 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[600],
     marginTop: 16,
   },
+
+  // Empty State
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-  },
-  emptyCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 20,
     padding: 32,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
   },
-  emptyIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+  emptyIconWrapper: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: COLORS.PRIMARY[50],
     alignItems: 'center',
     justifyContent: 'center',
@@ -918,7 +641,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XXL,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
-    marginBottom: 12,
+    marginBottom: 8,
     textAlign: 'center',
   },
   emptyDescription: {
@@ -927,396 +650,511 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[600],
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 24,
+    marginBottom: 32,
+    paddingHorizontal: 20,
   },
-  emptyButton: {
-    width: '100%',
-  },
-  emptyButtonGradient: {
+  primaryButton: {
+    backgroundColor: COLORS.PRIMARY[600],
     paddingVertical: 16,
     paddingHorizontal: 32,
-    borderRadius: 16,
-    alignItems: 'center',
+    borderRadius: 14,
     shadowColor: COLORS.PRIMARY[600],
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
-  emptyButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  emptyButtonText: {
+  primaryButtonText: {
     fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: 'white',
+  },
+
+  // Header - Consistent with Dashboard
+  header: {
+    backgroundColor: 'white',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 28,
     fontFamily: FONTS.BOLD,
-    color: COLORS.NEUTRAL.WHITE,
+    color: '#111827',
   },
-  progressCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  progressHeader: {
+  todayChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 8,
-  },
-  progressTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  progressStats: {
-    marginBottom: 16,
-  },
-  progressPercentage: {
-    fontSize: FONT_SIZES.DISPLAY_SM,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
-    marginBottom: 4,
-  },
-  progressLabel: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-  },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: COLORS.NEUTRAL[200],
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.PRIMARY[600],
-    borderRadius: 4,
-  },
-  scheduleCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    backgroundColor: COLORS.PRIMARY[50],
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    gap: 6,
+  },
+  todayChipText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+
+  // Calendar Section
+  calendarSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+  },
+  weekNavigationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  navButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.SECONDARY[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navButtonDisabled: {
+    backgroundColor: COLORS.SECONDARY[50],
+    opacity: 0.5,
+  },
+  weekLabel: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+  },
+  calendarStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  dayCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  dayName: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dayNameSelected: {
+    color: COLORS.PRIMARY[600],
+    fontFamily: FONTS.SEMIBOLD,
+  },
+  dayNameToday: {
+    color: COLORS.PRIMARY[600],
+    fontFamily: FONTS.SEMIBOLD,
+  },
+  dayNumberWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  dayNumberWrapperSelected: {
+    backgroundColor: COLORS.PRIMARY[600],
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  scheduleHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    gap: 8,
-  },
-  scheduleTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  weekContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    marginBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.NEUTRAL[200],
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.NEUTRAL[200],
-  },
-  dayCircleWrapper: {
-    alignItems: 'center',
-  },
-  dayCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-    backgroundColor: COLORS.NEUTRAL[100],
-  },
-  dayCircleToday: {
-    backgroundColor: COLORS.PRIMARY[600],
-    borderWidth: 2,
-    borderColor: COLORS.PRIMARY[600],
-  },
-  dayCircleScheduled: {
+  dayNumberWrapperToday: {
     backgroundColor: COLORS.PRIMARY[50],
     borderWidth: 2,
-    borderColor: COLORS.PRIMARY[500],
+    borderColor: COLORS.PRIMARY[400],
   },
-  dayCircleCompleted: {
-    backgroundColor: COLORS.SUCCESS[50],
-    borderWidth: 2,
-    borderColor: COLORS.SUCCESS[500],
+  dayNumber: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[800],
   },
-  dayCircleLabel: {
-    fontSize: 11,
+  dayNumberSelected: {
+    color: 'white',
+    fontFamily: FONTS.BOLD,
+  },
+  dayNumberToday: {
+    color: COLORS.PRIMARY[700],
+    fontFamily: FONTS.BOLD,
+  },
+  statusIndicator: {
+    height: 8,
+    marginTop: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  completedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.SUCCESS[500],
+  },
+  workoutDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.PRIMARY[400],
+  },
+
+  // Progress Summary - Minimal style
+  progressSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  progressText: {
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
   },
-  dayCircleLabelToday: {
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
-  },
-  scheduleSummary: {
+  progressDotsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 6,
   },
-  scheduleSummaryText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.SECONDARY[200],
   },
-  section: {
-    marginBottom: 24,
+  progressDotCompleted: {
+    backgroundColor: COLORS.SUCCESS[500],
   },
-  sectionHeaderRow: {
+
+  // Scroll View
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingTop: 8,
+  },
+
+  // Section Header
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
-    gap: 8,
   },
   sectionTitle: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  sectionBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  todayPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY[600],
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    gap: 5,
+  },
+  todayPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'white',
+  },
+  todayPillText: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: 'white',
+  },
+  completedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[50],
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.SUCCESS[200],
+  },
+  completedPillText: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SUCCESS[700],
+  },
+
+  // Rest Day Card
+  restDayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  restDayIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: COLORS.SECONDARY[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  restDayTextContainer: {
+    flex: 1,
+  },
+  restDayTitle: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[800],
+    marginBottom: 4,
+  },
+  restDayDescription: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    lineHeight: 20,
+  },
+
+  // Empty Workout Card
+  emptyWorkoutCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 16,
+    padding: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  emptyWorkoutText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginTop: 12,
+  },
+
+  // Quick Stats Row
+  quickStatsRow: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  quickStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  quickStatIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  quickStatValue: {
     fontSize: FONT_SIZES.LG,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
   },
-  daysContainer: {
-    gap: 12,
+  quickStatLabel: {
+    fontSize: 11,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    marginTop: 2,
   },
-  dayWrapper: {
-    marginBottom: 4,
-  },
-  dayCard: {
+
+  // Exercises Container
+  exercisesContainer: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 16,
     padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  dayCardCompleted: {
-    borderWidth: 2,
-    borderColor: COLORS.SUCCESS[500],
+  exercisesTitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[500],
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
   },
-  dayCardToday: {
-    borderWidth: 2,
-    borderColor: COLORS.PRIMARY[500],
-  },
-  restDayCard: {
-    backgroundColor: COLORS.NEUTRAL[50],
-    borderWidth: 1,
-    borderColor: COLORS.NEUTRAL[200],
-  },
-  dayCardContent: {
+  exerciseItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.NEUTRAL[100],
   },
-  dayIndicator: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.NEUTRAL[100],
+  exerciseNumberContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: COLORS.PRIMARY[50],
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  dayIndicatorCompleted: {
-    backgroundColor: COLORS.SUCCESS[50],
-  },
-  dayIndicatorToday: {
-    backgroundColor: COLORS.PRIMARY[50],
-  },
-  restDayIndicator: {
-    backgroundColor: COLORS.NEUTRAL[100],
-  },
-  dayIndicatorText: {
+  exerciseNumber: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[700],
+    color: COLORS.PRIMARY[600],
   },
-  todayDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: COLORS.PRIMARY[600],
-  },
-  dayInfo: {
+  exerciseInfo: {
     flex: 1,
   },
-  dayTitleRow: {
+  exerciseName: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+    marginBottom: 2,
+  },
+  exerciseMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
   },
-  dayTitle: {
+  exerciseMetaText: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+  },
+  exerciseMetaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: COLORS.SECONDARY[300],
+    marginHorizontal: 6,
+  },
+  exerciseCheckmark: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.SUCCESS[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Completed Banner
+  completedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.SUCCESS[50],
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.SUCCESS[200],
+  },
+  completedBannerText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SUCCESS[700],
+  },
+
+  // Start Button
+  startButton: {
+    marginBottom: 8,
+  },
+  startButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 10,
+  },
+  startButtonText: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
+    color: 'white',
   },
-  todayBadge: {
-    backgroundColor: COLORS.PRIMARY[100],
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginLeft: 8,
-  },
-  restDayBadge: {
-    backgroundColor: COLORS.NEUTRAL[200],
-  },
-  todayBadgeText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[700],
-  },
-  restDayBadgeText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[700],
-  },
-  dayMetaRow: {
+
+  // Upcoming Banner
+  upcomingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 8,
   },
-  dayMeta: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-  },
-  restDayMeta: {
+  upcomingBannerText: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
   },
-  dayMetaDivider: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[400],
-    marginHorizontal: 4,
+
+  // Legend
+  legend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    marginTop: 24,
+    paddingVertical: 16,
   },
-  dayMetaCompleted: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SUCCESS[600],
-  },
-  exercisesContainer: {
-    marginTop: 12,
-    backgroundColor: COLORS.NEUTRAL[50],
-    borderRadius: 12,
-    padding: 12,
-  },
-  // Completion Status Styles (replaces old complete button)
-  completionStatusContainer: {
-    marginTop: 16,
-  },
-  completionStatusGradient: {
+  legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    gap: 6,
   },
-  completionStatusText: {
-    marginLeft: 16,
-    flex: 1,
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  completionStatusTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.NEUTRAL.WHITE,
-    marginBottom: 2,
-  },
-  completionStatusSubtitle: {
+  legendText: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.REGULAR,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: COLORS.SECONDARY[500],
   },
-  incompletionStatusContainer: {
-    marginTop: 16,
-  },
-  incompletionStatusContent: {
+
+  // Regenerate Button
+  regenerateButton: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    backgroundColor: COLORS.SECONDARY[50],
-    borderWidth: 1,
-    borderColor: COLORS.SECONDARY[200],
-  },
-  incompletionStatusText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    marginLeft: 12,
-    flex: 1,
-  },
-  // Warning Banner Styles
-  warningBanner: {
-    backgroundColor: COLORS.WARNING[50],
-    borderWidth: 2,
-    borderColor: COLORS.WARNING[400],
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: COLORS.WARNING[600],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  warningContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  warningTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  warningTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.WARNING[900],
-    marginBottom: 4,
-  },
-  warningDescription: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.WARNING[800],
-    lineHeight: 20,
-  },
-  warningButton: {
-    width: '100%',
-  },
-  warningButtonGradient: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    marginTop: 8,
+    gap: 8,
   },
-  warningButtonText: {
+  regenerateText: {
     fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.NEUTRAL.WHITE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
   },
 });
