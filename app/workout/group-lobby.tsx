@@ -106,6 +106,7 @@ export default function GroupLobbyScreen() {
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  const isMountedRef = useRef(true); // Track if component is still mounted
   const sessionIdRef = useRef<string | null>(null); // Track sessionId for cleanup
   const channelRef = useRef<any>(null);
   const presenceChannelRef = useRef<any>(null);
@@ -152,6 +153,9 @@ export default function GroupLobbyScreen() {
     initializeLobby();
 
     return () => {
+      // Mark component as unmounted to prevent state updates
+      isMountedRef.current = false;
+
       // CRITICAL: Call leave API when component unmounts (back button, swipe, etc.)
       // Without this, backend still thinks user is in lobby when they navigate away
       const leaveOnUnmount = async () => {
@@ -652,6 +656,7 @@ export default function GroupLobbyScreen() {
     if (!sessionId || isLeaving) return;
 
     setIsLeaving(true);
+    isCleaningUpRef.current = true; // Prevent any pending async operations
 
     try {
       console.log('📤 [LEAVE] Calling leaveLobbyV2 API...');
@@ -1020,6 +1025,12 @@ export default function GroupLobbyScreen() {
 
       if (response?.success && response?.workout?.exercises) {
         console.log('✅ Generated', response.workout.exercises.length, 'exercises');
+
+        // Check if user is still in lobby before updating (race condition prevention)
+        if (isLeaving || !isMountedRef.current || isCleaningUpRef.current) {
+          console.log('⚠️ User left lobby or component unmounted, skipping workout data update');
+          return;
+        }
 
         // Update lobby with generated exercises via backend (V2 API)
         await socialService.updateWorkoutDataV2(sessionId, {
