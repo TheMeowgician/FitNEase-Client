@@ -148,8 +148,8 @@ export default function GroupLobbyScreen() {
   // This prevents starting a group workout alone
   const canStartWorkout = isInitiator && allMembersReady && lobbyMembers.length >= 2 && hasExercises;
 
-  // Check if ready check can be started (initiator, no active ready check, no exercises yet)
-  const canStartReadyCheck = isInitiator && !isReadyCheckActive && !hasExercises && lobbyMembers.length >= 2 && !isGenerating;
+  // Check if ready check can be started (any member, no active ready check, no exercises yet)
+  const canStartReadyCheck = !isReadyCheckActive && !hasExercises && lobbyMembers.length >= 2 && !isGenerating;
 
   /**
    * Watch for ready check completion
@@ -1754,8 +1754,8 @@ export default function GroupLobbyScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Ready Check Button - Initiator only, before exercises are generated */}
-        {isInitiator && !hasExercises && (
+        {/* Ready Check Button - Any member can start, before exercises are generated */}
+        {!hasExercises && (
           <TouchableOpacity
             style={[styles.readyCheckButton, !canStartReadyCheck && styles.readyCheckButtonDisabled]}
             onPress={handleStartReadyCheck}
