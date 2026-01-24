@@ -117,6 +117,7 @@ export default function GroupLobbyScreen() {
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  const isLobbyDeletedRef = useRef(false); // Track if LobbyDeleted event was received (blocks further actions)
   const isMountedRef = useRef(true); // Track if component is still mounted
   const sessionIdRef = useRef<string | null>(null); // Track sessionId for cleanup
   const channelRef = useRef<any>(null);
@@ -311,6 +312,12 @@ export default function GroupLobbyScreen() {
       return;
     }
 
+    // CRITICAL: Check if lobby was deleted (event received during race condition)
+    if (isLobbyDeletedRef.current) {
+      console.log('🛡️ [INIT] Skipping initialization - lobby was deleted');
+      return;
+    }
+
     // CRITICAL: Check if we just left this lobby (Zustand flag persists across component mounts)
     // This prevents the lobby indicator from reappearing after leaving
     if (leftSessionId && leftSessionId === sessionId) {
@@ -353,9 +360,26 @@ export default function GroupLobbyScreen() {
         }
 
         console.log('✅ [REAL-TIME] Lobby created');
+
+        const createdLobbyState = response.data.lobby_state;
+
+        // CRITICAL: Validate created lobby (edge case: race condition with deletion)
+        if (isLobbyDeletedRef.current ||
+            createdLobbyState.status === 'completed' ||
+            !createdLobbyState.members ||
+            createdLobbyState.members.length === 0) {
+          console.log('⚠️ [INIT] Created lobby is invalid, aborting:', {
+            status: createdLobbyState.status,
+            memberCount: createdLobbyState.members?.length || 0,
+            isLobbyDeleted: isLobbyDeletedRef.current,
+          });
+          router.back();
+          return;
+        }
+
         // Set initial state from API response (safety net for race conditions)
         // WebSocket will handle all future updates
-        setLobbyState(response.data.lobby_state);
+        setLobbyState(createdLobbyState);
       } else {
         // Lobby already exists - check if we need to join
         const isUserInitiator = initiatorId === currentUser.id;
@@ -376,8 +400,25 @@ export default function GroupLobbyScreen() {
             throw new Error('Failed to get lobby state');
           }
 
+          const lobbyState = response.data.lobby_state;
+
+          // CRITICAL: Validate lobby is still active (not deleted during race condition)
+          // Check for completed status, 0 members, or lobby deleted flag
+          if (isLobbyDeletedRef.current ||
+              lobbyState.status === 'completed' ||
+              !lobbyState.members ||
+              lobbyState.members.length === 0) {
+            console.log('⚠️ [INIT] Lobby is no longer valid, aborting initialization:', {
+              status: lobbyState.status,
+              memberCount: lobbyState.members?.length || 0,
+              isLobbyDeleted: isLobbyDeletedRef.current,
+            });
+            router.back();
+            return;
+          }
+
           // Set initial state - WebSocket will handle all future updates
-          setLobbyState(response.data.lobby_state);
+          setLobbyState(lobbyState);
         } else {
           // Not initiator and didn't join via invitation - join the lobby now
           console.log('📤 [REAL-TIME] Joining lobby in database...');
@@ -388,10 +429,34 @@ export default function GroupLobbyScreen() {
           }
 
           console.log('✅ [REAL-TIME] Joined lobby');
+
+          const joinedLobbyState = response.data.lobby_state;
+
+          // CRITICAL: Validate lobby is still active after joining
+          if (isLobbyDeletedRef.current ||
+              joinedLobbyState.status === 'completed' ||
+              !joinedLobbyState.members ||
+              joinedLobbyState.members.length === 0) {
+            console.log('⚠️ [INIT] Joined lobby is no longer valid, aborting:', {
+              status: joinedLobbyState.status,
+              memberCount: joinedLobbyState.members?.length || 0,
+              isLobbyDeleted: isLobbyDeletedRef.current,
+            });
+            router.back();
+            return;
+          }
+
           // Set initial state from API response (safety net for race conditions)
           // WebSocket will handle all future updates
-          setLobbyState(response.data.lobby_state);
+          setLobbyState(joinedLobbyState);
         }
+      }
+
+      // CRITICAL: Final check before saving - lobby could have been deleted during async operations
+      if (isLobbyDeletedRef.current) {
+        console.log('🛡️ [INIT] Lobby was deleted during initialization, skipping save');
+        router.back();
+        return;
       }
 
       // Save active lobby to AsyncStorage (for crash recovery)
@@ -410,14 +475,35 @@ export default function GroupLobbyScreen() {
    * Save active lobby to AsyncStorage for crash recovery
    */
   const saveActiveLobbyToStorage = async () => {
-    // CRITICAL: Don't save if cleanup is in progress
+    // CRITICAL: Don't save if cleanup is in progress or lobby was deleted
     // This prevents the lobby indicator from reappearing after leaving
     if (isCleaningUpRef.current) {
       console.log('🛡️ [SAVE] Skipping save - cleanup in progress');
       return;
     }
 
+    if (isLobbyDeletedRef.current) {
+      console.log('🛡️ [SAVE] Skipping save - lobby was deleted');
+      return;
+    }
+
     if (!sessionId || !groupId || !currentUser) return;
+
+    // Get current lobby state from store to validate
+    const lobbyState = useLobbyStore.getState().currentLobby;
+
+    // CRITICAL: Don't save if lobby is invalid (completed, no members, etc.)
+    if (!lobbyState ||
+        lobbyState.status === 'completed' ||
+        !lobbyState.members ||
+        lobbyState.members.length === 0) {
+      console.log('🛡️ [SAVE] Skipping save - lobby is invalid:', {
+        hasLobbyState: !!lobbyState,
+        status: lobbyState?.status,
+        memberCount: lobbyState?.members?.length || 0,
+      });
+      return;
+    }
 
     try {
       // Get group name from currentLobby if available
@@ -434,9 +520,14 @@ export default function GroupLobbyScreen() {
    * Subscribe to WebSocket channels
    */
   const subscribeToChannels = () => {
-    // CRITICAL: Don't subscribe if cleanup is in progress
+    // CRITICAL: Don't subscribe if cleanup is in progress or lobby was deleted
     if (isCleaningUpRef.current) {
       console.log('🛡️ [SUBSCRIBE] Skipping subscription - cleanup in progress');
+      return;
+    }
+
+    if (isLobbyDeletedRef.current) {
+      console.log('🛡️ [SUBSCRIBE] Skipping subscription - lobby was deleted');
       return;
     }
 
@@ -601,9 +692,14 @@ export default function GroupLobbyScreen() {
         });
       },
       onLobbyDeleted: (data: any) => {
+        // CRITICAL: Set deleted flag FIRST to prevent any further initialization or saves
+        // This flag is checked in initializeLobby, saveActiveLobbyToStorage, and subscribeToChannels
+        isLobbyDeletedRef.current = true;
+        console.log('🗑️ [LOBBY DELETED] Setting isLobbyDeletedRef=true, reason:', data.reason);
+
         // Guard against updates during cleanup
         if (isCleaningUpRef.current || !isMountedRef.current) return;
-        console.log('🗑️ Lobby deleted:', data.reason);
+
         alert.info('Lobby Closed', data.reason || 'The lobby has been closed.', () => {
           cleanup();
           router.back();

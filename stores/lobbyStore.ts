@@ -72,8 +72,23 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
    * Set complete lobby state (from API or WebSocket)
    * IMPORTANT: Updates lastUpdated timestamp to force re-renders on Android
    * Also clears leftSessionId when entering a new lobby
+   * CRITICAL: Rejects invalid lobbies (completed status, 0 members) to prevent ghost indicators
    */
   setLobbyState: (lobbyState: LobbyState) => {
+    // CRITICAL: Validate lobby state before setting
+    // Reject completed lobbies or lobbies with 0 members (ghost lobbies)
+    if (lobbyState.status === 'completed' ||
+        !lobbyState.members ||
+        lobbyState.members.length === 0) {
+      console.log('⚠️ [LOBBY STORE] Rejecting invalid lobby state:', {
+        session_id: lobbyState.session_id,
+        status: lobbyState.status,
+        member_count: lobbyState.member_count,
+        members_count_actual: lobbyState.members?.length || 0,
+      });
+      return; // Don't set invalid lobby state
+    }
+
     set({
       currentLobby: lobbyState,
       lastUpdated: Date.now(), // Force re-render by updating timestamp

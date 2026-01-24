@@ -51,6 +51,16 @@ export function GlobalLobbyIndicator() {
     return null;
   }
 
+  // CRITICAL: Don't show indicator if Zustand store has invalid lobby state
+  // This prevents ghost indicators from appearing after lobby deletion
+  if (currentLobby && (currentLobby.status === 'completed' || !currentLobby.members || currentLobby.members.length === 0)) {
+    console.log('🛡️ [INDICATOR] Hiding - lobby is invalid:', {
+      status: currentLobby.status,
+      memberCount: currentLobby.members?.length || 0,
+    });
+    return null;
+  }
+
   // Get member info from Zustand store (real-time) or fallback
   const memberCount = currentLobby?.members?.length || lobbyMembers.length || 1;
   const readyCount = currentLobby?.members?.filter((m: any) => m.status === 'ready').length ||
