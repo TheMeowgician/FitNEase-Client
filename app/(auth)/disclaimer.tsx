@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
+  BackHandler,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,22 +14,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { useAlert } from '../../contexts/AlertContext';
-import { authService } from '../../services/microservices/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width } = Dimensions.get('window');
-
 const DISCLAIMER_KEY = '@fitnease_disclaimer_accepted';
+const SUPPORT_EMAIL = 'support.recoders@gmail.com';
 
 export default function DisclaimerScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
   const alert = useAlert();
   const [isAcknowledged, setIsAcknowledged] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState<'terms' | 'privacy'>('terms');
 
   const handleContinue = async () => {
     if (!isAcknowledged) {
-      alert.warning('Acknowledgment Required', 'Please read and acknowledge the disclaimer to continue.');
+      alert.warning('Acknowledgment Required', 'Please read and acknowledge the Terms of Use and Privacy Policy to continue.');
       return;
     }
 
@@ -40,16 +40,8 @@ export default function DisclaimerScreen() {
         acceptedAt: new Date().toISOString(),
       }));
 
-      // Try to update user profile with disclaimer acceptance
-      try {
-        await authService.updateUserProfile({
-          disclaimer_accepted: true,
-          disclaimer_accepted_at: new Date().toISOString(),
-        });
-      } catch (error) {
-        // If not logged in yet, that's okay - we stored it locally
-        console.log('Could not update profile (user may not be fully authenticated yet)');
-      }
+      // Disclaimer acceptance is stored locally above
+      // The user profile doesn't have disclaimer fields, so we skip the API update
 
       // Navigate to email verification or onboarding
       if (params.email) {
@@ -68,6 +60,23 @@ export default function DisclaimerScreen() {
     }
   };
 
+  const handleExitApp = () => {
+    alert.confirm(
+      'Exit Application',
+      'You must accept the Terms of Use and Privacy Policy to use FitNEase. Are you sure you want to exit?',
+      () => {
+        BackHandler.exitApp();
+      },
+      undefined,
+      'Exit',
+      'Cancel'
+    );
+  };
+
+  const handleContactSupport = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -75,138 +84,335 @@ export default function DisclaimerScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Icon */}
-        <View style={styles.iconContainer}>
+        {/* Header */}
+        <View style={styles.header}>
           <View style={styles.iconCircle}>
-            <Ionicons name="warning" size={48} color={COLORS.WARNING[500]} />
+            <Ionicons name="document-text" size={40} color={COLORS.PRIMARY[600]} />
           </View>
+          <Text style={styles.title}>Terms of Use & Privacy Policy</Text>
+          <Text style={styles.subtitle}>FitNEase - Last Updated: January 20, 2026</Text>
         </View>
 
-        {/* Title */}
-        <Text style={styles.title}>Important Health Disclaimer</Text>
-        <Text style={styles.subtitle}>Please read carefully before proceeding</Text>
-
-        {/* Disclaimer Content */}
-        <View style={styles.disclaimerCard}>
-          {/* HIIT Warning */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="fitness" size={24} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.sectionTitle}>High-Intensity Training</Text>
-            </View>
-            <Text style={styles.sectionText}>
-              FitNEase utilizes <Text style={styles.bold}>Tabata training</Text>, a form of
-              High-Intensity Interval Training (HIIT). This type of exercise involves short
-              bursts of intense activity followed by brief rest periods, which places
-              significant demands on your cardiovascular system.
+        {/* Section Tabs */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeSection === 'terms' && styles.tabActive]}
+            onPress={() => setActiveSection('terms')}
+          >
+            <Ionicons
+              name="document"
+              size={18}
+              color={activeSection === 'terms' ? COLORS.PRIMARY[600] : COLORS.NEUTRAL[500]}
+            />
+            <Text style={[styles.tabText, activeSection === 'terms' && styles.tabTextActive]}>
+              Terms of Use
             </Text>
-          </View>
-
-          {/* Medical Consultation */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="medkit" size={24} color={COLORS.ERROR[500]} />
-              <Text style={styles.sectionTitle}>Medical Consultation Required</Text>
-            </View>
-            <Text style={styles.sectionText}>
-              Before starting any high-intensity exercise program, we <Text style={styles.bold}>strongly recommend</Text> that you:
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeSection === 'privacy' && styles.tabActive]}
+            onPress={() => setActiveSection('privacy')}
+          >
+            <Ionicons
+              name="shield-checkmark"
+              size={18}
+              color={activeSection === 'privacy' ? COLORS.PRIMARY[600] : COLORS.NEUTRAL[500]}
+            />
+            <Text style={[styles.tabText, activeSection === 'privacy' && styles.tabTextActive]}>
+              Privacy Policy
             </Text>
-            <View style={styles.bulletPoints}>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Consult with your doctor or healthcare provider</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Obtain medical clearance for high-intensity exercise</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Discuss any pre-existing health conditions</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Understand your physical limitations</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Who Should Not Use */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="alert-circle" size={24} color={COLORS.WARNING[500]} />
-              <Text style={styles.sectionTitle}>Important Considerations</Text>
-            </View>
-            <Text style={styles.sectionText}>
-              High-intensity training may not be suitable for individuals with:
-            </Text>
-            <View style={styles.bulletPoints}>
-              <View style={styles.bulletItem}>
-                <Ionicons name="close-circle" size={18} color={COLORS.ERROR[500]} />
-                <Text style={styles.bulletText}>Heart conditions or cardiovascular disease</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="close-circle" size={18} color={COLORS.ERROR[500]} />
-                <Text style={styles.bulletText}>High blood pressure (uncontrolled)</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="close-circle" size={18} color={COLORS.ERROR[500]} />
-                <Text style={styles.bulletText}>Joint or bone problems</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="close-circle" size={18} color={COLORS.ERROR[500]} />
-                <Text style={styles.bulletText}>Pregnancy or recent surgery</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="close-circle" size={18} color={COLORS.ERROR[500]} />
-                <Text style={styles.bulletText}>Other medical conditions affecting exercise ability</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Target Audience */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="people" size={24} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.sectionTitle}>Intended Users</Text>
-            </View>
-            <Text style={styles.sectionText}>
-              This application is designed for <Text style={styles.bold}>fitness enthusiasts aged 18-54</Text> who:
-            </Text>
-            <View style={styles.bulletPoints}>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Are in good general health</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Have received medical clearance for intense exercise</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Understand the risks of high-intensity training</Text>
-              </View>
-              <View style={styles.bulletItem}>
-                <Ionicons name="checkmark-circle" size={18} color={COLORS.SUCCESS[500]} />
-                <Text style={styles.bulletText}>Are committed to exercising responsibly</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Liability */}
-          <View style={[styles.section, styles.lastSection]}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="document-text" size={24} color={COLORS.NEUTRAL[600]} />
-              <Text style={styles.sectionTitle}>Assumption of Risk</Text>
-            </View>
-            <Text style={styles.sectionText}>
-              By using FitNEase, you acknowledge that you understand the risks associated
-              with high-intensity interval training and accept full responsibility for
-              your health and safety during exercise. The developers of this application
-              are not liable for any injuries or health issues that may occur.
-            </Text>
-          </View>
+          </TouchableOpacity>
         </View>
+
+        {/* Terms of Use Section */}
+        {activeSection === 'terms' && (
+          <View style={styles.contentCard}>
+            {/* Acceptance */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>1</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Acceptance of Terms</Text>
+                <Text style={styles.sectionText}>
+                  By downloading, installing, or using the FitNEase application, you agree to be
+                  bound by these Terms of Use and Privacy Policy. If you do not agree to these
+                  terms, you must discontinue use and uninstall the App immediately.
+                </Text>
+              </View>
+            </View>
+
+            {/* Medical Disclaimer */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>2</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Medical Disclaimer & User Responsibility</Text>
+
+                <View style={styles.subsection}>
+                  <Text style={styles.subsectionTitle}>2.1 Research-Based Content</Text>
+                  <Text style={styles.sectionText}>
+                    The fitness programs, exercises, and health information provided within FitNEase
+                    are developed based on research data and advice from professionals. However, this
+                    content is for educational and informational purposes only and is{' '}
+                    <Text style={styles.bold}>not a substitute for professional medical advice</Text>.
+                  </Text>
+                </View>
+
+                <View style={styles.subsection}>
+                  <Text style={styles.subsectionTitle}>2.2 Target Audience & User Representation</Text>
+                  <Text style={styles.sectionText}>
+                    By continuing to use this App, you represent and warrant that you are a{' '}
+                    <Text style={styles.bold}>fitness enthusiast aged 18-54</Text> with sufficient
+                    prior knowledge of physical exercise. You acknowledge that you possess the
+                    experience to execute workouts safely and monitor your physical limits.
+                  </Text>
+                </View>
+
+                <View style={styles.subsection}>
+                  <Text style={styles.subsectionTitle}>2.3 Voluntary Assumption of Risk</Text>
+                  <Text style={styles.sectionText}>
+                    You understand that exercises (including HIIT and Tabata) carry inherent risks
+                    of physical injury. You agree that:
+                  </Text>
+                  <View style={styles.bulletPoints}>
+                    <View style={styles.bulletItem}>
+                      <Ionicons name="alert-circle" size={16} color={COLORS.WARNING[500]} />
+                      <Text style={styles.bulletText}>
+                        You are participating entirely at your own risk
+                      </Text>
+                    </View>
+                    <View style={styles.bulletItem}>
+                      <Ionicons name="alert-circle" size={16} color={COLORS.WARNING[500]} />
+                      <Text style={styles.bulletText}>
+                        You may discontinue use at any moment if you feel discomfort
+                      </Text>
+                    </View>
+                    <View style={styles.bulletItem}>
+                      <Ionicons name="alert-circle" size={16} color={COLORS.WARNING[500]} />
+                      <Text style={styles.bulletText}>
+                        FitNEase assumes no responsibility for injuries sustained while using the App
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.subsection}>
+                  <Text style={styles.subsectionTitle}>2.4 Waiver of Liability</Text>
+                  <Text style={styles.sectionText}>
+                    You hereby release, waive, and discharge FitNEase, its owners, and developers
+                    from any and all liability arising out of your use of the App. Your health
+                    risks are your sole responsibility.
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Intellectual Property */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>3</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Intellectual Property</Text>
+                <Text style={styles.sectionText}>
+                  All content within FitNEase, including text, graphics, logos, code, and exercise
+                  compilations, is the intellectual property of the FitNEase development team.
+                  You are granted a limited license for personal use only. You may not copy,
+                  distribute, or reverse-engineer the App.
+                </Text>
+              </View>
+            </View>
+
+            {/* Contact */}
+            <View style={[styles.section, styles.lastSection]}>
+              <Text style={styles.sectionNumber}>4</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Contact Us</Text>
+                <Text style={styles.sectionText}>
+                  If you have questions about these Terms, please contact our Data Protection
+                  Officer at:
+                </Text>
+                <TouchableOpacity style={styles.emailButton} onPress={handleContactSupport}>
+                  <Ionicons name="mail" size={18} color={COLORS.PRIMARY[600]} />
+                  <Text style={styles.emailText}>{SUPPORT_EMAIL}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Privacy Policy Section */}
+        {activeSection === 'privacy' && (
+          <View style={styles.contentCard}>
+            {/* Intro */}
+            <View style={styles.privacyIntro}>
+              <Ionicons name="shield-checkmark" size={24} color={COLORS.SUCCESS[500]} />
+              <Text style={styles.privacyIntroText}>
+                We are committed to protecting your personal data in compliance with the{' '}
+                <Text style={styles.bold}>Data Privacy Act of 2012 (RA 10173)</Text>.
+              </Text>
+            </View>
+
+            {/* Collection of Data */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>1</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Collection of Data</Text>
+                <Text style={styles.sectionText}>
+                  We collect only information necessary to provide App functions:
+                </Text>
+                <View style={styles.dataList}>
+                  <View style={styles.dataItem}>
+                    <View style={styles.dataIcon}>
+                      <Ionicons name="person" size={16} color={COLORS.PRIMARY[600]} />
+                    </View>
+                    <View style={styles.dataInfo}>
+                      <Text style={styles.dataLabel}>Personal Information</Text>
+                      <Text style={styles.dataDesc}>Name, age, gender (for profile creation)</Text>
+                    </View>
+                  </View>
+                  <View style={styles.dataItem}>
+                    <View style={styles.dataIcon}>
+                      <Ionicons name="fitness" size={16} color={COLORS.PRIMARY[600]} />
+                    </View>
+                    <View style={styles.dataInfo}>
+                      <Text style={styles.dataLabel}>Health Information</Text>
+                      <Text style={styles.dataDesc}>Height, weight, fitness metrics (for workout data)</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Use of Data */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>2</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Use of Data</Text>
+                <Text style={styles.sectionText}>Your data is processed solely for:</Text>
+                <View style={styles.bulletPoints}>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="checkmark-circle" size={16} color={COLORS.SUCCESS[500]} />
+                    <Text style={styles.bulletText}>Calculating fitness metrics (BMI, calorie burn)</Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="checkmark-circle" size={16} color={COLORS.SUCCESS[500]} />
+                    <Text style={styles.bulletText}>Tracking your workout progress</Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="checkmark-circle" size={16} color={COLORS.SUCCESS[500]} />
+                    <Text style={styles.bulletText}>Improving functionality and user experience</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Data Protection */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>3</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Data Protection & Security</Text>
+                <Text style={styles.sectionText}>
+                  We implement strict security measures:
+                </Text>
+                <View style={styles.securityList}>
+                  <View style={styles.securityItem}>
+                    <View style={styles.securityIconContainer}>
+                      <Ionicons name="lock-closed" size={20} color={COLORS.SUCCESS[600]} />
+                    </View>
+                    <View style={styles.securityInfo}>
+                      <Text style={styles.securityTitle}>Data Encryption</Text>
+                      <Text style={styles.securityDesc}>
+                        All sensitive data encrypted in transit and at rest (AES-256, SSL/TLS)
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.securityItem}>
+                    <View style={styles.securityIconContainer}>
+                      <Ionicons name="eye-off" size={20} color={COLORS.SUCCESS[600]} />
+                    </View>
+                    <View style={styles.securityInfo}>
+                      <Text style={styles.securityTitle}>Data Anonymization</Text>
+                      <Text style={styles.securityDesc}>
+                        Research data stripped of personally identifiable information
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.securityItem}>
+                    <View style={styles.securityIconContainer}>
+                      <Ionicons name="key" size={20} color={COLORS.SUCCESS[600]} />
+                    </View>
+                    <View style={styles.securityInfo}>
+                      <Text style={styles.securityTitle}>Access Control</Text>
+                      <Text style={styles.securityDesc}>
+                        Access limited to authorized personnel only
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Data Retention */}
+            <View style={styles.section}>
+              <Text style={styles.sectionNumber}>4</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Data Retention & Disposal</Text>
+                <View style={styles.bulletPoints}>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="time" size={16} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.bulletText}>
+                      Data retained only while your account is active
+                    </Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="warning" size={16} color={COLORS.WARNING[500]} />
+                    <Text style={styles.bulletText}>
+                      Inactive accounts may be deleted after 1 year
+                    </Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="trash" size={16} color={COLORS.ERROR[500]} />
+                    <Text style={styles.bulletText}>
+                      Upon deletion, all personal data permanently removed
+                    </Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <Ionicons name="school" size={16} color={COLORS.NEUTRAL[600]} />
+                    <Text style={styles.bulletText}>
+                      Research exception: Anonymized data may be retained for academic purposes
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Rights */}
+            <View style={[styles.section, styles.lastSection]}>
+              <Text style={styles.sectionNumber}>5</Text>
+              <View style={styles.sectionContent}>
+                <Text style={styles.sectionTitle}>Your Rights (Data Privacy Act 2012)</Text>
+                <View style={styles.rightsGrid}>
+                  <View style={styles.rightItem}>
+                    <Ionicons name="eye" size={24} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.rightTitle}>Access</Text>
+                    <Text style={styles.rightDesc}>View your personal data in your profile</Text>
+                  </View>
+                  <View style={styles.rightItem}>
+                    <Ionicons name="create" size={24} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.rightTitle}>Rectification</Text>
+                    <Text style={styles.rightDesc}>Correct or update inaccurate information</Text>
+                  </View>
+                  <View style={styles.rightItem}>
+                    <Ionicons name="trash-bin" size={24} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.rightTitle}>Erasure</Text>
+                    <Text style={styles.rightDesc}>Request deletion of your account and data</Text>
+                  </View>
+                  <View style={styles.rightItem}>
+                    <Ionicons name="information-circle" size={24} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.rightTitle}>Be Informed</Text>
+                    <Text style={styles.rightDesc}>Know how your data is processed</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Acknowledgment Checkbox */}
         <TouchableOpacity
@@ -220,36 +426,47 @@ export default function DisclaimerScreen() {
             )}
           </View>
           <Text style={styles.checkboxLabel}>
-            I have read and understood the above disclaimer. I confirm that I am in good
-            health and have consulted with a healthcare provider regarding my fitness for
-            high-intensity exercise.
+            I have read, understood, and accepted the{' '}
+            <Text style={styles.bold}>Terms of Use and Privacy Policy</Text>. I confirm that
+            I am a fitness enthusiast in good health and voluntarily assume all risks associated
+            with using this application.
           </Text>
         </TouchableOpacity>
 
-        {/* Continue Button */}
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            !isAcknowledged && styles.continueButtonDisabled
-          ]}
-          onPress={handleContinue}
-          disabled={!isAcknowledged || isLoading}
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <Text style={styles.continueButtonText}>Processing...</Text>
-          ) : (
-            <>
-              <Text style={styles.continueButtonText}>I Understand & Agree</Text>
-              <Ionicons name="arrow-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.continueButton,
+              !isAcknowledged && styles.continueButtonDisabled
+            ]}
+            onPress={handleContinue}
+            disabled={!isAcknowledged || isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? (
+              <Text style={styles.continueButtonText}>Processing...</Text>
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.NEUTRAL.WHITE} />
+                <Text style={styles.continueButtonText}>I Agree & Continue</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.exitButton}
+            onPress={handleExitApp}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="exit-outline" size={20} color={COLORS.ERROR[600]} />
+            <Text style={styles.exitButtonText}>Exit App</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Footer Note */}
         <Text style={styles.footerNote}>
-          If you experience any discomfort, dizziness, or pain during exercise,
-          stop immediately and seek medical attention.
+          If you experience any discomfort during exercise, stop immediately and seek medical attention.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -265,51 +482,85 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    padding: 20,
     paddingBottom: 40,
   },
-  iconContainer: {
+  header: {
     alignItems: 'center',
     marginBottom: 20,
   },
   iconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: COLORS.WARNING[50],
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.PRIMARY[50],
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: COLORS.WARNING[200],
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY[200],
+    marginBottom: 16,
   },
   title: {
-    fontSize: 26,
+    fontSize: 22,
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL[900],
     textAlign: 'center',
-    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: FONTS.REGULAR,
     color: COLORS.NEUTRAL[500],
     textAlign: 'center',
-    marginBottom: 24,
+    marginTop: 4,
   },
-  disclaimerCard: {
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.NEUTRAL[100],
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  tabActive: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[500],
+  },
+  tabTextActive: {
+    color: COLORS.PRIMARY[600],
+    fontFamily: FONTS.SEMIBOLD,
+  },
+  contentCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
-    elevation: 3,
-    marginBottom: 24,
+    elevation: 2,
   },
   section: {
-    marginBottom: 24,
-    paddingBottom: 24,
+    flexDirection: 'row',
+    marginBottom: 20,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.NEUTRAL[100],
   },
@@ -318,43 +569,187 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     borderBottomWidth: 0,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 10,
+  sectionNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.PRIMARY[100],
+    color: COLORS.PRIMARY[700],
+    fontSize: 14,
+    fontFamily: FONTS.BOLD,
+    textAlign: 'center',
+    lineHeight: 28,
+    marginRight: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.NEUTRAL[800],
+  sectionContent: {
     flex: 1,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[800],
+    marginBottom: 8,
+  },
   sectionText: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: FONTS.REGULAR,
     color: COLORS.NEUTRAL[600],
-    lineHeight: 24,
+    lineHeight: 22,
   },
   bold: {
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.NEUTRAL[800],
   },
+  subsection: {
+    marginTop: 14,
+  },
+  subsectionTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[700],
+    marginBottom: 6,
+  },
   bulletPoints: {
-    marginTop: 12,
-    gap: 10,
+    marginTop: 10,
+    gap: 8,
   },
   bulletItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: 8,
   },
   bulletText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: FONTS.REGULAR,
     color: COLORS.NEUTRAL[600],
     flex: 1,
     lineHeight: 20,
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: COLORS.PRIMARY[50],
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  emailText: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  privacyIntro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[50],
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 20,
+    gap: 12,
+  },
+  privacyIntroText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.NEUTRAL[700],
+    lineHeight: 20,
+  },
+  dataList: {
+    marginTop: 12,
+    gap: 12,
+  },
+  dataItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL[50],
+    padding: 12,
+    borderRadius: 10,
+    gap: 12,
+  },
+  dataIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.PRIMARY[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dataInfo: {
+    flex: 1,
+  },
+  dataLabel: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[800],
+  },
+  dataDesc: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.NEUTRAL[500],
+    marginTop: 2,
+  },
+  securityList: {
+    marginTop: 12,
+    gap: 12,
+  },
+  securityItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  securityIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.SUCCESS[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  securityInfo: {
+    flex: 1,
+  },
+  securityTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[800],
+  },
+  securityDesc: {
+    fontSize: 13,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.NEUTRAL[600],
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  rightsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 12,
+  },
+  rightItem: {
+    width: '47%',
+    backgroundColor: COLORS.PRIMARY[50],
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  rightTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[800],
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  rightDesc: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.NEUTRAL[600],
+    marginTop: 4,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -362,7 +757,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.PRIMARY[50],
     padding: 16,
     borderRadius: 12,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: COLORS.PRIMARY[200],
     gap: 12,
@@ -389,15 +784,18 @@ const styles = StyleSheet.create({
     color: COLORS.NEUTRAL[700],
     lineHeight: 22,
   },
+  buttonContainer: {
+    gap: 12,
+  },
   continueButton: {
     backgroundColor: COLORS.PRIMARY[600],
     paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
     borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     shadowColor: COLORS.PRIMARY[600],
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -414,13 +812,30 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
+  exitButton: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.ERROR[200],
+  },
+  exitButtonText: {
+    fontSize: 15,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.ERROR[600],
+  },
   footerNote: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FONTS.REGULAR,
     color: COLORS.NEUTRAL[500],
     textAlign: 'center',
-    marginTop: 20,
-    lineHeight: 20,
+    marginTop: 16,
+    lineHeight: 18,
     paddingHorizontal: 16,
   },
 });
