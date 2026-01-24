@@ -97,17 +97,30 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
   /**
    * Clear active lobby locally only (does NOT call backend API)
    * Use this when you've already left the lobby via API
+   *
+   * CRITICAL: Set React state FIRST (synchronous, immediate UI update)
+   * then do AsyncStorage cleanup (async, can be slow)
    */
   const clearActiveLobbyLocal = async () => {
     try {
-      if (activeLobby && user) {
-        const storageKey = `activeLobby_group_${activeLobby.groupId}_user_${user.id}`;
-        await AsyncStorage.removeItem(storageKey);
-        console.log('🧹 [LOBBY CONTEXT] Cleared lobby session from storage (local only)');
-      }
+      // Capture values before clearing state
+      const lobbyToClean = activeLobby;
+      const currentUser = user;
+
+      // CRITICAL: Set state to null IMMEDIATELY (synchronous)
+      // This ensures UI components like GlobalLobbyIndicator update right away
       setActiveLobby(null);
+      console.log('🧹 [LOBBY CONTEXT] State set to null immediately');
+
+      // THEN remove from AsyncStorage (async, slower I/O operation)
+      if (lobbyToClean && currentUser) {
+        const storageKey = `activeLobby_group_${lobbyToClean.groupId}_user_${currentUser.id}`;
+        await AsyncStorage.removeItem(storageKey);
+        console.log('🧹 [LOBBY CONTEXT] Cleared lobby session from AsyncStorage (local only)');
+      }
     } catch (error) {
       console.error('❌ [LOBBY CONTEXT] Error clearing lobby session locally:', error);
+      // Even if AsyncStorage fails, state is already null which is the important part
     }
   };
 

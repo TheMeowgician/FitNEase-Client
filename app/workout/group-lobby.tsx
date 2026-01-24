@@ -181,6 +181,9 @@ export default function GroupLobbyScreen() {
    * Auto-generate exercises when ALL members are ready (minimum 2 users)
    */
   useEffect(() => {
+    // Guard against updates during cleanup
+    if (isCleaningUpRef.current || !isMountedRef.current) return;
+
     // Skip if lobby not loaded yet
     if (!currentLobby) {
       return;
@@ -204,6 +207,9 @@ export default function GroupLobbyScreen() {
    * This prevents showing stale exercises when a user leaves
    */
   useEffect(() => {
+    // Guard against updates during cleanup
+    if (isCleaningUpRef.current) return;
+
     const memberCount = lobbyMembers.length;
 
     // If we have exercises but less than 2 members, clear them
@@ -212,13 +218,16 @@ export default function GroupLobbyScreen() {
       setExerciseDetails([]);
 
       // Also clear from lobby state if user is initiator
-      if (isInitiator && currentLobby?.session_id) {
+      if (isInitiator && currentLobby?.session_id && !isCleaningUpRef.current) {
         console.log('🧹 [LOBBY] Clearing exercises from backend (initiator)');
         socialService.updateWorkoutDataV2(currentLobby.session_id, {
           workout_format: 'tabata',
           exercises: []
         }).catch(err => {
-          console.error('❌ Failed to clear exercises from backend:', err);
+          // Only log error if not cleaning up (expected to fail during cleanup)
+          if (!isCleaningUpRef.current) {
+            console.error('❌ Failed to clear exercises from backend:', err);
+          }
         });
       }
     }
@@ -389,6 +398,11 @@ export default function GroupLobbyScreen() {
       console.log('🔌 Calling subscribeToLobby...');
       channelRef.current = reverbService.subscribeToLobby(sessionId, {
       onLobbyStateChanged: (data: any) => {
+        // CRITICAL: Guard against updates during cleanup to prevent stale state
+        if (isCleaningUpRef.current || !isMountedRef.current) {
+          console.log('⚠️ [REAL-TIME] Ignoring LobbyStateChanged during cleanup');
+          return;
+        }
         console.log('📊 [REAL-TIME] Lobby state changed:', data);
         // CRITICAL: This is the single source of truth for lobby state
         // Backend broadcasts this event for ALL changes (join, leave, status, kick, transfer, etc.)
@@ -399,6 +413,8 @@ export default function GroupLobbyScreen() {
       // NOTE: Individual events like MemberJoined, MemberLeft, MemberStatusUpdated are kept
       // for system chat messages only. State updates come from LobbyStateChanged above.
       onMemberJoined: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('👤 [REAL-TIME] Member joined:', data);
         // Add system chat message (don't update state - LobbyStateChanged handles it)
         if (data?.member) {
@@ -413,6 +429,8 @@ export default function GroupLobbyScreen() {
         }
       },
       onMemberLeft: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('👤 [REAL-TIME] Member left:', data);
         // Add system chat message (don't update state - LobbyStateChanged handles it)
         if (data?.user_id) {
@@ -427,11 +445,15 @@ export default function GroupLobbyScreen() {
         }
       },
       onMemberStatusUpdated: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('✅ [REAL-TIME] Member status updated:', data);
         // State update handled by LobbyStateChanged event
         // This event is kept for potential future use (analytics, etc.)
       },
       onLobbyMessageSent: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('💬 Message received:', data);
         // The data object IS the message, not data.message
         if (data?.message_id) {
@@ -439,6 +461,11 @@ export default function GroupLobbyScreen() {
         }
       },
       onWorkoutStarted: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) {
+          console.log('⚠️ [REAL-TIME] Ignoring WorkoutStarted during cleanup');
+          return;
+        }
         console.log('🏋️ Workout started!', data);
 
         // IMPORTANT: Access lobby store directly to get the LATEST state
@@ -518,6 +545,8 @@ export default function GroupLobbyScreen() {
         });
       },
       onLobbyDeleted: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('🗑️ Lobby deleted:', data.reason);
         alert.info('Lobby Closed', data.reason || 'The lobby has been closed.', () => {
           cleanup();
@@ -525,6 +554,8 @@ export default function GroupLobbyScreen() {
         });
       },
       onMemberKicked: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('⚠️ [REAL-TIME] Member kicked:', data);
         // NOTE: The kicked user receives this event on their PERSONAL channel (private-user.{id})
         // NOT on the lobby channel. So this handler only processes OTHER users being kicked.
@@ -541,6 +572,8 @@ export default function GroupLobbyScreen() {
         }
       },
       onInitiatorRoleTransferred: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('👑 [REAL-TIME] Initiator role transferred:', data);
         // NOTE: isInitiator state is automatically updated by the useEffect watching currentLobby.initiator_id
         // No manual state update needed here - LobbyStateChanged event updates the store
@@ -565,17 +598,23 @@ export default function GroupLobbyScreen() {
       // This channel tracks who's actively viewing this specific lobby screen
       presenceChannelRef.current = reverbService.subscribeToPresence(`lobby.${sessionId}`, {
         onHere: (members: any[]) => {
+          // Guard against updates during cleanup
+          if (isCleaningUpRef.current || !isMountedRef.current) return;
           console.log('👥 Members here:', members);
           const memberIds = new Set((members || []).map((m) => m.user_id));
           setOnlineMembers(memberIds);
         },
         onJoining: (member: any) => {
+          // Guard against updates during cleanup
+          if (isCleaningUpRef.current || !isMountedRef.current) return;
           console.log('✅ Member joining:', member);
           if (member?.user_id) {
             setOnlineMembers((prev) => new Set([...prev, member.user_id]));
           }
         },
         onLeaving: (member: any) => {
+          // Guard against updates during cleanup
+          if (isCleaningUpRef.current || !isMountedRef.current) return;
           console.log('❌ Member leaving:', member);
           if (member?.user_id) {
             setOnlineMembers((prev) => {
@@ -594,6 +633,8 @@ export default function GroupLobbyScreen() {
         console.log('🔌 Subscribing to user channel for user:', currentUser.id);
         userChannelRef.current = reverbService.subscribeToUserChannel(currentUser.id, {
           onMemberKicked: (data: any) => {
+            // Guard against updates during cleanup
+            if (isCleaningUpRef.current || !isMountedRef.current) return;
             console.log('🚫 YOU HAVE BEEN KICKED from lobby:', data);
             alert.warning(
               'Removed from Lobby',
@@ -1075,6 +1116,12 @@ export default function GroupLobbyScreen() {
 
   /**
    * Comprehensive cleanup on unmount, leave, kick, or delete
+   *
+   * CRITICAL: Order matters to prevent race conditions:
+   * 1. First unsubscribe from all channels (stop receiving events)
+   * 2. Small delay to ensure unsubscribe completes
+   * 3. Clear state stores (Zustand first, then LobbyContext)
+   * 4. Refresh group subscriptions
    */
   const cleanup = async () => {
     // Guard against duplicate cleanup calls
@@ -1083,64 +1130,67 @@ export default function GroupLobbyScreen() {
       return;
     }
 
+    // CRITICAL: Set this flag FIRST to block any incoming WebSocket events
     isCleaningUpRef.current = true;
     console.log('🧹 [CLEANUP] Starting comprehensive cleanup...');
 
     try {
-      // 1. Clear LobbyContext locally (we already left via API in leaveLobby)
-      await clearActiveLobbyLocal();
-      console.log('🧹 [CLEANUP] Cleared LobbyContext and AsyncStorage (local only)');
+      // STEP 1: Unsubscribe from ALL channels FIRST (stop receiving events)
+      console.log('🧹 [CLEANUP] Step 1: Unsubscribing from all channels...');
 
-      // 2. Unsubscribe from lobby channel
       if (channelRef.current) {
         reverbService.unsubscribe(`private-lobby.${sessionId}`);
         channelRef.current = null;
         console.log('🧹 [CLEANUP] Unsubscribed from lobby channel');
       }
 
-      // 3. Unsubscribe from presence channel
       if (presenceChannelRef.current) {
         reverbService.unsubscribe(`presence-lobby.${sessionId}`);
         presenceChannelRef.current = null;
         console.log('🧹 [CLEANUP] Unsubscribed from presence channel');
       }
 
-      // 4. Unsubscribe from group presence channel
       if (groupPresenceChannelRef.current) {
         reverbService.unsubscribe(`presence-group.${groupId}`);
         groupPresenceChannelRef.current = null;
         console.log('🧹 [CLEANUP] Unsubscribed from group presence channel');
       }
 
-      // 5. Unsubscribe from user personal channel
       if (userChannelRef.current && currentUser) {
         reverbService.unsubscribe(`private-user.${currentUser.id}`);
         userChannelRef.current = null;
         console.log('🧹 [CLEANUP] Unsubscribed from user channel');
       }
 
-      // 6. Clear lobby store
-      clearLobby();
-      console.log('🧹 [CLEANUP] Cleared lobby store');
+      // STEP 2: Small delay to ensure unsubscribe messages are processed
+      // This prevents any in-flight WebSocket events from updating state
+      await new Promise(resolve => setTimeout(resolve, 100));
+      console.log('🧹 [CLEANUP] Step 2: Unsubscribe delay complete');
 
-      // 7. Refresh group subscriptions to receive new invitations
-      // CRITICAL: After leaving lobby, user should be able to receive new invitations
-      console.log('🔄 [CLEANUP] Refreshing group subscriptions...');
+      // STEP 3: Clear Zustand store FIRST (in-memory, fast)
+      clearLobby();
+      console.log('🧹 [CLEANUP] Step 3: Cleared Zustand lobby store');
+
+      // STEP 4: Clear LobbyContext (includes AsyncStorage - slower)
+      await clearActiveLobbyLocal();
+      console.log('🧹 [CLEANUP] Step 4: Cleared LobbyContext and AsyncStorage');
+
+      // STEP 5: Refresh group subscriptions to receive new invitations
+      console.log('🧹 [CLEANUP] Step 5: Refreshing group subscriptions...');
       await refreshGroupSubscriptions();
       console.log('✅ [CLEANUP] Group subscriptions refreshed');
 
-      // 8. Reset all refs
+      // STEP 6: Reset initialization refs
       hasJoinedRef.current = false;
       hasInitializedRef.current = false;
-      console.log('🧹 [CLEANUP] Reset refs');
+      console.log('🧹 [CLEANUP] Step 6: Reset refs');
 
       console.log('✅ [CLEANUP] Cleanup complete');
     } catch (error) {
       console.error('❌ [CLEANUP] Cleanup failed:', error);
-    } finally {
-      // Reset cleanup guard for potential future use
-      isCleaningUpRef.current = false;
     }
+    // NOTE: Do NOT reset isCleaningUpRef.current = false here
+    // Once cleanup starts, this component instance should never accept more events
   };
 
   // Show loading only if user is not available
