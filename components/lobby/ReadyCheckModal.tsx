@@ -43,6 +43,7 @@ export function ReadyCheckModal() {
   const sessionId = useReadyCheckStore((state) => state.sessionId);
   const result = useReadyCheckStore((state) => state.result);
   const clearReadyCheck = useReadyCheckStore((state) => state.clearReadyCheck);
+  const setResult = useReadyCheckStore((state) => state.setResult);
 
   // Local state
   const [timeLeft, setTimeLeft] = useState(25);
@@ -94,10 +95,18 @@ export function ReadyCheckModal() {
       setTimeLeft(remaining);
 
       if (remaining <= 0) {
-        // Time's up
+        // Time's up - clear interval
         if (timerIntervalRef.current) {
           clearInterval(timerIntervalRef.current);
           timerIntervalRef.current = null;
+        }
+
+        // CRITICAL: Auto-close modal when timer reaches 0
+        // Only if result is still pending (backend might not have sent timeout event)
+        const currentResult = useReadyCheckStore.getState().result;
+        if (currentResult === 'pending') {
+          console.log('⏰ [READY CHECK MODAL] Timer reached 0, auto-closing');
+          setResult('timeout');
         }
       }
     };
@@ -111,7 +120,7 @@ export function ReadyCheckModal() {
         timerIntervalRef.current = null;
       }
     };
-  }, [isActive, expiresAt]);
+  }, [isActive, expiresAt, setResult]);
 
   // Show/hide animation
   useEffect(() => {

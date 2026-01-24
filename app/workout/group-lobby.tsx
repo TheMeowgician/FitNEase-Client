@@ -189,17 +189,17 @@ export default function GroupLobbyScreen() {
       const leaveOnUnmount = async () => {
         const currentSessionId = sessionIdRef.current;
 
-        // If user minimized, DON'T leave the lobby - just unsubscribe from channels
+        // If user minimized, DON'T leave the lobby
+        // IMPORTANT: Keep the private-lobby channel subscribed for ready check events!
+        // Only unsubscribe from presence channel (user is no longer "present" on screen)
         if (isMinimizedRef.current) {
           console.log('📦 [UNMOUNT] User minimized lobby, keeping lobby active');
-          // Just unsubscribe from channels but keep lobby state
-          if (channelRef.current) {
-            reverbService.unsubscribe(`private-lobby.${currentSessionId}`);
-            channelRef.current = null;
-          }
+          // DON'T unsubscribe from private-lobby channel - ReadyCheckHandler needs it!
+          // Only unsubscribe from presence channel
           if (presenceChannelRef.current) {
             reverbService.unsubscribe(`presence-lobby.${currentSessionId}`);
             presenceChannelRef.current = null;
+            console.log('📦 [UNMOUNT] Unsubscribed from presence channel only');
           }
           // Reset refs for next time
           hasJoinedRef.current = false;
