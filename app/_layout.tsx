@@ -17,6 +17,11 @@ import { LobbyProvider } from '../contexts/LobbyContext';
 import { ReverbProvider } from '../contexts/ReverbProvider';
 import { AlertProvider } from '../contexts/AlertContext';
 
+// Global Lobby Components
+import { GlobalLobbyIndicator } from '../components/lobby/GlobalLobbyIndicator';
+import { ReadyCheckHandler } from '../components/lobby/ReadyCheckHandler';
+import { ReadyCheckModal } from '../components/lobby/ReadyCheckModal';
+
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
@@ -57,6 +62,10 @@ export default function RootLayout() {
                           <StatusBar style="auto" />
                           <View style={{ flex: 1 }}>
                             <Slot />
+                            {/* Global Lobby Components - render on top of all screens */}
+                            <GlobalLobbyIndicator />
+                            <ReadyCheckHandler />
+                            <ReadyCheckModal />
                           </View>
                         </WebSocketProvider>
                       </NotificationProvider>

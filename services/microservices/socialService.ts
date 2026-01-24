@@ -1844,6 +1844,103 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to fetch user join requests');
     }
   }
+
+  // ============================================================================
+  // READY CHECK METHODS (Lobby Ready Check System)
+  // ============================================================================
+
+  /**
+   * Start a ready check in the lobby
+   * This broadcasts a ReadyCheckStarted event to all lobby members
+   * POST /api/v2/lobby/{sessionId}/ready-check/start
+   */
+  public async startReadyCheckV2(
+    sessionId: string,
+    timeoutSeconds: number = 25
+  ): Promise<{
+    status: string;
+    message: string;
+    data: {
+      ready_check_id: string;
+      expires_at: number;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Starting ready check:', { sessionId, timeoutSeconds });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/ready-check/start`,
+        { timeout_seconds: timeoutSeconds }
+      );
+
+      console.log('✅ [SOCIAL V2] Ready check started successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to start ready check:', error);
+      throw new Error((error as any).message || 'Failed to start ready check');
+    }
+  }
+
+  /**
+   * Respond to a ready check (accept or decline)
+   * This broadcasts a ReadyCheckResponse event to all lobby members
+   * POST /api/v2/lobby/{sessionId}/ready-check/respond
+   */
+  public async respondToReadyCheckV2(
+    sessionId: string,
+    response: 'accepted' | 'declined'
+  ): Promise<{
+    status: string;
+    message: string;
+    data: {
+      all_accepted: boolean;
+      responses: Record<number, string>;
+    };
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Responding to ready check:', { sessionId, response });
+
+      const apiResponse = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/ready-check/respond`,
+        { response }
+      );
+
+      console.log('✅ [SOCIAL V2] Ready check response sent successfully');
+      return apiResponse.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to respond to ready check:', error);
+      throw new Error((error as any).message || 'Failed to respond to ready check');
+    }
+  }
+
+  /**
+   * Cancel an active ready check (initiator only)
+   * POST /api/v2/lobby/{sessionId}/ready-check/cancel
+   */
+  public async cancelReadyCheckV2(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    message: string;
+  }> {
+    try {
+      console.log('📤 [SOCIAL V2] Cancelling ready check:', { sessionId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/ready-check/cancel`,
+        {}
+      );
+
+      console.log('✅ [SOCIAL V2] Ready check cancelled successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [SOCIAL V2] Failed to cancel ready check:', error);
+      throw new Error((error as any).message || 'Failed to cancel ready check');
+    }
+  }
 }
 
 export const socialService = new SocialService();

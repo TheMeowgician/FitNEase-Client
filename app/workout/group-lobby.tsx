@@ -17,7 +17,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAlert } from '../../contexts/AlertContext';
-import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMembersReady, selectIsLobbyInitiator, selectUnreadMessageCount } from '../../stores/lobbyStore';
+import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMembersReady, selectIsLobbyInitiator, selectUnreadMessageCount, selectLeftSessionId } from '../../stores/lobbyStore';
+import { useReadyCheckStore, selectIsReadyCheckActive, selectReadyCheckResult } from '../../stores/readyCheckStore';
 import { useConnectionStore, selectIsConnected, selectConnectionState } from '../../stores/connectionStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
@@ -66,6 +67,7 @@ export default function GroupLobbyScreen() {
   const currentLobby = useLobbyStore(selectCurrentLobby);
   const lobbyMembers = useLobbyStore(selectLobbyMembers);
   const unreadMessageCount = useLobbyStore(selectUnreadMessageCount);
+  const leftSessionId = useLobbyStore(selectLeftSessionId);
   const isLoading = useLobbyStore((state) => state.isLoading);
   const allMembersReady = useLobbyStore(selectAreAllMembersReady);
   const isConnected = useConnectionStore(selectIsConnected);
@@ -80,7 +82,15 @@ export default function GroupLobbyScreen() {
   const addChatMessage = useLobbyStore((state) => state.addChatMessage);
   const setChatOpen = useLobbyStore((state) => state.setChatOpen);
   const clearLobby = useLobbyStore((state) => state.clearLobby);
+  const clearLeftSession = useLobbyStore((state) => state.clearLeftSession);
   const setLoading = useLobbyStore((state) => state.setLoading);
+
+  // Ready Check store
+  const isReadyCheckActive = useReadyCheckStore(selectIsReadyCheckActive);
+  const readyCheckResult = useReadyCheckStore(selectReadyCheckResult);
+  const startReadyCheck = useReadyCheckStore((state) => state.startReadyCheck);
+  const setReadyCheckResult = useReadyCheckStore((state) => state.setResult);
+  const clearReadyCheck = useReadyCheckStore((state) => state.clearReadyCheck);
 
   // Local state
   const [isReady, setIsReady] = useState(false);
@@ -88,6 +98,7 @@ export default function GroupLobbyScreen() {
   const [isLeaving, setIsLeaving] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStartingReadyCheck, setIsStartingReadyCheck] = useState(false);
   const [onlineMembers, setOnlineMembers] = useState<Set<number>>(new Set());
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -134,6 +145,21 @@ export default function GroupLobbyScreen() {
   // Check if all members are ready AND exercises exist AND minimum 2 members present
   // This prevents starting a group workout alone
   const canStartWorkout = isInitiator && allMembersReady && lobbyMembers.length >= 2 && hasExercises;
+
+  // Check if ready check can be started (initiator, no active ready check, no exercises yet)
+  const canStartReadyCheck = isInitiator && !isReadyCheckActive && !hasExercises && lobbyMembers.length >= 2 && !isGenerating;
+
+  /**
+   * Watch for ready check completion
+   * When all members accept the ready check, auto-generate exercises
+   */
+  useEffect(() => {
+    // Only proceed if ready check succeeded and we're the initiator
+    if (readyCheckResult === 'success' && isInitiator && !hasExercises && !isGenerating) {
+      console.log('🎯 [READY CHECK] All members ready! Auto-generating exercises...');
+      autoGenerateExercises(lobbyMembers.length);
+    }
+  }, [readyCheckResult, isInitiator, hasExercises, isGenerating, lobbyMembers.length]);
 
   /**
    * Initialize lobby on mount
@@ -278,6 +304,23 @@ export default function GroupLobbyScreen() {
   }, [exerciseIdsString]); // STABLE DEPENDENCY - only changes when IDs actually change
 
   const initializeLobby = async () => {
+    // CRITICAL: Prevent re-initialization if cleanup is in progress
+    // This prevents the lobby from being re-saved after leaving
+    if (isCleaningUpRef.current) {
+      console.log('🛡️ [INIT] Skipping initialization - cleanup in progress');
+      return;
+    }
+
+    // CRITICAL: Check if we just left this lobby (Zustand flag persists across component mounts)
+    // This prevents the lobby indicator from reappearing after leaving
+    if (leftSessionId && leftSessionId === sessionId) {
+      console.log('🛡️ [INIT] Skipping initialization - just left this lobby:', sessionId);
+      // Clear the left session marker and navigate back
+      clearLeftSession();
+      router.back();
+      return;
+    }
+
     if (!sessionId || !currentUser) {
       console.error('❌ Missing sessionId or user');
       router.back();
@@ -367,6 +410,13 @@ export default function GroupLobbyScreen() {
    * Save active lobby to AsyncStorage for crash recovery
    */
   const saveActiveLobbyToStorage = async () => {
+    // CRITICAL: Don't save if cleanup is in progress
+    // This prevents the lobby indicator from reappearing after leaving
+    if (isCleaningUpRef.current) {
+      console.log('🛡️ [SAVE] Skipping save - cleanup in progress');
+      return;
+    }
+
     if (!sessionId || !groupId || !currentUser) return;
 
     try {
@@ -384,6 +434,12 @@ export default function GroupLobbyScreen() {
    * Subscribe to WebSocket channels
    */
   const subscribeToChannels = () => {
+    // CRITICAL: Don't subscribe if cleanup is in progress
+    if (isCleaningUpRef.current) {
+      console.log('🛡️ [SUBSCRIBE] Skipping subscription - cleanup in progress');
+      return;
+    }
+
     if (!sessionId) {
       console.error('❌ Cannot subscribe to channels: sessionId is missing');
       return;
@@ -587,6 +643,51 @@ export default function GroupLobbyScreen() {
           timestamp: Math.floor(Date.now() / 1000),
           is_system_message: true,
         });
+      },
+      // Ready Check Event Handlers
+      onReadyCheckStarted: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('🔔 [REAL-TIME] Ready check started:', data);
+
+        // Start ready check in store - this will show the modal globally
+        startReadyCheck({
+          sessionId: data.session_id || sessionId,
+          groupId: groupId,
+          groupName: currentLobby?.group_id ? `Group ${currentLobby.group_id}` : 'Workout Lobby',
+          initiatorId: data.initiator_id,
+          initiatorName: data.initiator_name || 'Host',
+          members: data.members || lobbyMembers.map((m) => ({
+            user_id: m.user_id,
+            user_name: m.user_name,
+          })),
+          timeoutSeconds: data.timeout_seconds || 25,
+        });
+      },
+      onReadyCheckResponse: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('📝 [REAL-TIME] Ready check response:', data);
+
+        // Update response in store
+        const updateResponse = useReadyCheckStore.getState().updateResponse;
+        updateResponse(data.user_id, data.response);
+      },
+      onReadyCheckComplete: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('🏁 [REAL-TIME] Ready check complete:', data);
+
+        // Set result in store - this triggers exercise generation if success
+        setReadyCheckResult(data.success ? 'success' : 'failed');
+      },
+      onReadyCheckCancelled: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('❌ [REAL-TIME] Ready check cancelled:', data);
+
+        // Clear ready check in store
+        clearReadyCheck();
       },
     });
 
@@ -1115,6 +1216,61 @@ export default function GroupLobbyScreen() {
   };
 
   /**
+   * Start a ready check (initiator only)
+   * This sends a ready check modal to ALL lobby members
+   * They have 25 seconds to accept or decline
+   * If all accept, exercises are auto-generated
+   */
+  const handleStartReadyCheck = async () => {
+    if (!isInitiator || isStartingReadyCheck || isReadyCheckActive) return;
+
+    // Need at least 2 members for a ready check
+    if (lobbyMembers.length < 2) {
+      alert.warning('Not Enough Members', 'You need at least 2 members to start a ready check.');
+      return;
+    }
+
+    setIsStartingReadyCheck(true);
+
+    try {
+      console.log('🔔 [READY CHECK] Starting ready check for lobby:', sessionId);
+
+      // Call backend to start ready check
+      // This will broadcast ReadyCheckStarted event to all members
+      await socialService.startReadyCheckV2(sessionId, 25);
+
+      console.log('✅ [READY CHECK] Ready check started successfully');
+    } catch (error: any) {
+      console.error('❌ [READY CHECK] Failed to start ready check:', error);
+
+      // If backend doesn't support ready check yet, simulate locally
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        console.log('⚠️ [READY CHECK] Backend not ready, simulating locally...');
+
+        // Simulate ready check start locally
+        if (currentUser) {
+          startReadyCheck({
+            sessionId: sessionId,
+            groupId: groupId,
+            groupName: currentLobby?.group_id ? `Group ${currentLobby.group_id}` : 'Workout Lobby',
+            initiatorId: parseInt(currentUser.id),
+            initiatorName: currentUser.username || 'Host',
+            members: lobbyMembers.map((m) => ({
+              user_id: m.user_id,
+              user_name: m.user_name,
+            })),
+            timeoutSeconds: 25,
+          });
+        }
+      } else {
+        alert.error('Error', 'Failed to start ready check. Please try again.');
+      }
+    } finally {
+      setIsStartingReadyCheck(false);
+    }
+  };
+
+  /**
    * Comprehensive cleanup on unmount, leave, kick, or delete
    *
    * CRITICAL: Order matters to prevent race conditions:
@@ -1168,8 +1324,9 @@ export default function GroupLobbyScreen() {
       console.log('🧹 [CLEANUP] Step 2: Unsubscribe delay complete');
 
       // STEP 3: Clear Zustand store FIRST (in-memory, fast)
-      clearLobby();
-      console.log('🧹 [CLEANUP] Step 3: Cleared Zustand lobby store');
+      // Pass sessionId to mark this lobby as "just left" to prevent re-initialization
+      clearLobby(sessionId);
+      console.log('🧹 [CLEANUP] Step 3: Cleared Zustand lobby store, marked session as left:', sessionId);
 
       // STEP 4: Clear LobbyContext (includes AsyncStorage - slower)
       await clearActiveLobbyLocal();
@@ -1414,8 +1571,31 @@ export default function GroupLobbyScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Start Button - Initiator only, when all ready */}
-        {isInitiator && (
+        {/* Ready Check Button - Initiator only, before exercises are generated */}
+        {isInitiator && !hasExercises && (
+          <TouchableOpacity
+            style={[styles.readyCheckButton, !canStartReadyCheck && styles.readyCheckButtonDisabled]}
+            onPress={handleStartReadyCheck}
+            disabled={!canStartReadyCheck || isStartingReadyCheck || isReadyCheckActive}
+          >
+            {isStartingReadyCheck ? (
+              <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+            ) : isReadyCheckActive ? (
+              <>
+                <Ionicons name="time" size={24} color={COLORS.NEUTRAL.WHITE} />
+                <Text style={styles.readyCheckButtonText}>Ready Check Active</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="notifications" size={24} color={COLORS.NEUTRAL.WHITE} />
+                <Text style={styles.readyCheckButtonText}>Ready Check</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Start Button - Initiator only, when all ready AND exercises exist */}
+        {isInitiator && hasExercises && (
           <TouchableOpacity
             style={[styles.startButton, !canStartWorkout && styles.startButtonDisabled]}
             onPress={handleStartWorkout}
@@ -2443,6 +2623,26 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   startButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  // Ready Check Button Styles
+  readyCheckButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.WARNING[500],
+    gap: 8,
+  },
+  readyCheckButtonDisabled: {
+    backgroundColor: COLORS.SECONDARY[300],
+    opacity: 0.6,
+  },
+  readyCheckButtonText: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL.WHITE,

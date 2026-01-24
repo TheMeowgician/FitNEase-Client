@@ -39,6 +39,8 @@ interface LobbyStore {
   isChatOpen: boolean;
   isLoading: boolean;
   lastUpdated: number; // Timestamp to force re-renders
+  leftSessionId: string | null; // Session ID of lobby we just left (prevents re-initialization)
+  leftAt: number | null; // Timestamp when we left (for cleanup)
 
   // Actions
   setLobbyState: (lobbyState: LobbyState) => void;
@@ -51,7 +53,8 @@ interface LobbyStore {
   incrementUnreadCount: () => void;
   resetUnreadCount: () => void;
   setChatOpen: (isOpen: boolean) => void;
-  clearLobby: () => void;
+  clearLobby: (sessionId?: string) => void;
+  clearLeftSession: () => void;
   setLoading: (isLoading: boolean) => void;
 }
 
@@ -62,15 +65,21 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
   isChatOpen: false,
   isLoading: false,
   lastUpdated: 0,
+  leftSessionId: null,
+  leftAt: null,
 
   /**
    * Set complete lobby state (from API or WebSocket)
    * IMPORTANT: Updates lastUpdated timestamp to force re-renders on Android
+   * Also clears leftSessionId when entering a new lobby
    */
   setLobbyState: (lobbyState: LobbyState) => {
     set({
       currentLobby: lobbyState,
-      lastUpdated: Date.now() // Force re-render by updating timestamp
+      lastUpdated: Date.now(), // Force re-render by updating timestamp
+      // Clear leftSessionId when entering a lobby (prevents blocking future joins)
+      leftSessionId: null,
+      leftAt: null,
     });
     console.log('📊 [LOBBY STORE] Lobby state updated:', {
       session_id: lobbyState.session_id,
@@ -244,17 +253,33 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
 
   /**
    * Clear lobby and chat
+   * @param sessionId - Optional session ID to mark as "just left" (prevents re-initialization)
    */
-  clearLobby: () => {
+  clearLobby: (sessionId?: string) => {
+    const currentSessionId = sessionId || get().currentLobby?.session_id;
     set({
       currentLobby: null,
       chatMessages: [],
       unreadMessageCount: 0,
       isChatOpen: false,
       isLoading: false,
-      lastUpdated: Date.now() // Force re-render
+      lastUpdated: Date.now(), // Force re-render
+      leftSessionId: currentSessionId || null,
+      leftAt: Date.now(),
     });
-    console.log('🗑️ [LOBBY STORE] Lobby cleared');
+    console.log('🗑️ [LOBBY STORE] Lobby cleared, leftSessionId:', currentSessionId);
+  },
+
+  /**
+   * Clear the "just left" session marker
+   * Call this after sufficient time has passed or when entering a new lobby
+   */
+  clearLeftSession: () => {
+    set({
+      leftSessionId: null,
+      leftAt: null,
+    });
+    console.log('🗑️ [LOBBY STORE] Left session marker cleared');
   },
 
   /**
@@ -295,3 +320,7 @@ export const selectIsLobbyInitiator = (userId: number) => (state: LobbyStore) =>
 };
 
 export const selectUnreadMessageCount = (state: LobbyStore) => state.unreadMessageCount;
+
+export const selectLeftSessionId = (state: LobbyStore) => state.leftSessionId;
+
+export const selectLeftAt = (state: LobbyStore) => state.leftAt;

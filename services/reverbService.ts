@@ -523,6 +523,11 @@ class ReverbService {
       onLobbyDeleted?: (data: any) => void;
       onMemberKicked?: (data: any) => void;
       onInitiatorRoleTransferred?: (data: any) => void;
+      // Ready Check events
+      onReadyCheckStarted?: (data: any) => void;
+      onReadyCheckResponse?: (data: any) => void;
+      onReadyCheckComplete?: (data: any) => void;
+      onReadyCheckCancelled?: (data: any) => void;
     }
   ) {
     const channelName = `private-lobby.${sessionId}`;
@@ -556,6 +561,19 @@ class ReverbService {
             break;
           case 'initiator.transferred':
             callbacks.onInitiatorRoleTransferred?.(data);
+            break;
+          // Ready Check events
+          case 'ReadyCheckStarted':
+            callbacks.onReadyCheckStarted?.(data);
+            break;
+          case 'ReadyCheckResponse':
+            callbacks.onReadyCheckResponse?.(data);
+            break;
+          case 'ReadyCheckComplete':
+            callbacks.onReadyCheckComplete?.(data);
+            break;
+          case 'ReadyCheckCancelled':
+            callbacks.onReadyCheckCancelled?.(data);
             break;
         }
       },
