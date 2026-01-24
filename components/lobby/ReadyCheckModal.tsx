@@ -55,7 +55,7 @@ export function ReadyCheckModal() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Check if user is on lobby screen
   const isOnLobbyScreen = pathname?.includes('/workout/group-lobby');
