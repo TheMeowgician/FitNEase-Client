@@ -118,6 +118,7 @@ export default function GroupLobbyScreen() {
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
   const isLobbyDeletedRef = useRef(false); // Track if LobbyDeleted event was received (blocks further actions)
+  const isMinimizedRef = useRef(false); // Track if user minimized (to explore app while staying in lobby)
   const isMountedRef = useRef(true); // Track if component is still mounted
   const sessionIdRef = useRef<string | null>(null); // Track sessionId for cleanup
   const channelRef = useRef<any>(null);
@@ -183,10 +184,30 @@ export default function GroupLobbyScreen() {
       // Mark component as unmounted to prevent state updates
       isMountedRef.current = false;
 
-      // CRITICAL: Call leave API when component unmounts (back button, swipe, etc.)
-      // Without this, backend still thinks user is in lobby when they navigate away
+      // CRITICAL: Only call leave API if user did NOT minimize the lobby
+      // If minimized, user wants to explore the app while staying in the lobby
       const leaveOnUnmount = async () => {
         const currentSessionId = sessionIdRef.current;
+
+        // If user minimized, DON'T leave the lobby - just unsubscribe from channels
+        if (isMinimizedRef.current) {
+          console.log('📦 [UNMOUNT] User minimized lobby, keeping lobby active');
+          // Just unsubscribe from channels but keep lobby state
+          if (channelRef.current) {
+            reverbService.unsubscribe(`private-lobby.${currentSessionId}`);
+            channelRef.current = null;
+          }
+          if (presenceChannelRef.current) {
+            reverbService.unsubscribe(`presence-lobby.${currentSessionId}`);
+            presenceChannelRef.current = null;
+          }
+          // Reset refs for next time
+          hasJoinedRef.current = false;
+          hasInitializedRef.current = false;
+          return; // DON'T call cleanup() or leave API
+        }
+
+        // User didn't minimize - they left the lobby (back button, swipe, etc.)
         if (currentSessionId && !isCleaningUpRef.current) {
           try {
             console.log('🚪 [UNMOUNT] Component unmounting, calling leave API...');
@@ -332,6 +353,53 @@ export default function GroupLobbyScreen() {
       console.error('❌ Missing sessionId or user');
       router.back();
       return;
+    }
+
+    // Check if returning from minimized state (Zustand store already has the lobby)
+    const existingLobby = useLobbyStore.getState().currentLobby;
+    const isReturningFromMinimized = existingLobby &&
+      existingLobby.session_id === sessionId &&
+      existingLobby.members?.some((m: any) => m.user_id === parseInt(currentUser.id));
+
+    if (isReturningFromMinimized) {
+      console.log('📦 [INIT] Returning from minimized state, refreshing lobby state');
+      try {
+        // Re-subscribe to channels first
+        subscribeToChannels();
+
+        // Fetch fresh state to catch up on any missed updates while minimized
+        const response = await socialService.getLobbyStateV2(sessionId);
+
+        if (response.status !== 'success' || !response.data) {
+          console.log('⚠️ [INIT] Lobby no longer exists, cleaning up');
+          await cleanup();
+          router.back();
+          return;
+        }
+
+        const freshLobbyState = response.data.lobby_state;
+
+        // Validate lobby is still valid
+        if (freshLobbyState.status === 'completed' ||
+            !freshLobbyState.members ||
+            freshLobbyState.members.length === 0) {
+          console.log('⚠️ [INIT] Lobby is no longer valid after refresh');
+          await cleanup();
+          router.back();
+          return;
+        }
+
+        // Update store with fresh state
+        setLobbyState(freshLobbyState);
+        hasJoinedRef.current = true;
+        console.log('✅ [INIT] Lobby state refreshed after returning from minimize');
+        return;
+      } catch (error) {
+        console.error('❌ [INIT] Error refreshing lobby state:', error);
+        await cleanup();
+        router.back();
+        return;
+      }
     }
 
     try {
@@ -913,6 +981,16 @@ export default function GroupLobbyScreen() {
   };
 
   /**
+   * Minimize lobby to explore the app while waiting
+   * User stays in the lobby, GlobalLobbyIndicator will show
+   */
+  const handleMinimizeLobby = () => {
+    console.log('📦 [MINIMIZE] User minimizing lobby to explore app');
+    isMinimizedRef.current = true; // Mark as minimized so unmount doesn't call leave API
+    router.back();
+  };
+
+  /**
    * Load group members for inviting
    */
   const loadGroupMembers = async () => {
@@ -1491,6 +1569,15 @@ export default function GroupLobbyScreen() {
           <Text style={styles.headerTitle}>Group Workout Lobby</Text>
         </View>
         <View style={styles.headerActions}>
+          {/* Minimize Button - Explore app while staying in lobby */}
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleMinimizeLobby}
+            disabled={isLeaving}
+          >
+            <Ionicons name="chevron-down" size={24} color={COLORS.PRIMARY[600]} />
+          </TouchableOpacity>
+
           {/* Settings Button - Initiator Only */}
           {isInitiator && (
             <TouchableOpacity style={styles.iconButton} onPress={() => setIsSettingsModalOpen(true)}>
