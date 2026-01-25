@@ -84,6 +84,8 @@ export default function WorkoutSessionScreen() {
   const serverTickTimeoutRef = useRef<NodeJS.Timeout | number | null>(null); // Debounce server ticks
   const lastDisplayedTimeRef = useRef<number>(-1); // Track last displayed time to avoid redundant updates
   const wasAutoFinished = useRef<boolean>(false); // Track if AUTO FINISH button was used
+  const lastCountdownBeepRef = useRef<number>(-1); // Track last countdown beep to avoid duplicates
+  const halfwayPlayedRef = useRef<boolean>(false); // Track if halfway sound played this phase
   const appState = useRef(AppState.currentState);
   const isInitiator = user?.id.toString() === initiatorId;
 
@@ -524,7 +526,7 @@ export default function WorkoutSessionScreen() {
    * RESEARCH REQUIREMENT: Sound alerts for workout transitions (Chapter 1, line 117)
    * @param type - Type of sound alert to play
    */
-  const playSound = async (type: 'start' | 'rest' | 'complete' | 'next' | 'round') => {
+  const playSound = async (type: 'start' | 'rest' | 'complete' | 'next' | 'round' | 'countdown' | 'countdown_go' | 'halfway') => {
     try {
       // Load appropriate sound file based on type
       let soundFile;
@@ -544,6 +546,15 @@ export default function WorkoutSessionScreen() {
         case 'round':
           soundFile = require('../../assets/sounds/round.mp3');
           break;
+        case 'countdown':
+          soundFile = require('../../assets/sounds/countdown.mp3');
+          break;
+        case 'countdown_go':
+          soundFile = require('../../assets/sounds/countdown_go.mp3');
+          break;
+        case 'halfway':
+          soundFile = require('../../assets/sounds/halfway.mp3');
+          break;
         default:
           soundFile = require('../../assets/sounds/start.mp3');
       }
@@ -561,12 +572,15 @@ export default function WorkoutSessionScreen() {
       console.log(`❌ [SOUND] Error playing ${type} sound:`, error);
 
       // Fallback to vibration with different patterns for each type
-      const vibrationPatterns: Record<typeof type, number | number[]> = {
+      const vibrationPatterns: Record<string, number | number[]> = {
         start: [0, 100],                    // Single short beep
         rest: [0, 200],                     // Single medium beep
         complete: [0, 500, 200, 500],       // Double long beeps
         next: [0, 100, 100, 100],           // Two quick beeps
         round: [0, 300, 100, 300],          // Two medium beeps
+        countdown: [0, 50],                 // Very short beep
+        countdown_go: [0, 150],             // Short beep
+        halfway: [0, 100, 50, 100],         // Two quick beeps
       };
 
       Vibration.vibrate(vibrationPatterns[type] || 200);
@@ -710,6 +724,33 @@ export default function WorkoutSessionScreen() {
               return handlePhaseComplete(prev);
             }
           }
+        }
+
+        // Play halfway sound at 10 seconds during work phase (20 sec work / 2 = 10)
+        if (prev.phase === 'work' && Math.ceil(newTimeRemaining) === 10 && !halfwayPlayedRef.current) {
+          halfwayPlayedRef.current = true;
+          playSound('halfway');
+        }
+
+        // Reset halfway ref when starting new phase
+        if (newTimeRemaining > 15) {
+          halfwayPlayedRef.current = false;
+        }
+
+        // Play countdown sounds at 3, 2, 1 during work and prepare phases
+        if ((prev.phase === 'work' || prev.phase === 'prepare') && newTimeRemaining <= 3 && newTimeRemaining > 0) {
+          const countdownSecond = Math.ceil(newTimeRemaining);
+          if (countdownSecond !== lastCountdownBeepRef.current && countdownSecond > 0) {
+            lastCountdownBeepRef.current = countdownSecond;
+            if (countdownSecond === 1) {
+              playSound('countdown_go'); // "GO!" sound at 1 second
+            } else {
+              playSound('countdown'); // Beep at 3, 2
+            }
+          }
+        } else if (newTimeRemaining > 3) {
+          // Reset countdown ref when time is above 3
+          lastCountdownBeepRef.current = -1;
         }
 
         // Calculate calories burned per second
