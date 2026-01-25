@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, S
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { startOfWeek, addDays, format } from 'date-fns';
 
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
-import { WorkoutDayStatus } from '../../components/dashboard/WorkoutDayStatus';
+import { WeekCalendarStrip } from '../../components/calendar/WeekCalendarStrip';
 import ProgressionCard from '../../components/ProgressionCard';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
 import { useAuth } from '../../contexts/AuthContext';
@@ -67,6 +68,10 @@ export default function HomeScreen() {
   }>({ completed_this_week: false, this_week_assessment: null }); // Track weekly assessment status
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
 
+  // Week calendar state
+  const [currentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
+
   // 🎓 MENTOR NOTE: Mentors stay in tabs navigation and can access their dashboard via "My Members" card
   // They can also do their own Tabata workouts like regular members
 
@@ -83,6 +88,7 @@ export default function HomeScreen() {
         fetchAllProgressData(user.id);
         checkTodayWorkoutCompletion(); // Check if today's workout is completed
         checkWeeklyAssessmentStatus(); // Check if weekly assessment is completed
+        checkCompletedDays(); // Check completed days for week calendar
       }
     }, [user, fetchAllProgressData])
   );
@@ -156,6 +162,39 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('❌ [DASHBOARD] Failed to check today\'s workout completion:', error);
       setIsTodayWorkoutCompleted(false);
+    }
+  };
+
+  /**
+   * Check completed days for the current week (for calendar display)
+   */
+  const checkCompletedDays = async () => {
+    if (!user) return;
+
+    try {
+      const userId = String(user.id);
+      const sessions = await trackingService.getSessions({
+        userId,
+        status: 'completed',
+        limit: 100,
+      });
+
+      // Get week boundaries
+      const weekEnd = addDays(currentWeekStart, 6);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      // Filter sessions for this week and map to date strings
+      const completed = new Set<string>();
+      sessions.sessions.forEach((session: any) => {
+        const sessionDate = new Date(session.createdAt);
+        if (sessionDate >= currentWeekStart && sessionDate <= weekEnd) {
+          completed.add(format(sessionDate, 'yyyy-MM-dd'));
+        }
+      });
+
+      setCompletedDays(completed);
+    } catch (error) {
+      console.error('Failed to check completed days:', error);
     }
   };
 
@@ -552,9 +591,18 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Workout Day Status */}
+        {/* Week Calendar Strip */}
         {user?.workoutDays && user.workoutDays.length > 0 && (
-          <WorkoutDayStatus workoutDays={user.workoutDays} />
+          <View style={styles.weekCalendarContainer}>
+            <WeekCalendarStrip
+              weekStart={currentWeekStart}
+              workoutDays={user.workoutDays}
+              completedDates={completedDays}
+              showProgress={true}
+              showNavigation={false}
+              compact={true}
+            />
+          </View>
         )}
 
         {/* Stats Summary - Redesigned */}
@@ -986,6 +1034,17 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 16,
     paddingBottom: 0,
+  },
+  weekCalendarContainer: {
+    marginBottom: 16,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   profileSection: {
     marginHorizontal: 24,

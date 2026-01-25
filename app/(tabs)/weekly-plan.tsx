@@ -18,6 +18,7 @@ import { planningService, WeeklyWorkoutPlan, Exercise } from '@/services/microse
 import { trackingService } from '@/services/microservices/trackingService';
 import { format, startOfWeek, addDays, isSameDay, isToday as isDateToday, addWeeks, subWeeks } from 'date-fns';
 import { COLORS, FONTS, FONT_SIZES } from '@/constants/colors';
+import { WeekCalendarStrip } from '@/components/calendar/WeekCalendarStrip';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
@@ -335,91 +336,19 @@ export default function WeeklyPlanScreen() {
         )}
       </View>
 
-      {/* Calendar Week Strip */}
-      <View style={styles.calendarSection}>
-        {/* Week Navigation Row */}
-        <View style={styles.weekNavigationRow}>
-          <TouchableOpacity
-            style={[styles.navButton, !canNavigatePrev && styles.navButtonDisabled]}
-            onPress={() => canNavigatePrev && navigateWeek('prev')}
-            disabled={!canNavigatePrev}
-          >
-            <Ionicons name="chevron-back" size={20} color={canNavigatePrev ? COLORS.SECONDARY[700] : COLORS.SECONDARY[300]} />
-          </TouchableOpacity>
-          <Text style={styles.weekLabel}>
-            {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d, yyyy')}
-          </Text>
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => navigateWeek('next')}
-          >
-            <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[700]} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.calendarStrip}>
-          {weekDays.map((day, index) => {
-            const isSelected = isSameDay(day.date, selectedDate);
-
-            return (
-              <TouchableOpacity
-                key={index}
-                style={styles.dayCell}
-                onPress={() => setSelectedDate(day.date)}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.dayName,
-                  isSelected && styles.dayNameSelected,
-                  day.isToday && !isSelected && styles.dayNameToday,
-                ]}>
-                  {day.shortName}
-                </Text>
-                <View style={[
-                  styles.dayNumberWrapper,
-                  isSelected && styles.dayNumberWrapperSelected,
-                  day.isToday && !isSelected && styles.dayNumberWrapperToday,
-                ]}>
-                  <Text style={[
-                    styles.dayNumber,
-                    isSelected && styles.dayNumberSelected,
-                    day.isToday && !isSelected && styles.dayNumberToday,
-                  ]}>
-                    {format(day.date, 'd')}
-                  </Text>
-                </View>
-
-                {/* Status indicator dot */}
-                <View style={styles.statusIndicator}>
-                  {day.completed ? (
-                    <View style={styles.completedDot} />
-                  ) : !day.isRestDay ? (
-                    <View style={styles.workoutDot} />
-                  ) : null}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Progress Summary - Minimal */}
-        <View style={styles.progressSummary}>
-          <Text style={styles.progressText}>
-            {completedCount}/{workoutDaysCount} completed
-          </Text>
-          <View style={styles.progressDotsContainer}>
-            {weekDays.filter(d => !d.isRestDay).map((day, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.progressDot,
-                  day.completed && styles.progressDotCompleted,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-      </View>
+      {/* Calendar Week Strip - Shared Component */}
+      <WeekCalendarStrip
+        weekStart={currentWeekStart}
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        showNavigation={true}
+        onNavigatePrev={() => canNavigatePrev && navigateWeek('prev')}
+        onNavigateNext={() => navigateWeek('next')}
+        canNavigatePrev={canNavigatePrev}
+        workoutDays={userWorkoutDays}
+        completedDates={completedDays}
+        showProgress={true}
+      />
 
       <ScrollView
         style={styles.scrollView}
