@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
-  Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   Text,
@@ -10,6 +8,7 @@ import {
   View,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -56,14 +55,6 @@ export default function ProfileScreen() {
       console.error('Error loading fitness level:', error);
       setFitnessLevel(user.fitnessLevel || 'beginner');
     }
-  };
-
-  // Get status bar height for Android
-  const getStatusBarHeight = () => {
-    if (Platform.OS === 'android') {
-      return StatusBar.currentHeight || 24;
-    }
-    return 0;
   };
 
   const menuItems = [
@@ -233,19 +224,11 @@ export default function ProfileScreen() {
   const showLoading = isLoading || isLoggingOut;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="white" />
 
       {/* FIXED HEADER - OUTSIDE SCROLLVIEW */}
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop:
-              Platform.OS === 'android' ? getStatusBarHeight() + 16 : 16,
-          },
-        ]}
-      >
+      <View style={styles.header}>
         <Text style={styles.headerTitle}>Menu</Text>
       </View>
 
@@ -388,6 +371,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: 'white',
     paddingHorizontal: 24,
+    paddingTop: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',

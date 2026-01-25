@@ -704,6 +704,7 @@ const styles = StyleSheet.create({
   // Calendar Section
   calendarSection: {
     paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 20,
     backgroundColor: COLORS.NEUTRAL.WHITE,
   },
