@@ -836,6 +836,15 @@ export default function GroupLobbyScreen() {
         // Update response in store
         const updateResponse = useReadyCheckStore.getState().updateResponse;
         updateResponse(data.user_id, data.response);
+
+        // If user accepted, update their member status in lobby to 'ready'
+        if (data.response === 'accepted') {
+          updateMemberStatus(data.user_id, 'ready');
+          // If it's the current user, also update local ready state
+          if (currentUser && data.user_id === parseInt(currentUser.id)) {
+            setIsReady(true);
+          }
+        }
       },
       onReadyCheckComplete: (data: any) => {
         // Guard against updates during cleanup
@@ -844,6 +853,16 @@ export default function GroupLobbyScreen() {
 
         // Set result in store - this triggers exercise generation if success
         setReadyCheckResult(data.success ? 'success' : 'failed');
+
+        // If ready check succeeded, set all members to ready and update local state
+        if (data.success) {
+          // Update all members' status to 'ready'
+          lobbyMembers.forEach(member => {
+            updateMemberStatus(member.user_id, 'ready');
+          });
+          // Set local ready state
+          setIsReady(true);
+        }
       },
       onReadyCheckCancelled: (data: any) => {
         // Guard against updates during cleanup
