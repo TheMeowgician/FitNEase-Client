@@ -48,30 +48,53 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
   const scrollViewRef = useRef<ScrollView>(null);
   const pan = useRef(new Animated.Value(0)).current;
 
-  // Animation values for smooth fade in/out
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  // Animation values for smooth slide up/down and backdrop fade
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(height)).current;
 
   // Animate in when modal becomes visible
   useEffect(() => {
     if (visible) {
-      fadeAnim.setValue(0);
-      scaleAnim.setValue(0.9);
+      // Reset values
+      backdropOpacity.setValue(0);
+      slideAnim.setValue(height);
+      pan.setValue(0);
+
+      // Animate in: backdrop fades in, modal slides up
       Animated.parallel([
-        Animated.timing(fadeAnim, {
+        Animated.timing(backdropOpacity, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
         }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 8,
-          tension: 40,
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          damping: 20,
+          stiffness: 150,
+          mass: 1,
           useNativeDriver: true,
         }),
       ]).start();
     }
   }, [visible]);
+
+  // Animated close function
+  const handleClose = () => {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: height,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose();
+    });
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -84,18 +107,28 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
         // Only allow downward dragging
         if (gestureState.dy > 0) {
           pan.setValue(gestureState.dy);
+          // Also fade backdrop as user drags
+          const opacity = Math.max(0, 1 - (gestureState.dy / 300));
+          backdropOpacity.setValue(opacity);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        // If dragged down more than 100px, close the modal
+        // If dragged down more than 100px, close the modal with animation
         if (gestureState.dy > 100) {
-          onClose();
+          handleClose();
         } else {
           // Otherwise, snap back
-          Animated.spring(pan, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
+          Animated.parallel([
+            Animated.spring(pan, {
+              toValue: 0,
+              useNativeDriver: true,
+            }),
+            Animated.timing(backdropOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+            }),
+          ]).start();
         }
       },
     })
@@ -133,22 +166,35 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
-      onRequestClose={onClose}
+      animationType="none"
+      onRequestClose={handleClose}
+      statusBarTranslucent
     >
       <View style={styles.modalOverlay}>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+        {/* Animated Backdrop */}
+        <Animated.View
+          style={[
+            styles.backdrop,
+            {
+              opacity: backdropOpacity,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={handleClose}
+          />
+        </Animated.View>
 
+        {/* Animated Modal Content - Slides up */}
         <Animated.View
           style={[
             styles.modalContainer,
             {
-              opacity: fadeAnim,
-              transform: [{ translateY: pan }, { scale: scaleAnim }],
+              transform: [
+                { translateY: Animated.add(slideAnim, pan) },
+              ],
             },
           ]}
         >
@@ -168,7 +214,7 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
                 <Text style={styles.headerSubtitle}>{workoutSet.exercises.length} exercises • {workoutSet.total_duration} min</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close-circle" size={28} color="#9CA3AF" />
             </TouchableOpacity>
           </View>
@@ -280,10 +326,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   modalContainer: {
     backgroundColor: '#F8FAFC',

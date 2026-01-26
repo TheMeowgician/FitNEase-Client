@@ -249,7 +249,7 @@ export default function HomeScreen() {
           console.warn('Engagement service unavailable:', err);
           return null;
         }),
-        authService.getFitnessAssessment().catch(err => {
+        authService.getFitnessAssessment(user.id).catch(err => {
           console.warn('Fitness assessment unavailable:', err);
           return null;
         }),
@@ -281,10 +281,31 @@ export default function HomeScreen() {
       setEngagementStats(engagementResponse);
 
       // Set fitness level from assessment data (more accurate than user profile)
+      // Look for initial_onboarding assessment which contains fitness_level
+      // (weekly assessments don't have fitness_level)
       if (fitnessAssessment && fitnessAssessment.length > 0) {
-        const assessmentFitnessLevel = fitnessAssessment[0].assessment_data.fitness_level;
-        setFitnessLevel(assessmentFitnessLevel || 'beginner');
-        console.log('💪 [DASHBOARD] Using fitness level from assessment:', assessmentFitnessLevel);
+        // Find the initial_onboarding assessment (has fitness_level)
+        const onboardingAssessment = fitnessAssessment.find(
+          (a: any) => a.assessment_type === 'initial_onboarding' && a.assessment_data?.fitness_level
+        );
+
+        if (onboardingAssessment) {
+          const assessmentFitnessLevel = onboardingAssessment.assessment_data.fitness_level;
+          setFitnessLevel(assessmentFitnessLevel || 'beginner');
+          console.log('💪 [DASHBOARD] Using fitness level from initial_onboarding assessment:', assessmentFitnessLevel);
+        } else {
+          // Fallback: check any assessment with fitness_level
+          const anyWithFitnessLevel = fitnessAssessment.find(
+            (a: any) => a.assessment_data?.fitness_level
+          );
+          if (anyWithFitnessLevel) {
+            setFitnessLevel(anyWithFitnessLevel.assessment_data.fitness_level);
+            console.log('💪 [DASHBOARD] Using fitness level from assessment:', anyWithFitnessLevel.assessment_data.fitness_level);
+          } else {
+            setFitnessLevel(user.fitnessLevel || 'beginner');
+            console.log('💪 [DASHBOARD] No assessment with fitness_level, using user profile:', user.fitnessLevel);
+          }
+        }
       } else {
         // Fallback to user profile fitness level
         setFitnessLevel(user.fitnessLevel || 'beginner');
@@ -454,7 +475,15 @@ export default function HomeScreen() {
     const levelText = fitnessLevel ? `${fitnessLevel.charAt(0).toUpperCase() + fitnessLevel.slice(1)} Level` : 'Beginner Level';
     const details = `${levelText} • Tabata Training`;
 
-    return { name, role, details };
+    // Color coding for fitness levels
+    const levelColors: { [key: string]: string } = {
+      beginner: '#10B981',     // Green
+      intermediate: '#F59E0B', // Orange/Amber
+      advanced: '#EF4444',     // Red
+    };
+    const badgeColor = levelColors[fitnessLevel?.toLowerCase() || 'beginner'] || '#10B981';
+
+    return { name, role, details, badgeColor };
   };
 
   const userDisplay = getUserDisplayData();
@@ -559,9 +588,9 @@ export default function HomeScreen() {
             <View style={styles.profileInfo}>
               <Text style={styles.profileGreeting}>Welcome back,</Text>
               <Text style={styles.profileName}>{userDisplay.name}</Text>
-              <View style={styles.profileBadge}>
-                <Ionicons name="flash" size={12} color="#10B981" />
-                <Text style={styles.profileDetails}>{userDisplay.details}</Text>
+              <View style={[styles.profileBadge, { borderColor: userDisplay.badgeColor }]}>
+                <Ionicons name="flash" size={12} color={userDisplay.badgeColor} />
+                <Text style={[styles.profileDetails, { color: userDisplay.badgeColor }]}>{userDisplay.details}</Text>
               </View>
             </View>
           </View>
@@ -713,8 +742,15 @@ export default function HomeScreen() {
         {/* Today's Recommended Workout Set - Only show on workout days */}
         {isWorkoutDay() ? (
           <View style={styles.workoutSection}>
-            <View style={styles.sectionHeaderWithAction}>
-              <Text style={styles.sectionHeader}>Today's Tabata Workout</Text>
+            {/* Section Header - Consistent with Workouts page */}
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeaderLeft}>
+                <Text style={styles.sectionHeader}>Today's Tabata</Text>
+                <View style={styles.personalizedBadge}>
+                  <Ionicons name="sparkles" size={14} color={COLORS.SUCCESS[600]} />
+                  <Text style={styles.personalizedText}>Personalized</Text>
+                </View>
+              </View>
               <TouchableOpacity
                 onPress={refreshWorkoutRecommendations}
                 disabled={isRefreshingWorkouts}
@@ -748,65 +784,19 @@ export default function HomeScreen() {
               </View>
             ) : recommendations.length > 0 ? (
               <TouchableOpacity
-                style={styles.workoutSetCard}
+                style={styles.workoutCard}
                 onPress={handleViewWorkoutSet}
-                activeOpacity={0.92}
+                activeOpacity={0.9}
               >
-                {/* Header with Icon */}
-                <View style={styles.workoutSetHeader}>
-                  <View style={styles.tabataIconLarge}>
-                    <Ionicons name="flash" size={36} color={COLORS.NEUTRAL.WHITE} />
+                {/* Card Header - Consistent with Workouts page */}
+                <View style={styles.workoutCardHeader}>
+                  <View style={styles.workoutIconContainer}>
+                    <Ionicons name="flash" size={32} color={COLORS.NEUTRAL.WHITE} />
                   </View>
-                  <View style={styles.workoutSetTitleContainer}>
-                    <Text style={styles.workoutSetTitle}>
-                      {fitnessLevel ? `${fitnessLevel.charAt(0).toUpperCase() + fitnessLevel.slice(1)} Tabata` : 'Tabata Workout'}
-                    </Text>
-                    <Text style={styles.workoutSetSubtitle}>
-                      {fitnessLevel === 'beginner' ? '4' : fitnessLevel === 'intermediate' ? '5' : '6'} exercises • Tabata protocol
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Preview of first 3 exercises */}
-                <View style={styles.exercisePreviewList}>
-                  {recommendations?.slice(0, 3).map((ex, idx) => (
-                    <ExerciseCard
-                      key={ex.exercise_id}
-                      exercise={ex}
-                      index={idx}
-                      showCompletionIcon={true}
-                      showMLBadge={true} // Show ML model type (hybrid, content-based, etc.)
-                      mlModelType={getAlgorithmDisplayName(ex.recommendation_type)} // Get algorithm from exercise data
-                    />
-                  ))}
-                  {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) > 3 && (
-                    <Text style={styles.moreExercises}>
-                      +{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) - 3} more
-                    </Text>
-                  )}
-                </View>
-
-                {/* Stats Row */}
-                <View style={styles.workoutSetStats}>
-                  <View style={styles.workoutSetStat}>
-                    <Ionicons name="time-outline" size={20} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.workoutSetStatText}>
-                      {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min
-                    </Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.workoutSetStat}>
-                    <Ionicons name="flame-outline" size={20} color="#F59E0B" />
-                    <Text style={styles.workoutSetStatText}>
-                      ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6)
-                        .reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0)} cal
-                    </Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.workoutSetStat}>
-                    <Ionicons name="fitness-outline" size={20} color="#8B5CF6" />
-                    <Text style={styles.workoutSetStatText}>
-                      {(() => {
+                  <View style={styles.workoutCardTitleContainer}>
+                    <Text style={styles.workoutCardTitle}>Tabata Workout</Text>
+                    <Text style={styles.workoutCardSubtitle}>
+                      {fitnessLevel === 'beginner' ? '4' : fitnessLevel === 'intermediate' ? '5' : '6'} exercises • {(() => {
                         const workoutExercises = recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) || [];
                         const muscleGroups = new Set<string>();
                         workoutExercises.forEach(ex => {
@@ -815,10 +805,9 @@ export default function HomeScreen() {
                           }
                         });
                         const uniqueGroups = Array.from(muscleGroups);
-                        if (uniqueGroups.length >= 3) {
-                          return 'Full Body';
-                        } else if (uniqueGroups.length > 0) {
-                          return uniqueGroups.map((g: string) =>
+                        if (uniqueGroups.length >= 3) return 'Full Body';
+                        if (uniqueGroups.length > 0) {
+                          return uniqueGroups.slice(0, 2).map((g: string) =>
                             g.replace(/_/g, ' ').split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
                           ).join(' & ');
                         }
@@ -828,10 +817,71 @@ export default function HomeScreen() {
                   </View>
                 </View>
 
-                {/* View Details Button */}
-                <View style={styles.viewDetailsButton}>
-                  <Text style={styles.viewDetailsText}>View Full Workout</Text>
-                  <Ionicons name="chevron-forward" size={22} color={COLORS.PRIMARY[600]} />
+                {/* Exercise Preview - Consistent with Workouts page */}
+                <View style={styles.exercisePreview}>
+                  {(() => {
+                    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+                    const previewCount = Math.min(3, exerciseCount); // Show max 3 in preview
+                    const remaining = exerciseCount - previewCount;
+
+                    return (
+                      <>
+                        {recommendations?.slice(0, previewCount).map((ex, idx) => (
+                          <View key={ex.exercise_id || idx} style={styles.exercisePreviewItem}>
+                            <View style={styles.exercisePreviewNumber}>
+                              <Text style={styles.exercisePreviewNumberText}>{idx + 1}</Text>
+                            </View>
+                            <Text style={styles.exercisePreviewName} numberOfLines={1}>
+                              {ex.exercise_name}
+                            </Text>
+                          </View>
+                        ))}
+                        {remaining > 0 && (
+                          <View style={styles.moreExercisesRow}>
+                            <View style={styles.moreExercisesDots}>
+                              <View style={styles.dot} />
+                              <View style={styles.dot} />
+                              <View style={styles.dot} />
+                            </View>
+                            <Text style={styles.moreExercisesText}>
+                              +{remaining} more exercise{remaining > 1 ? 's' : ''}
+                            </Text>
+                          </View>
+                        )}
+                      </>
+                    );
+                  })()}
+                </View>
+
+                {/* Stats Row - Consistent with Workouts page */}
+                <View style={styles.statsRow}>
+                  <View style={styles.statItem}>
+                    <Ionicons name="time-outline" size={18} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.statValue}>
+                      {(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min
+                    </Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Ionicons name="flame-outline" size={18} color={COLORS.WARNING[500]} />
+                    <Text style={styles.statValue}>
+                      ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6)
+                        .reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0)} cal
+                    </Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Ionicons name="fitness-outline" size={18} color={COLORS.SUCCESS[500]} />
+                    <Text style={styles.statValue}>
+                      {fitnessLevel === 'beginner' ? '4' : fitnessLevel === 'intermediate' ? '5' : '6'} sets
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Start Button - Consistent with Workouts page */}
+                <View style={styles.startWorkoutButton}>
+                  <Text style={styles.startWorkoutButtonText}>View & Start Workout</Text>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.NEUTRAL.WHITE} />
                 </View>
               </TouchableOpacity>
             ) : (
@@ -1262,11 +1312,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  // New consistent section header styles (matching workouts page)
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  personalizedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SUCCESS[50],
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 4,
+  },
+  personalizedText: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SUCCESS[600],
+  },
   refreshButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: COLORS.PRIMARY[600] + '10',
+    backgroundColor: COLORS.PRIMARY[50],
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1308,61 +1384,140 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginBottom: 24,
   },
+  // Workout Card - Consistent with Workouts page
   workoutCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    marginBottom: 16,
   },
-  workoutHeader: {
+  workoutCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 20,
   },
-  workoutTitle: {
-    fontSize: 18,
+  workoutIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: COLORS.SUCCESS[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  workoutCardTitleContainer: {
+    flex: 1,
+  },
+  workoutCardTitle: {
+    fontSize: 20,
     fontFamily: FONTS.BOLD,
-    color: '#111827',
-    marginLeft: 8,
+    color: COLORS.NEUTRAL[900],
   },
-  workoutDescription: {
+  workoutCardSubtitle: {
     fontSize: 14,
     fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
+    color: COLORS.NEUTRAL[500],
+    marginTop: 2,
+  },
+  // Exercise Preview - Consistent with Workouts page
+  exercisePreview: {
+    backgroundColor: COLORS.NEUTRAL[50],
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 16,
   },
-  workoutDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  workoutDetail: {
+  exercisePreviewItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8,
   },
-  workoutDetailText: {
+  exercisePreviewNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.PRIMARY[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  exercisePreviewNumberText: {
     fontSize: 12,
-    fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
-    marginLeft: 4,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[700],
   },
+  exercisePreviewName: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.NEUTRAL[700],
+  },
+  moreExercisesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 10,
+  },
+  moreExercisesDots: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.PRIMARY[300],
+  },
+  moreExercisesText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  // Stats Row - Consistent with Workouts page
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.NEUTRAL[100],
+    marginBottom: 16,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statValue: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[700],
+  },
+  statDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: COLORS.NEUTRAL[200],
+  },
+  // Start Button - Consistent with Workouts page
   startWorkoutButton: {
     backgroundColor: COLORS.PRIMARY[600],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    padding: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
   },
-  startWorkoutText: {
+  startWorkoutButtonText: {
     fontSize: 16,
     fontFamily: FONTS.SEMIBOLD,
-    color: 'white',
-    marginRight: 8,
+    color: COLORS.NEUTRAL.WHITE,
   },
   emptyWorkoutCard: {
     backgroundColor: 'white',

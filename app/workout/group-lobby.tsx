@@ -1633,6 +1633,17 @@ export default function GroupLobbyScreen() {
                 globalOnlineUsers: Array.from(onlineUsers)
               });
 
+              // Get fitness level color
+              const getFitnessLevelColor = (level: string) => {
+                switch (level?.toLowerCase()) {
+                  case 'advanced': return { bg: '#FEE2E2', text: '#DC2626' }; // Red
+                  case 'intermediate': return { bg: '#FEF3C7', text: '#D97706' }; // Orange
+                  case 'beginner':
+                  default: return { bg: '#D1FAE5', text: '#059669' }; // Green
+                }
+              };
+              const fitnessColors = getFitnessLevelColor(member.fitness_level || 'beginner');
+
               return (
                 <TouchableOpacity
                   key={member.user_id}
@@ -1643,70 +1654,80 @@ export default function GroupLobbyScreen() {
                     setShowMemberPreview(true);
                   }}
                 >
-                  {/* Left: Avatar + Info */}
-                  <View style={styles.memberLeft}>
-                    <View style={styles.memberAvatar}>
-                      <Ionicons name="person" size={28} color={COLORS.PRIMARY[600]} />
-                      {isLobbyInitiator && (
-                        <View style={styles.crownBadge}>
-                          <Ionicons name="star" size={14} color={COLORS.WARNING[500]} />
+                  {/* Avatar */}
+                  <View style={styles.memberAvatar}>
+                    <Ionicons name="person" size={24} color={COLORS.PRIMARY[600]} />
+                    {isLobbyInitiator && (
+                      <View style={styles.crownBadge}>
+                        <Ionicons name="star" size={12} color={COLORS.WARNING[500]} />
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        styles.onlineDot,
+                        { backgroundColor: isOnline ? COLORS.SUCCESS[500] : COLORS.SECONDARY[300] },
+                      ]}
+                    />
+                  </View>
+
+                  {/* Content */}
+                  <View style={styles.memberContent}>
+                    {/* Top Row: Name + You badge */}
+                    <View style={styles.memberTopRow}>
+                      <Text style={styles.memberName} numberOfLines={1}>
+                        {member.user_name}
+                      </Text>
+                      {isCurrentUser && (
+                        <View style={styles.youBadge}>
+                          <Text style={styles.youBadgeText}>You</Text>
                         </View>
                       )}
-                      <View
-                        style={[
-                          styles.onlineDot,
-                          { backgroundColor: isOnline ? COLORS.SUCCESS[500] : COLORS.SECONDARY[300] },
-                        ]}
-                      />
                     </View>
 
-                    {/* Name and Fitness Level */}
-                    <View style={styles.memberInfo}>
-                      <View style={styles.memberNameRow}>
-                        <Text style={styles.memberName} numberOfLines={1}>
-                          {member.user_name}
-                        </Text>
-                        {isCurrentUser && (
-                          <Text style={styles.youBadge}>(You)</Text>
-                        )}
-                        {member.user_role === 'mentor' && (
-                          <View style={styles.mentorBadge}>
-                            <Ionicons name="school" size={10} color="#FFFFFF" />
-                            <Text style={styles.mentorBadgeText}>Mentor</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Fitness Level */}
+                    {/* Bottom Row: Badges */}
+                    <View style={styles.memberBadgeRow}>
+                      {/* Fitness Level Badge */}
                       {member.fitness_level && (
-                        <Text style={styles.fitnessLevel}>
-                          {member.fitness_level.charAt(0).toUpperCase() + member.fitness_level.slice(1)}
-                        </Text>
+                        <View style={[styles.fitnessLevelBadge, { backgroundColor: fitnessColors.bg }]}>
+                          <Text style={[styles.fitnessLevelText, { color: fitnessColors.text }]}>
+                            {member.fitness_level.charAt(0).toUpperCase() + member.fitness_level.slice(1)}
+                          </Text>
+                        </View>
+                      )}
+                      {/* Mentor Badge */}
+                      {member.user_role === 'mentor' && (
+                        <View style={styles.mentorBadge}>
+                          <Ionicons name="school" size={10} color="#FFFFFF" />
+                          <Text style={styles.mentorBadgeText}>Mentor</Text>
+                        </View>
                       )}
                     </View>
                   </View>
 
-                  {/* Right: Status Badge + Kick Button */}
-                  <View style={styles.memberRight}>
-                    <View
+                  {/* Status Badge */}
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      member.status === 'ready'
+                        ? styles.statusBadgeReady
+                        : styles.statusBadgeWaiting,
+                    ]}
+                  >
+                    <Ionicons
+                      name={member.status === 'ready' ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={14}
+                      color={member.status === 'ready' ? COLORS.SUCCESS[700] : COLORS.WARNING[700]}
+                    />
+                    <Text
                       style={[
-                        styles.statusBadge,
+                        styles.statusText,
                         member.status === 'ready'
-                          ? styles.statusBadgeReady
-                          : styles.statusBadgeWaiting,
+                          ? styles.statusTextReady
+                          : styles.statusTextWaiting,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.statusText,
-                          member.status === 'ready'
-                            ? styles.statusTextReady
-                            : styles.statusTextWaiting,
-                        ]}
-                      >
-                        {member.status === 'ready' ? '✓ Ready' : 'Not Ready'}
-                      </Text>
-                    </View>
+                      {member.status === 'ready' ? 'Ready' : 'Waiting'}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -2201,29 +2222,23 @@ const styles = StyleSheet.create({
   memberCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: COLORS.SECONDARY[200],
+    borderColor: COLORS.SECONDARY[100],
     shadowColor: COLORS.SECONDARY[900],
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
     elevation: 2,
-  },
-  memberLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
     gap: 12,
   },
   memberAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.PRIMARY[50],
     alignItems: 'center',
     justifyContent: 'center',
@@ -2231,11 +2246,11 @@ const styles = StyleSheet.create({
   },
   crownBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: -3,
+    right: -3,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: COLORS.WARNING[100],
     alignItems: 'center',
     justifyContent: 'center',
@@ -2246,61 +2261,74 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: COLORS.NEUTRAL.WHITE,
   },
-  memberInfo: {
+  memberContent: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
-  memberNameRow: {
+  memberTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   memberName: {
     fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.BOLD,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
+    flexShrink: 1,
   },
   youBadge: {
-    fontSize: FONT_SIZES.XS,
+    backgroundColor: COLORS.PRIMARY[100],
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  youBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[700],
+  },
+  memberBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  fitnessLevelBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  fitnessLevelText: {
+    fontSize: 11,
     fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[600],
   },
   mentorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.SUCCESS[600],
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    gap: 3,
-    marginLeft: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
   },
   mentorBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: FONTS.SEMIBOLD,
     color: '#FFFFFF',
   },
-  fitnessLevel: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-  },
-  memberRight: {
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
   },
   statusBadgeReady: {
     backgroundColor: COLORS.SUCCESS[100],
@@ -2309,7 +2337,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.WARNING[100],
   },
   statusText: {
-    fontSize: FONT_SIZES.XS,
+    fontSize: 11,
     fontFamily: FONTS.BOLD,
   },
   statusTextReady: {

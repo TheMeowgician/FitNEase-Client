@@ -889,9 +889,14 @@ export class AuthService {
   }
 
   // Get user's fitness assessment data (including personalization)
-  public async getFitnessAssessment(): Promise<any> {
+  public async getFitnessAssessment(userId?: number | string): Promise<any> {
     try {
-      const response = await apiClient.get('auth', '/api/fitness-assessments');
+      // Build the endpoint - filter by user_id if provided
+      const endpoint = userId
+        ? `/api/fitness-assessments?user_id=${userId}`
+        : '/api/fitness-assessments';
+
+      const response = await apiClient.get('auth', endpoint);
       // API returns paginated data, we want the data array
       return response.data?.data || response.data;
     } catch (error) {
