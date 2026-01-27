@@ -1375,6 +1375,11 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     color: '#111827',
   },
+  statDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: COLORS.NEUTRAL[200],
+  },
   workoutSection: {
     marginHorizontal: 24,
     marginBottom: 24,
@@ -1483,21 +1488,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.NEUTRAL[100],
     marginBottom: 16,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statValue: {
-    fontSize: 14,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.NEUTRAL[700],
-  },
-  statDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: COLORS.NEUTRAL[200],
   },
   // Start Button - Consistent with Workouts page
   startWorkoutButton: {
@@ -1991,11 +1981,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
-  },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: COLORS.SECONDARY[200],
   },
   viewDetailsButton: {
     flexDirection: 'row',
