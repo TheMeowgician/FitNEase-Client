@@ -115,9 +115,8 @@ export default function WorkoutsScreen() {
     }
 
     const fitnessLevel = user?.fitnessLevel || 'beginner';
-    // Standard Tabata workout: 4 exercises (4 min each = 16 min total)
-    // Fitness level affects DIFFICULTY of exercises, not the count
-    const exerciseCount = 4;
+    // Exercise count based on fitness level (consistent with ML service and getWorkoutStats)
+    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
     const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
 
     const totalDuration = workoutExercises.length * 4;

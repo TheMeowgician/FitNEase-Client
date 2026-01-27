@@ -373,9 +373,8 @@ export default function HomeScreen() {
       return;
     }
 
-    // Standard Tabata workout: 4 exercises (4 min each = 16 min total)
-    // Fitness level affects DIFFICULTY of exercises, not the count
-    const exerciseCount = 4;
+    // Exercise count based on fitness level (consistent with ML service)
+    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
     const exercises = recommendations.slice(0, Math.min(exerciseCount, recommendations.length));
 
     // Calculate total duration and calories
@@ -796,8 +795,9 @@ export default function HomeScreen() {
                   <View style={styles.workoutCardTitleContainer}>
                     <Text style={styles.workoutCardTitle}>Tabata Workout</Text>
                     <Text style={styles.workoutCardSubtitle}>
-                      4 exercises • {(() => {
-                        const workoutExercises = recommendations?.slice(0, 4) || [];
+                      {fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6} exercises • {(() => {
+                        const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+                        const workoutExercises = recommendations?.slice(0, exerciseCount) || [];
                         const muscleGroups = new Set<string>();
                         workoutExercises.forEach(ex => {
                           if (ex.target_muscle_group) {
@@ -820,7 +820,7 @@ export default function HomeScreen() {
                 {/* Exercise Preview - Consistent with Workouts page */}
                 <View style={styles.exercisePreview}>
                   {(() => {
-                    const exerciseCount = 4; // Standard Tabata: 4 exercises
+                    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
                     const previewCount = Math.min(3, exerciseCount); // Show max 3 in preview
                     const remaining = exerciseCount - previewCount;
 
@@ -857,19 +857,19 @@ export default function HomeScreen() {
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
                     <Ionicons name="time-outline" size={18} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.statValue}>16 min</Text>
+                    <Text style={styles.statValue}>{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <Ionicons name="flame-outline" size={18} color={COLORS.WARNING[500]} />
                     <Text style={styles.statValue}>
-                      ~{recommendations?.slice(0, 4).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0)} cal
+                      ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0)} cal
                     </Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <Ionicons name="fitness-outline" size={18} color={COLORS.SUCCESS[500]} />
-                    <Text style={styles.statValue}>4 sets</Text>
+                    <Text style={styles.statValue}>{fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6} sets</Text>
                   </View>
                 </View>
 
