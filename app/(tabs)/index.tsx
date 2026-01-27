@@ -379,7 +379,8 @@ export default function HomeScreen() {
 
     // Calculate total duration and calories
     const totalDuration = exercises.length * 4; // 4 minutes per exercise (Tabata protocol)
-    const totalCalories = exercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0);
+    // Default: 28 calories per exercise (4 min Tabata * 7 cal/min average)
+    const totalCalories = exercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0);
 
     const workoutSet = {
       exercises,
@@ -863,7 +864,7 @@ export default function HomeScreen() {
                   <View style={styles.statItem}>
                     <Ionicons name="flame-outline" size={18} color={COLORS.WARNING[500]} />
                     <Text style={styles.statValue}>
-                      ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0)} cal
+                      ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0)} cal
                     </Text>
                   </View>
                   <View style={styles.statDivider} />

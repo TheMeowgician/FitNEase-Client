@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   exerciseDetailsLine: {
-    fontSize: 14,
+    fontSize: 11,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
     textTransform: 'capitalize',
