@@ -61,6 +61,14 @@ export default function GroupDetailsScreen() {
   // Settings modal state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // Edit group states
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [showEditDescModal, setShowEditDescModal] = useState(false);
+  const [showRolesModal, setShowRolesModal] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [editDescValue, setEditDescValue] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
   // Join requests modal state
   const [showJoinRequestsModal, setShowJoinRequestsModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -304,6 +312,101 @@ export default function GroupDetailsScreen() {
 
   const handleManageGroup = () => {
     setShowSettingsModal(true);
+  };
+
+  const handleEditGroupName = () => {
+    setEditNameValue(group?.name || '');
+    setShowEditNameModal(true);
+    setShowSettingsModal(false);
+  };
+
+  const handleSaveGroupName = async () => {
+    if (!group || !editNameValue.trim()) return;
+
+    setIsUpdating(true);
+    try {
+      await socialService.updateGroup(group.id, { name: editNameValue.trim() });
+      alert.success('Success', 'Group name updated successfully');
+      setShowEditNameModal(false);
+      loadGroupDetails(); // Refresh group data
+    } catch (error: any) {
+      alert.error('Error', error.message || 'Failed to update group name');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleEditDescription = () => {
+    setEditDescValue(group?.description || '');
+    setShowEditDescModal(true);
+    setShowSettingsModal(false);
+  };
+
+  const handleSaveDescription = async () => {
+    if (!group) return;
+
+    setIsUpdating(true);
+    try {
+      await socialService.updateGroup(group.id, { description: editDescValue.trim() || undefined });
+      alert.success('Success', 'Description updated successfully');
+      setShowEditDescModal(false);
+      loadGroupDetails(); // Refresh group data
+    } catch (error: any) {
+      alert.error('Error', error.message || 'Failed to update description');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleTogglePrivacy = async () => {
+    if (!group) return;
+
+    const newType = group.type === 'public' ? 'private' : 'public';
+
+    alert.confirm(
+      'Change Privacy',
+      `Are you sure you want to make this group ${newType}?`,
+      async () => {
+        setIsUpdating(true);
+        try {
+          await socialService.updateGroup(group.id, { type: newType });
+          alert.success('Success', `Group is now ${newType}`);
+          setShowSettingsModal(false);
+          loadGroupDetails(); // Refresh group data
+        } catch (error: any) {
+          alert.error('Error', error.message || 'Failed to update privacy');
+        } finally {
+          setIsUpdating(false);
+        }
+      }
+    );
+  };
+
+  const handleManageRoles = () => {
+    setShowRolesModal(true);
+    setShowSettingsModal(false);
+  };
+
+  const handleChangeRole = async (member: GroupMember, newRole: 'moderator' | 'member') => {
+    if (!group) return;
+
+    const action = newRole === 'moderator' ? 'promote' : 'demote';
+    alert.confirm(
+      `${action.charAt(0).toUpperCase() + action.slice(1)} Member`,
+      `Are you sure you want to ${action} ${member.username} to ${newRole}?`,
+      async () => {
+        setIsUpdating(true);
+        try {
+          await socialService.updateMemberRole(group.id, member.userId.toString(), newRole);
+          alert.success('Success', `${member.username} is now a ${newRole}`);
+          loadGroupDetails(); // Refresh to get updated roles
+        } catch (error: any) {
+          alert.error('Error', error.message || 'Failed to update role');
+        } finally {
+          setIsUpdating(false);
+        }
+      }
+    );
   };
 
   const handleKickMember = (member: GroupMember) => {
@@ -901,7 +1004,7 @@ export default function GroupDetailsScreen() {
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Group Information</Text>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Edit group name feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleEditGroupName}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="create-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Edit Group Name</Text>
@@ -909,7 +1012,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Edit description feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleEditDescription}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="document-text-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Edit Description</Text>
@@ -917,12 +1020,12 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Change privacy feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleTogglePrivacy}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name={group?.type === 'public' ? 'globe' : 'lock-closed'} size={22} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.settingsOptionText}>Privacy Settings</Text>
+                    <Text style={styles.settingsOptionText}>Privacy: {group?.type === 'public' ? 'Public' : 'Private'}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                  <Ionicons name="swap-horizontal" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
               </View>
 
@@ -959,7 +1062,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Manage roles feature coming soon')}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleManageRoles}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="shield-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Manage Member Roles</Text>
@@ -1017,6 +1120,161 @@ export default function GroupDetailsScreen() {
               </View>
             </ScrollView>
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Edit Group Name Modal */}
+      <Modal
+        visible={showEditNameModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowEditNameModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalContent}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Edit Group Name</Text>
+              <TouchableOpacity onPress={() => setShowEditNameModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.editInput}
+              value={editNameValue}
+              onChangeText={setEditNameValue}
+              placeholder="Enter group name"
+              placeholderTextColor={COLORS.SECONDARY[400]}
+              maxLength={100}
+              autoFocus
+            />
+            <Text style={styles.charCount}>{editNameValue.length}/100</Text>
+            <View style={styles.editModalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowEditNameModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, (!editNameValue.trim() || isUpdating) && styles.saveButtonDisabled]}
+                onPress={handleSaveGroupName}
+                disabled={!editNameValue.trim() || isUpdating}
+              >
+                {isUpdating ? (
+                  <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Description Modal */}
+      <Modal
+        visible={showEditDescModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowEditDescModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalContent}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Edit Description</Text>
+              <TouchableOpacity onPress={() => setShowEditDescModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.editInput, styles.editTextArea]}
+              value={editDescValue}
+              onChangeText={setEditDescValue}
+              placeholder="Enter group description (optional)"
+              placeholderTextColor={COLORS.SECONDARY[400]}
+              maxLength={500}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <Text style={styles.charCount}>{editDescValue.length}/500</Text>
+            <View style={styles.editModalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowEditDescModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, isUpdating && styles.saveButtonDisabled]}
+                onPress={handleSaveDescription}
+                disabled={isUpdating}
+              >
+                {isUpdating ? (
+                  <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Manage Roles Modal */}
+      <Modal
+        visible={showRolesModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowRolesModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.editModalContent, { maxHeight: '70%' }]}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Manage Roles</Text>
+              <TouchableOpacity onPress={() => setShowRolesModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              {members.filter(m => m.role !== 'owner').map((member) => (
+                <View key={member.id} style={styles.roleMemberItem}>
+                  <View style={styles.roleMemberInfo}>
+                    <View style={styles.roleMemberAvatar}>
+                      <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
+                    </View>
+                    <View style={styles.roleMemberDetails}>
+                      <Text style={styles.roleMemberName}>{member.username}</Text>
+                      <Text style={styles.roleMemberRole}>
+                        {member.role === 'moderator' ? 'Moderator' : 'Member'}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleToggleButton,
+                      member.role === 'moderator' ? styles.demoteButton : styles.promoteButton
+                    ]}
+                    onPress={() => handleChangeRole(member, member.role === 'moderator' ? 'member' : 'moderator')}
+                    disabled={isUpdating}
+                  >
+                    <Ionicons
+                      name={member.role === 'moderator' ? 'arrow-down' : 'arrow-up'}
+                      size={16}
+                      color={COLORS.NEUTRAL.WHITE}
+                    />
+                    <Text style={styles.roleToggleText}>
+                      {member.role === 'moderator' ? 'Demote' : 'Promote'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {members.filter(m => m.role !== 'owner').length === 0 && (
+                <Text style={styles.noMembersText}>No members to manage</Text>
+              )}
+            </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -1603,6 +1861,141 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.SECONDARY[200],
     paddingTop: 16,
+  },
+  // Edit Modal Styles
+  editModalContent: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  editModalTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[300],
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[900],
+    backgroundColor: COLORS.SECONDARY[50],
+  },
+  editTextArea: {
+    height: 120,
+    paddingTop: 14,
+  },
+  charCount: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    textAlign: 'right',
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  editModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.SECONDARY[100],
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.PRIMARY[600],
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    backgroundColor: COLORS.SECONDARY[300],
+  },
+  saveButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  // Role Management Styles
+  roleMemberItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[100],
+  },
+  roleMemberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  roleMemberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.PRIMARY[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleMemberDetails: {
+    flex: 1,
+  },
+  roleMemberName: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  roleMemberRole: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+  },
+  roleToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  promoteButton: {
+    backgroundColor: COLORS.SUCCESS[600],
+  },
+  demoteButton: {
+    backgroundColor: COLORS.WARNING[600],
+  },
+  roleToggleText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  noMembersText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   activeLobbyBanner: {
     flexDirection: 'row',
