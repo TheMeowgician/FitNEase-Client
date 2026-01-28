@@ -234,7 +234,6 @@ export class CommsService {
       throw new Error((error as any).message || 'Failed to send invitation accepted notification');
     }
   }
-}
 
   /**
    * Register device token for push notifications
