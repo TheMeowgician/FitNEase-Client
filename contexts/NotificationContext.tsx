@@ -94,17 +94,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
    */
   const initializePushNotifications = async () => {
     try {
-      console.log('[NOTIFICATION CONTEXT] Initializing push notifications...');
-
       // Initialize the push notification service (sets up listeners)
       await pushNotificationService.initialize();
 
-      // Register the device token with the backend
+      // Register the device token with the backend (silent fail if no Firebase)
       await registerPushToken();
-
-      console.log('[NOTIFICATION CONTEXT] Push notifications initialized');
     } catch (error) {
-      console.error('[NOTIFICATION CONTEXT] Failed to initialize push notifications:', error);
+      // Silent fail - push notifications are optional
     }
   };
 
@@ -121,7 +117,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const token = await pushNotificationService.getExpoPushToken();
 
       if (!token) {
-        console.warn('[NOTIFICATION CONTEXT] Could not get push token');
+        // Silent fail - push tokens require Firebase/FCM setup
+        // Local notifications and WebSocket still work without it
         return;
       }
 

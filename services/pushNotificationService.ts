@@ -48,19 +48,20 @@ class PushNotificationService {
       // Setup listeners for when notifications are received or tapped
       this.setupNotificationListeners();
       this.isInitialized = true;
-      console.log('[PUSH] Push notification service initialized');
+      // Silent initialization - no log needed
     } catch (error) {
-      console.error('[PUSH] Failed to initialize push notification service:', error);
+      // Silent fail - push notifications are optional
     }
   }
 
   /**
    * Get Expo push token for this device
    * Returns null if push notifications are not available
+   * Note: This requires Firebase/FCM setup for Android. Without it, returns null silently.
    */
   async getExpoPushToken(): Promise<string | null> {
     if (!Notifications) {
-      console.warn('[PUSH] expo-notifications not available');
+      // Silent fail - expo-notifications not available
       return null;
     }
 
@@ -75,7 +76,7 @@ class PushNotificationService {
       }
 
       if (finalStatus !== 'granted') {
-        console.warn('[PUSH] Push notification permission denied');
+        // Silent fail - permission denied
         return null;
       }
 
@@ -83,7 +84,7 @@ class PushNotificationService {
       const projectId = Constants.expoConfig?.extra?.eas?.projectId;
 
       if (!projectId) {
-        console.error('[PUSH] No project ID found in app config');
+        // Silent fail - no project ID
         return null;
       }
 
@@ -94,8 +95,15 @@ class PushNotificationService {
 
       console.log('[PUSH] Expo push token obtained:', tokenData.data);
       return tokenData.data;
-    } catch (error) {
-      console.error('[PUSH] Failed to get Expo push token:', error);
+    } catch (error: any) {
+      // Silent fail for Firebase/FCM errors - this is expected without Firebase setup
+      // Push tokens are optional - local notifications and WebSocket still work
+      if (error?.message?.includes('Firebase') || error?.message?.includes('FCM')) {
+        // Expected error without Firebase - don't log
+        return null;
+      }
+      // Log other unexpected errors
+      console.warn('[PUSH] Could not get push token:', error?.message);
       return null;
     }
   }
@@ -109,21 +117,17 @@ class PushNotificationService {
     // Listen for notifications received while app is foregrounded
     this.notificationListener = Notifications.addNotificationReceivedListener(
       (notification: any) => {
-        console.log('[PUSH] Notification received in foreground:', notification);
-        // The notification will be displayed by the notification handler
-        // No additional action needed here
+        // Notification received in foreground - will be displayed by handler
       }
     );
 
     // Listen for notification responses (user tapped notification)
     this.responseListener = Notifications.addNotificationResponseReceivedListener(
       (response: any) => {
-        console.log('[PUSH] Notification response received:', response);
+        console.log('[PUSH] Notification tapped:', response?.notification?.request?.content?.title);
         this.handleNotificationResponse(response);
       }
     );
-
-    console.log('[PUSH] Notification listeners setup complete');
   }
 
   /**
@@ -248,7 +252,6 @@ class PushNotificationService {
     }
 
     this.isInitialized = false;
-    console.log('[PUSH] Push notification service cleaned up');
   }
 
   /**
@@ -287,9 +290,8 @@ class PushNotificationService {
 
     try {
       await Notifications.setBadgeCountAsync(count);
-      console.log('[PUSH] Badge count set to:', count);
     } catch (error) {
-      console.error('[PUSH] Failed to set badge count:', error);
+      // Silent fail
     }
   }
 
@@ -301,9 +303,8 @@ class PushNotificationService {
 
     try {
       await Notifications.dismissAllNotificationsAsync();
-      console.log('[PUSH] All notifications cleared');
     } catch (error) {
-      console.error('[PUSH] Failed to clear notifications:', error);
+      // Silent fail
     }
   }
 }
