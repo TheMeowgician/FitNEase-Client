@@ -107,15 +107,15 @@ class WorkoutNotificationScheduler {
         return;
       }
 
-      // Map day names to weekday numbers (1 = Monday, 7 = Sunday)
+      // Map day names to weekday numbers (1 = Sunday, 7 = Saturday for new expo-notifications API)
       const dayMap: { [key: string]: number } = {
-        Monday: 1,
-        Tuesday: 2,
-        Wednesday: 3,
-        Thursday: 4,
-        Friday: 5,
-        Saturday: 6,
-        Sunday: 7,
+        Sunday: 1,
+        Monday: 2,
+        Tuesday: 3,
+        Wednesday: 4,
+        Thursday: 5,
+        Friday: 6,
+        Saturday: 7,
       };
 
       const [hour, minute] = settings.morningReminderTime.split(':').map(Number);
@@ -124,7 +124,7 @@ class WorkoutNotificationScheduler {
         const weekday = dayMap[day];
         if (!weekday) continue;
 
-        // Schedule morning reminder
+        // Schedule morning reminder with new trigger format
         await Notifications.scheduleNotificationAsync({
           content: {
             title: 'Workout Day!',
@@ -133,10 +133,10 @@ class WorkoutNotificationScheduler {
             sound: true,
           },
           trigger: {
+            type: 'weekly',
             weekday,
             hour,
             minute,
-            repeats: true,
           },
         });
 
@@ -187,6 +187,7 @@ class WorkoutNotificationScheduler {
           sound: true,
         },
         trigger: {
+          type: 'date',
           date: reminderTime,
         },
       });
