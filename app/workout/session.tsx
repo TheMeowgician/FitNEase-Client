@@ -600,12 +600,17 @@ export default function WorkoutSessionScreen() {
       // For group workouts, only initiator can pause - skip pause for non-initiators
       if (type === 'group_tabata' && !isInitiator) {
         // Non-initiator trying to exit - show confirm dialog without pausing
+        const completedCount = sessionState.currentExercise;
+        const message = completedCount > 0
+          ? `You've completed ${completedCount} exercise${completedCount > 1 ? 's' : ''}. Would you like to save your progress and rate the completed exercises?`
+          : 'Are you sure you want to leave this workout? You will exit the session.';
+
         alert.confirm(
           'Leave Workout',
-          'Are you sure you want to leave this workout? You will exit the session.',
-          exitSession,
+          message,
+          completedCount > 0 ? exitAndRate : exitSession,
           undefined,
-          'Leave',
+          completedCount > 0 ? 'Save & Rate' : 'Leave',
           'Cancel'
         );
         return true;
@@ -613,12 +618,19 @@ export default function WorkoutSessionScreen() {
 
       // Solo workout or group initiator - pause then show exit dialog
       pauseSession();
+
+      // Calculate completed exercises for the message
+      const completedCount = sessionState.currentExercise;
+      const message = completedCount > 0
+        ? `You've completed ${completedCount} exercise${completedCount > 1 ? 's' : ''}. Would you like to save your progress and rate the completed exercises?`
+        : 'Are you sure you want to exit this workout? Your progress will not be saved.';
+
       alert.confirm(
         'Exit Workout',
-        'Are you sure you want to exit this workout? Your progress will be lost.',
-        exitSession,
+        message,
+        completedCount > 0 ? exitAndRate : exitSession,
         resumeSession,
-        'Exit',
+        completedCount > 0 ? 'Save & Rate' : 'Exit',
         'Continue'
       );
       return true;
@@ -1056,6 +1068,168 @@ export default function WorkoutSessionScreen() {
       router.replace(`/groups/${groupId}`);
     } else {
       router.back();
+    }
+  };
+
+  /**
+   * Exit session early but save progress and navigate to rating page
+   * for completed exercises only (exercises that had all 8 sets done)
+   *
+   * IMPORTANT FOR ML: Partial ratings still feed into collaborative filtering!
+   */
+  const exitAndRate = async () => {
+    console.log('📊 [EXIT & RATE] Starting exit with rating flow...');
+
+    try {
+      if (!sessionStartTime || !user) {
+        console.error('❌ [EXIT & RATE] Missing session start time or user');
+        router.back();
+        return;
+      }
+
+      // Use session_id for new Tabata sessions, or workoutId for old format
+      const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
+
+      // Calculate ACTUAL duration and calories for partial session
+      const actualDurationSeconds = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
+      const actualDurationMinutes = Math.max(1, Math.round(actualDurationSeconds / 60));
+      const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+      const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+      const totalWorkoutSeconds = totalWorkoutMinutes * 60;
+      const calculatedCalories = (actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories;
+      const accurateCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
+
+      // Calculate completion percentage based on exercises and sets completed
+      const totalExercises = tabataSession ? tabataSession.exercises.length : (workout?.rounds.length || 1);
+      const totalSets = totalExercises * 8;
+      const completedSets = sessionState.currentExercise * 8 + sessionState.currentSet;
+      const actualCompletionPercentage = Math.round((completedSets / totalSets) * 100);
+
+      // IMPORTANT: Only count fully completed exercises (all 8 sets done)
+      const completedExerciseCount = sessionState.currentExercise;
+
+      console.log('📊 [EXIT & RATE] Partial session stats:', {
+        actualDurationSeconds,
+        actualDurationMinutes,
+        accurateCaloriesBurned,
+        currentExercise: sessionState.currentExercise,
+        currentSet: sessionState.currentSet,
+        completedExerciseCount,
+        totalExercises,
+        completionPercentage: actualCompletionPercentage
+      });
+
+      // STEP 1: Fetch BEFORE stats for progress modal
+      console.log('📊 [EXIT & RATE] Fetching progression data BEFORE saving...');
+      const [beforeProgress, beforeHistory] = await Promise.all([
+        progressionService.getProgress(parseInt(user.id)).catch(() => null),
+        trackingService.getWorkoutHistory(user.id).catch(() => []),
+      ]);
+
+      const beforeStats = {
+        workouts: beforeHistory.length,
+        calories: beforeHistory.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
+        minutes: beforeHistory.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
+        activeDays: new Set(beforeHistory.map((w: any) => new Date(w.date).toDateString())).size,
+        currentStreak: 0,
+        scoreProgress: beforeProgress?.progress_percentage || 0,
+        nextLevel: progressionService.getFitnessLevelName(beforeProgress?.next_level || 'intermediate'),
+      };
+
+      // STEP 2: Save partial session data
+      console.log('💾 [EXIT & RATE] Saving partial workout session...');
+      const savedSession = await trackingService.createWorkoutSession({
+        workoutId: sessionId,
+        userId: Number(user.id),
+        sessionType: type === 'group_tabata' ? 'group' : 'individual',
+        groupId: groupId ? Number(groupId) : null,
+        startTime: sessionStartTime,
+        endTime: new Date(),
+        duration: actualDurationMinutes,
+        caloriesBurned: accurateCaloriesBurned,
+        completed: false, // Partial completion
+        completionPercentage: actualCompletionPercentage,
+        notes: `Partial workout - ${completedExerciseCount}/${totalExercises} exercises completed (${actualCompletionPercentage}% complete, ${actualDurationMinutes}min)`
+      });
+
+      const databaseSessionId = savedSession.session_id;
+      console.log('✅ [EXIT & RATE] Partial session saved:', { databaseSessionId });
+
+      // STEP 3: Fetch AFTER stats for progress modal
+      console.log('📊 [EXIT & RATE] Fetching progression data AFTER saving...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const [afterProgress, afterHistory] = await Promise.all([
+        progressionService.getProgress(parseInt(user.id)).catch(() => null),
+        trackingService.getWorkoutHistory(user.id).catch(() => []),
+      ]);
+
+      const afterStats = {
+        workouts: afterHistory.length,
+        calories: afterHistory.reduce((sum: number, w: any) => sum + (w.caloriesBurned || 0), 0),
+        minutes: afterHistory.reduce((sum: number, w: any) => sum + (w.duration || 0), 0),
+        activeDays: new Set(afterHistory.map((w: any) => new Date(w.date).toDateString())).size,
+        currentStreak: 0,
+        scoreProgress: afterProgress?.progress_percentage || 0,
+        nextLevel: progressionService.getFitnessLevelName(afterProgress?.next_level || 'intermediate'),
+      };
+
+      // STEP 4: Prepare ONLY completed exercises for rating
+      // An exercise is "completed" if currentExercise index is greater than that exercise's index
+      // This means all 8 sets of that exercise were finished
+      const completedExercises = tabataSession
+        ? tabataSession.exercises.slice(0, completedExerciseCount).map((ex: any) => ({
+            exercise_id: ex.exercise_id,
+            exercise_name: ex.exercise_name,
+            target_muscle_group: ex.target_muscle_group,
+            completed: true,
+          }))
+        : [];
+
+      console.log('📝 [EXIT & RATE] Completed exercises to rate:', completedExercises.length);
+
+      // For group workouts, clean up lobby and subscriptions
+      if (type === 'group_tabata' && tabataSession && user) {
+        try {
+          console.log('👋 [EXIT & RATE] Leaving lobby and cleaning up...');
+          await socialService.leaveLobbyV2(tabataSession.session_id);
+          await clearLobbyAndStorage();
+          console.log('✅ [EXIT & RATE] Cleanup completed');
+        } catch (error) {
+          console.error('❌ [EXIT & RATE] Failed to leave lobby:', error);
+        }
+      }
+
+      // STEP 5: Navigate to exercise rating screen with completed exercises
+      console.log('🎯 [EXIT & RATE] Navigating to exercise rating...');
+      router.push({
+        pathname: '/workout/exercise-rating',
+        params: {
+          sessionId: String(databaseSessionId),
+          workoutId: workoutId ? String(workoutId) : '',
+          exercises: JSON.stringify(completedExercises),
+          beforeStats: JSON.stringify(beforeStats),
+          afterStats: JSON.stringify(afterStats),
+          workoutData: JSON.stringify({
+            duration: actualDurationMinutes,
+            calories: accurateCaloriesBurned,
+            isPartial: true, // Flag for UI to know this is partial
+          }),
+        },
+      });
+
+      console.log('✅ [EXIT & RATE] Exit with rating flow completed');
+
+    } catch (error) {
+      console.error('❌ [EXIT & RATE] Error:', error);
+      alert.error('Error', 'Failed to save workout progress. Please try again.');
+
+      // On error, just go back
+      if (type === 'group_tabata' && groupId) {
+        router.replace(`/groups/${groupId}`);
+      } else {
+        router.back();
+      }
     }
   };
 
