@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { RoleCard, RoleData } from '../../components/auth/RoleCard';
 import { Button } from '../../components/ui/Button';
@@ -19,8 +20,8 @@ import { rolesData } from '../../constants/rolesData';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.85;
+const { width, height } = Dimensions.get('window');
+const CARD_WIDTH = width * 0.88;
 
 export default function RoleSelection() {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(rolesData[0].id);
@@ -29,7 +30,6 @@ export default function RoleSelection() {
 
   const selectedRole = rolesData.find(role => role.id === selectedRoleId);
 
-  // Auto-select the first role on mount
   useEffect(() => {
     if (rolesData.length > 0 && !selectedRoleId) {
       setSelectedRoleId(rolesData[0].id);
@@ -39,7 +39,6 @@ export default function RoleSelection() {
   const handleCardPress = (role: RoleData, index: number) => {
     setSelectedRoleId(role.id);
     setCurrentIndex(index);
-    // Scroll to the selected card
     scrollViewRef.current?.scrollTo({
       x: index * width,
       animated: true,
@@ -51,11 +50,9 @@ export default function RoleSelection() {
 
     console.log('Selected role:', selectedRole);
 
-    // Navigate to the appropriate registration page based on role
     if (selectedRole.id === 'mentor') {
       router.push('/(auth)/register-mentor');
     } else {
-      // Members go to regular registration (always set to beginner)
       router.push({
         pathname: '/(auth)/register',
         params: { selectedRole: selectedRole.id }
@@ -67,47 +64,31 @@ export default function RoleSelection() {
     router.push('/(auth)/login');
   };
 
-  // Get status bar height for Android
-  const getStatusBarHeight = () => {
-    if (Platform.OS === 'android') {
-      return StatusBar.currentHeight || 24;
-    }
-    return 0;
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.NEUTRAL.WHITE}
-        translucent={false}
-      />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-      {/* Header */}
-      <View style={[
-        styles.header,
-        { paddingTop: Platform.OS === 'android' ? getStatusBarHeight() + 8 : 8 }
-      ]}>
-        <View style={styles.headerContent}>
-          <Button
-            title=""
-            onPress={handleBackPress}
-            variant="ghost"
-            size="small"
-            icon={<Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />}
-            style={styles.backButton}
-          />
+      {/* Background Decoration */}
+      <View style={styles.backgroundDecoration}>
+        <View style={[styles.decorCircle, styles.decorCircle1]} />
+        <View style={[styles.decorCircle, styles.decorCircle2]} />
+      </View>
+
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
+          </TouchableOpacity>
+
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Choose Your Role</Text>
             <Text style={styles.headerSubtitle}>
-              Select how you'd like to use FitNEase for Tabata training
+              How would you like to use FitNEase?
             </Text>
           </View>
         </View>
-      </View>
 
-      {/* Main Content */}
-      <View style={styles.mainContent}>
         {/* Page Indicators */}
         <View style={styles.indicatorsContainer}>
           {rolesData.map((role, index) => (
@@ -115,15 +96,18 @@ export default function RoleSelection() {
               key={index}
               style={[
                 styles.indicator,
-                {
-                  backgroundColor: index === currentIndex
-                    ? COLORS.PRIMARY[600]
-                    : COLORS.SECONDARY[300],
-                },
+                index === currentIndex && styles.indicatorActive,
               ]}
               onPress={() => handleCardPress(role, index)}
               activeOpacity={0.7}
-            />
+            >
+              <Text style={[
+                styles.indicatorText,
+                index === currentIndex && styles.indicatorTextActive,
+              ]}>
+                {role.title}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -140,7 +124,6 @@ export default function RoleSelection() {
             onMomentumScrollEnd={(event) => {
               const newIndex = Math.round(event.nativeEvent.contentOffset.x / width);
               setCurrentIndex(newIndex);
-              // Auto-select the card being viewed
               if (rolesData[newIndex]) {
                 setSelectedRoleId(rolesData[newIndex].id);
               }
@@ -159,84 +142,140 @@ export default function RoleSelection() {
             ))}
           </ScrollView>
         </View>
-      </View>
 
-      {/* Bottom Action */}
-      <View style={styles.bottomAction}>
-        <Button
-          title={`Continue as ${selectedRole?.title || 'User'}`}
-          onPress={handleContinue}
-          disabled={!selectedRole}
-          size="large"
-          style={{
-            ...styles.continueButton,
-            backgroundColor: selectedRole ? COLORS.PRIMARY[600] : COLORS.SECONDARY[300],
-            shadowColor: selectedRole ? COLORS.PRIMARY[600] : 'transparent',
-          }}
-        />
-      </View>
-    </SafeAreaView>
+        {/* Bottom Action */}
+        <View style={styles.bottomAction}>
+          <TouchableOpacity
+            style={[
+              styles.continueButton,
+              { backgroundColor: selectedRole?.primaryColor || COLORS.PRIMARY[600] }
+            ]}
+            onPress={handleContinue}
+            disabled={!selectedRole}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.continueButtonText}>
+              Continue as {selectedRole?.title || 'User'}
+            </Text>
+            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <Text style={styles.helperText}>
+            You can always change this later in settings
+          </Text>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    backgroundColor: '#F8FAFC',
+  },
+  backgroundDecoration: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  decorCircle: {
+    position: 'absolute',
+    borderRadius: 999,
+    opacity: 0.5,
+  },
+  decorCircle1: {
+    width: 300,
+    height: 300,
+    backgroundColor: COLORS.PRIMARY[100],
+    top: -100,
+    right: -100,
+  },
+  decorCircle2: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#D1FAE5',
+    bottom: 100,
+    left: -80,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
-    paddingHorizontal: 16,
-  },
-  headerContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
   backButton: {
     width: 40,
     height: 40,
-    marginRight: 12,
-    marginTop: 4,
+    borderRadius: 12,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   headerTextContainer: {
     flex: 1,
-    paddingRight: 52, // Account for back button width
+    paddingTop: 2,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
-    marginBottom: 8,
+    marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    lineHeight: 24,
-  },
-  mainContent: {
-    flex: 1,
-    paddingTop: 20,
+    color: COLORS.SECONDARY[500],
   },
   indicatorsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 20,
+    gap: 12,
   },
   indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  indicatorActive: {
+    backgroundColor: COLORS.PRIMARY[600],
+  },
+  indicatorText: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[600],
+  },
+  indicatorTextActive: {
+    color: COLORS.NEUTRAL.WHITE,
   },
   cardsScrollContainer: {
     flex: 1,
     justifyContent: 'center',
+    paddingVertical: 16,
   },
   scrollView: {
     flexGrow: 0,
-    height: 500, // Fixed height to center the scroll area
   },
   cardsContainer: {
     alignItems: 'center',
@@ -245,16 +284,37 @@ const styles = StyleSheet.create({
     width: width,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 8,
   },
   bottomAction: {
     paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 16,
+    paddingBottom: 20,
+    paddingTop: 8,
+    alignItems: 'center',
   },
   continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
+  },
+  continueButtonText: {
+    fontSize: 16,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#FFFFFF',
+  },
+  helperText: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginTop: 10,
   },
 });
