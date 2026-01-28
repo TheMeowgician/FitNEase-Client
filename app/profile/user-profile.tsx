@@ -58,17 +58,28 @@ export default function UserProfileScreen() {
       setIsLoading(true);
 
       // Load fitness level and body metrics from fitness assessment
+      // Look for initial_onboarding assessment which has fitness_level (weekly assessments don't)
       const fitnessAssessment = await authService.getFitnessAssessment();
       if (fitnessAssessment && fitnessAssessment.length > 0) {
-        const assessmentData = fitnessAssessment[0].assessment_data;
-        setFitnessLevel(assessmentData.fitness_level || 'beginner');
+        // Find the initial_onboarding assessment (has fitness_level)
+        const onboardingAssessment = fitnessAssessment.find(
+          (a: any) => a.assessment_type === 'initial_onboarding' && a.assessment_data?.fitness_level
+        );
 
-        // Extract height and weight from assessment data
-        if (assessmentData.height && assessmentData.weight) {
-          setBodyMetrics({
-            height: assessmentData.height,
-            weight: assessmentData.weight,
-          });
+        if (onboardingAssessment) {
+          const assessmentData = onboardingAssessment.assessment_data;
+          setFitnessLevel(assessmentData.fitness_level || 'beginner');
+
+          // Extract height and weight from assessment data
+          if (assessmentData.height && assessmentData.weight) {
+            setBodyMetrics({
+              height: assessmentData.height,
+              weight: assessmentData.weight,
+            });
+          }
+        } else {
+          // Fallback: use user profile fitness level
+          setFitnessLevel(user.fitnessLevel || 'beginner');
         }
       } else {
         setFitnessLevel(user.fitnessLevel || 'beginner');

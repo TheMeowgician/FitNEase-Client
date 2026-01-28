@@ -66,9 +66,11 @@ export default function ProgressionCard() {
     return null;
   }
 
-  const progressPercentage = progress.progress_percentage;
+  const progressPercentage = progress.progress_percentage || 0;
   const nextLevel = progressionService.getFitnessLevelName(progress.next_level);
   const currentLevel = user?.fitnessLevel || 'beginner';
+  const scoreProgress = progress.score_progress || 0;
+  const timeProgress = progress.time_progress || 0;
 
   return (
     <View style={styles.card}>
@@ -104,14 +106,14 @@ export default function ProgressionCard() {
       {/* Individual Progress Bars */}
       <View style={styles.miniProgressContainer}>
         <View style={styles.miniProgress}>
-          <Text style={styles.miniProgressLabel}>Score: {progress.score_progress}%</Text>
+          <Text style={styles.miniProgressLabel}>Score: {scoreProgress}%</Text>
           <View style={styles.miniProgressBar}>
             <View
               style={[
                 styles.miniProgressFill,
                 {
-                  width: `${progress.score_progress}%`,
-                  backgroundColor: progress.requirements.meets_score_requirement
+                  width: `${scoreProgress}%`,
+                  backgroundColor: progress.requirements?.meets_score_requirement
                     ? COLORS.SUCCESS[500]
                     : COLORS.WARNING[500],
                 },
@@ -120,14 +122,14 @@ export default function ProgressionCard() {
           </View>
         </View>
         <View style={styles.miniProgress}>
-          <Text style={styles.miniProgressLabel}>Time: {progress.time_progress}%</Text>
+          <Text style={styles.miniProgressLabel}>Time: {timeProgress}%</Text>
           <View style={styles.miniProgressBar}>
             <View
               style={[
                 styles.miniProgressFill,
                 {
-                  width: `${progress.time_progress}%`,
-                  backgroundColor: progress.requirements.meets_time_requirement
+                  width: `${timeProgress}%`,
+                  backgroundColor: progress.requirements?.meets_time_requirement
                     ? COLORS.SUCCESS[500]
                     : COLORS.WARNING[500],
                 },
@@ -148,11 +150,11 @@ export default function ProgressionCard() {
             <Text style={styles.sectionTitle}>Score Breakdown</Text>
             <View style={styles.scoreRow}>
               <Text style={styles.scoreLabel}>Current Score:</Text>
-              <Text style={styles.scoreValue}>{Math.round(progress.current_score)}</Text>
+              <Text style={styles.scoreValue}>{Math.round(progress.current_score || 0)}</Text>
             </View>
             <View style={styles.scoreRow}>
               <Text style={styles.scoreLabel}>Required Score:</Text>
-              <Text style={styles.scoreValue}>{progress.required_score}</Text>
+              <Text style={styles.scoreValue}>{progress.required_score || 0}</Text>
             </View>
             {progress.breakdown && (
               <>
@@ -160,32 +162,32 @@ export default function ProgressionCard() {
                 <View style={styles.scoreRow}>
                   <Text style={styles.breakdownLabel}>Workouts:</Text>
                   <Text style={styles.breakdownValue}>
-                    {Math.round(progress.breakdown.workouts_points)} pts
+                    {Math.round(progress.breakdown.workouts_points || 0)} pts
                   </Text>
                 </View>
                 <View style={styles.scoreRow}>
                   <Text style={styles.breakdownLabel}>Minutes:</Text>
                   <Text style={styles.breakdownValue}>
-                    {Math.round(progress.breakdown.minutes_points)} pts
+                    {Math.round(progress.breakdown.minutes_points || 0)} pts
                   </Text>
                 </View>
                 <View style={styles.scoreRow}>
                   <Text style={styles.breakdownLabel}>Completion Rate:</Text>
                   <Text style={styles.breakdownValue}>
-                    {Math.round(progress.breakdown.completion_rate_points)} pts
+                    {Math.round(progress.breakdown.completion_rate_points || 0)} pts
                   </Text>
                 </View>
                 <View style={styles.scoreRow}>
                   <Text style={styles.breakdownLabel}>Weeks Active:</Text>
                   <Text style={styles.breakdownValue}>
-                    {Math.round(progress.breakdown.weeks_active_points)} pts
+                    {Math.round(progress.breakdown.weeks_active_points || 0)} pts
                   </Text>
                 </View>
                 {progress.breakdown.profile_points !== undefined && (
                   <View style={styles.scoreRow}>
                     <Text style={styles.breakdownLabel}>Profile:</Text>
                     <Text style={styles.breakdownValue}>
-                      {Math.round(progress.breakdown.profile_points)} pts
+                      {Math.round(progress.breakdown.profile_points || 0)} pts
                     </Text>
                   </View>
                 )}
@@ -194,40 +196,42 @@ export default function ProgressionCard() {
           </View>
 
           {/* Requirements */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Requirements</Text>
-            <View style={styles.requirementRow}>
-              <Ionicons
-                name={progress.requirements.meets_time_requirement ? 'checkmark-circle' : 'time'}
-                size={20}
-                color={
-                  progress.requirements.meets_time_requirement ? COLORS.SUCCESS[500] : COLORS.WARNING[500]
-                }
-              />
-              <Text style={styles.requirementText}>
-                {progress.requirements.current_days} / {progress.requirements.min_days} active days
-              </Text>
+          {progress.requirements && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Requirements</Text>
+              <View style={styles.requirementRow}>
+                <Ionicons
+                  name={progress.requirements.meets_time_requirement ? 'checkmark-circle' : 'time'}
+                  size={20}
+                  color={
+                    progress.requirements.meets_time_requirement ? COLORS.SUCCESS[500] : COLORS.WARNING[500]
+                  }
+                />
+                <Text style={styles.requirementText}>
+                  {progress.requirements.current_days || 0} / {progress.requirements.min_days || 0} active days
+                </Text>
+              </View>
+              <View style={styles.requirementRow}>
+                <Ionicons
+                  name={progress.requirements.meets_score_requirement ? 'checkmark-circle' : 'time'}
+                  size={20}
+                  color={
+                    progress.requirements.meets_score_requirement ? COLORS.SUCCESS[500] : COLORS.WARNING[500]
+                  }
+                />
+                <Text style={styles.requirementText}>
+                  {progress.requirements.completed_workouts || 0} workouts completed
+                </Text>
+              </View>
+              <View style={styles.requirementRow}>
+                <Ionicons name="flash" size={20} color={COLORS.PRIMARY[500]} />
+                <Text style={styles.requirementText}>
+                  {progressionService.formatDuration(progress.requirements.workout_minutes || 0)} of
+                  exercise
+                </Text>
+              </View>
             </View>
-            <View style={styles.requirementRow}>
-              <Ionicons
-                name={progress.requirements.meets_score_requirement ? 'checkmark-circle' : 'time'}
-                size={20}
-                color={
-                  progress.requirements.meets_score_requirement ? COLORS.SUCCESS[500] : COLORS.WARNING[500]
-                }
-              />
-              <Text style={styles.requirementText}>
-                {progress.requirements.completed_workouts} workouts completed
-              </Text>
-            </View>
-            <View style={styles.requirementRow}>
-              <Ionicons name="flash" size={20} color={COLORS.PRIMARY[500]} />
-              <Text style={styles.requirementText}>
-                {progressionService.formatDuration(progress.requirements.workout_minutes)} of
-                exercise
-              </Text>
-            </View>
-          </View>
+          )}
 
           {/* Refresh Button */}
           <TouchableOpacity style={styles.refreshButton} onPress={loadProgress}>

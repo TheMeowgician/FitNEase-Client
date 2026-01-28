@@ -39,17 +39,29 @@ export default function ProfileScreen() {
     if (!user) return;
 
     try {
-      console.log('💪 [PROFILE] Loading fitness level from assessment...');
+      console.log('[PROFILE] Loading fitness level from assessment...');
       const fitnessAssessment = await authService.getFitnessAssessment();
 
       if (fitnessAssessment && fitnessAssessment.length > 0) {
-        const assessmentFitnessLevel = fitnessAssessment[0].assessment_data.fitness_level;
-        setFitnessLevel(assessmentFitnessLevel || 'beginner');
-        console.log('💪 [PROFILE] Using fitness level from assessment:', assessmentFitnessLevel);
+        // Find the initial_onboarding assessment (has fitness_level)
+        // Weekly assessments don't have fitness_level
+        const onboardingAssessment = fitnessAssessment.find(
+          (a: any) => a.assessment_type === 'initial_onboarding' && a.assessment_data?.fitness_level
+        );
+
+        if (onboardingAssessment) {
+          const assessmentFitnessLevel = onboardingAssessment.assessment_data.fitness_level;
+          setFitnessLevel(assessmentFitnessLevel || 'beginner');
+          console.log('[PROFILE] Using fitness level from initial_onboarding assessment:', assessmentFitnessLevel);
+        } else {
+          // Fallback to user profile fitness level
+          setFitnessLevel(user.fitnessLevel || 'beginner');
+          console.log('[PROFILE] No initial_onboarding assessment, using user profile:', user.fitnessLevel);
+        }
       } else {
         // Fallback to user profile fitness level
         setFitnessLevel(user.fitnessLevel || 'beginner');
-        console.log('💪 [PROFILE] Using fitness level from user profile:', user.fitnessLevel);
+        console.log('[PROFILE] Using fitness level from user profile:', user.fitnessLevel);
       }
     } catch (error) {
       console.error('Error loading fitness level:', error);

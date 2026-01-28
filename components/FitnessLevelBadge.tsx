@@ -32,7 +32,6 @@ export default function FitnessLevelBadge({
 }: FitnessLevelBadgeProps) {
   const levelName = progressionService.getFitnessLevelName(level);
   const levelColor = progressionService.getFitnessLevelColor(level);
-  const levelEmoji = progressionService.getFitnessLevelEmoji(level);
 
   const sizeStyles = {
     small: {
@@ -56,7 +55,6 @@ export default function FitnessLevelBadge({
 
   return (
     <View style={[styles.container, currentSize.container, { backgroundColor: levelColor }]}>
-      <Text style={[styles.emoji, currentSize.emoji]}>{levelEmoji}</Text>
       {showLabel && <Text style={[styles.text, currentSize.text]}>{levelName}</Text>}
     </View>
   );
