@@ -39,8 +39,8 @@ export default function ProfileScreen() {
     if (!user) return;
 
     try {
-      console.log('[PROFILE] Loading fitness level from assessment...');
-      const fitnessAssessment = await authService.getFitnessAssessment();
+      console.log('[PROFILE] Loading fitness level from assessment for user:', user.id);
+      const fitnessAssessment = await authService.getFitnessAssessment(user.id);
 
       if (fitnessAssessment && fitnessAssessment.length > 0) {
         // Find the initial_onboarding assessment (has fitness_level)
@@ -54,9 +54,18 @@ export default function ProfileScreen() {
           setFitnessLevel(assessmentFitnessLevel || 'beginner');
           console.log('[PROFILE] Using fitness level from initial_onboarding assessment:', assessmentFitnessLevel);
         } else {
-          // Fallback to user profile fitness level
-          setFitnessLevel(user.fitnessLevel || 'beginner');
-          console.log('[PROFILE] No initial_onboarding assessment, using user profile:', user.fitnessLevel);
+          // Fallback: check any assessment with fitness_level
+          const anyWithFitnessLevel = fitnessAssessment.find(
+            (a: any) => a.assessment_data?.fitness_level
+          );
+          if (anyWithFitnessLevel) {
+            setFitnessLevel(anyWithFitnessLevel.assessment_data.fitness_level);
+            console.log('[PROFILE] Using fitness level from assessment:', anyWithFitnessLevel.assessment_data.fitness_level);
+          } else {
+            // Fallback to user profile fitness level
+            setFitnessLevel(user.fitnessLevel || 'beginner');
+            console.log('[PROFILE] No assessment with fitness_level, using user profile:', user.fitnessLevel);
+          }
         }
       } else {
         // Fallback to user profile fitness level

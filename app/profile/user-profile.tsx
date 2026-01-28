@@ -59,7 +59,8 @@ export default function UserProfileScreen() {
 
       // Load fitness level and body metrics from fitness assessment
       // Look for initial_onboarding assessment which has fitness_level (weekly assessments don't)
-      const fitnessAssessment = await authService.getFitnessAssessment();
+      console.log('[USER-PROFILE] Loading fitness level from assessment for user:', user.id);
+      const fitnessAssessment = await authService.getFitnessAssessment(user.id);
       if (fitnessAssessment && fitnessAssessment.length > 0) {
         // Find the initial_onboarding assessment (has fitness_level)
         const onboardingAssessment = fitnessAssessment.find(
@@ -78,11 +79,22 @@ export default function UserProfileScreen() {
             });
           }
         } else {
-          // Fallback: use user profile fitness level
-          setFitnessLevel(user.fitnessLevel || 'beginner');
+          // Fallback: check any assessment with fitness_level
+          const anyWithFitnessLevel = fitnessAssessment.find(
+            (a: any) => a.assessment_data?.fitness_level
+          );
+          if (anyWithFitnessLevel) {
+            setFitnessLevel(anyWithFitnessLevel.assessment_data.fitness_level);
+            console.log('[USER-PROFILE] Using fitness level from assessment:', anyWithFitnessLevel.assessment_data.fitness_level);
+          } else {
+            // Fallback: use user profile fitness level
+            setFitnessLevel(user.fitnessLevel || 'beginner');
+            console.log('[USER-PROFILE] No assessment with fitness_level, using user profile:', user.fitnessLevel);
+          }
         }
       } else {
         setFitnessLevel(user.fitnessLevel || 'beginner');
+        console.log('[USER-PROFILE] No assessments, using user profile:', user.fitnessLevel);
       }
 
       // Load workout stats

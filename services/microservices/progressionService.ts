@@ -131,11 +131,11 @@ class ProgressionService {
    */
   getFitnessLevelColor(level: string): string {
     const colors: Record<string, string> = {
-      beginner: '#10B981', // Green
-      intermediate: '#3B82F6', // Blue
-      advanced: '#8B5CF6', // Purple
+      beginner: '#10B981',     // Green
+      intermediate: '#F59E0B', // Orange/Amber
+      advanced: '#EF4444',     // Red
     };
-    return colors[level] || '#6B7280'; // Gray
+    return colors[level?.toLowerCase()] || '#6B7280'; // Gray
   }
 
   /**
