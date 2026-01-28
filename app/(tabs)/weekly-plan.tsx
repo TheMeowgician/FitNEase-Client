@@ -16,7 +16,7 @@ import { useAlert } from '@/contexts/AlertContext';
 import { router, useFocusEffect } from 'expo-router';
 import { planningService, WeeklyWorkoutPlan, Exercise } from '@/services/microservices/planningService';
 import { trackingService } from '@/services/microservices/trackingService';
-import { format, startOfWeek, addDays, isSameDay, isToday as isDateToday, addWeeks, subWeeks } from 'date-fns';
+import { format, startOfWeek, addDays, isSameDay, isToday as isDateToday } from 'date-fns';
 import { COLORS, FONTS, FONT_SIZES } from '@/constants/colors';
 import { WeekCalendarStrip } from '@/components/calendar/WeekCalendarStrip';
 
@@ -84,22 +84,6 @@ export default function WeeklyPlanScreen() {
   const userWorkoutDays = user?.workoutDays || [];
   const hasWorkoutDays = userWorkoutDays.length > 0;
 
-  // Check if viewing current week
-  const isCurrentWeek = isSameDay(
-    currentWeekStart,
-    startOfWeek(new Date(), { weekStartsOn: 1 })
-  );
-
-  // Get user's account creation date for navigation limit
-  const accountCreatedDate = user?.createdAt ? new Date(user.createdAt) : null;
-  const earliestWeekStart = accountCreatedDate
-    ? startOfWeek(accountCreatedDate, { weekStartsOn: 1 })
-    : null;
-
-  // Check if can navigate to previous week (can't go before account creation)
-  const canNavigatePrev = earliestWeekStart
-    ? currentWeekStart > earliestWeekStart
-    : true;
 
   useEffect(() => {
     loadWeeklyPlan();
@@ -150,31 +134,8 @@ export default function WeeklyPlanScreen() {
 
     try {
       setLoading(true);
-
-      // Check if viewing current week or a different week
-      const currentWeekStartDate = startOfWeek(new Date(), { weekStartsOn: 1 });
-      const isViewingCurrentWeek = isSameDay(currentWeekStart, currentWeekStartDate);
-
-      let response;
-      if (isViewingCurrentWeek) {
-        // Current week - use getCurrentWeekPlan (auto-generates if needed)
-        response = await planningService.getCurrentWeekPlan(parseInt(user.id));
-      } else {
-        // Different week - use getWeekPlan with the selected week's date
-        const weekDateStr = format(currentWeekStart, 'yyyy-MM-dd');
-        try {
-          response = await planningService.getWeekPlan(weekDateStr, parseInt(user.id));
-        } catch (err: any) {
-          // If no plan exists for this week, show null (empty state)
-          if (err.message?.includes('No plan found') || err.message?.includes('404')) {
-            setWeeklyPlan(null);
-            setLoading(false);
-            return;
-          }
-          throw err;
-        }
-      }
-
+      // Always fetch current week's plan (auto-generates if needed)
+      const response = await planningService.getCurrentWeekPlan(parseInt(user.id));
       const plan = (response.data as any)?.plan || response.data;
       setWeeklyPlan(plan);
     } catch (error) {
@@ -222,17 +183,6 @@ export default function WeeklyPlanScreen() {
     } finally {
       setGeneratingPlan(false);
     }
-  };
-
-  const navigateWeek = (direction: 'prev' | 'next') => {
-    setCurrentWeekStart(prev =>
-      direction === 'next' ? addWeeks(prev, 1) : subWeeks(prev, 1)
-    );
-  };
-
-  const goToToday = () => {
-    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
-    setSelectedDate(new Date());
   };
 
   // Normalize exercise data
@@ -353,23 +303,14 @@ export default function WeeklyPlanScreen() {
       {/* Header - Consistent with Dashboard */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Weekly Plan</Text>
-        {!isCurrentWeek && (
-          <TouchableOpacity style={styles.todayChip} onPress={goToToday}>
-            <Ionicons name="today-outline" size={16} color={COLORS.PRIMARY[600]} />
-            <Text style={styles.todayChipText}>Today</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* Calendar Week Strip - Shared Component */}
+      {/* Calendar Week Strip - Current week only, no navigation */}
       <WeekCalendarStrip
         weekStart={currentWeekStart}
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
-        showNavigation={true}
-        onNavigatePrev={() => canNavigatePrev && navigateWeek('prev')}
-        onNavigateNext={() => navigateWeek('next')}
-        canNavigatePrev={canNavigatePrev}
+        showNavigation={false}
         workoutDays={userWorkoutDays}
         completedDates={completedDays}
         showProgress={true}
