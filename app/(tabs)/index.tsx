@@ -684,44 +684,46 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Weekly Check-In Card */}
-        {weeklyAssessmentStatus.completed_this_week ? (
-          // Completed state - show success message
-          <View style={styles.weeklyCheckInCardCompleted}>
-            <View style={styles.weeklyCheckInIconCompleted}>
-              <Ionicons name="checkmark-circle" size={28} color={COLORS.SUCCESS[600]} />
-            </View>
-            <View style={styles.weeklyCheckInContent}>
-              <Text style={styles.weeklyCheckInTitleCompleted}>Weekly Check-In Complete!</Text>
-              <Text style={styles.weeklyCheckInSubtitleCompleted}>
-                Thanks for your feedback. See you next week!
-              </Text>
-            </View>
-            <Ionicons name="trophy" size={24} color={COLORS.SUCCESS[500]} />
-          </View>
-        ) : (
-          // Not completed - show prominent call to action
-          <TouchableOpacity
-            style={styles.weeklyCheckInCardRequired}
-            onPress={() => router.push('/assessment/weekly')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.weeklyCheckInIconRequired}>
-              <Ionicons name="clipboard-outline" size={28} color={COLORS.PRIMARY[600]} />
-            </View>
-            <View style={styles.weeklyCheckInContent}>
-              <View style={styles.weeklyCheckInTitleRow}>
-                <Text style={styles.weeklyCheckInTitleRequired}>Weekly Check-In</Text>
-                <View style={styles.weeklyCheckInBadge}>
-                  <Text style={styles.weeklyCheckInBadgeText}>Required</Text>
-                </View>
+        {/* Weekly Check-In Card - Only show if user has completed at least 1 workout */}
+        {(recentWorkouts.length > 0 || (weeklyStats?.this_week_sessions ?? 0) > 0) && (
+          weeklyAssessmentStatus.completed_this_week ? (
+            // Completed state - show success message
+            <View style={styles.weeklyCheckInCardCompleted}>
+              <View style={styles.weeklyCheckInIconCompleted}>
+                <Ionicons name="checkmark-circle" size={28} color={COLORS.SUCCESS[600]} />
               </View>
-              <Text style={styles.weeklyCheckInSubtitle}>
-                Share your progress and get better recommendations
-              </Text>
+              <View style={styles.weeklyCheckInContent}>
+                <Text style={styles.weeklyCheckInTitleCompleted}>Weekly Check-In Complete!</Text>
+                <Text style={styles.weeklyCheckInSubtitleCompleted}>
+                  Thanks for your feedback. See you next week!
+                </Text>
+              </View>
+              <Ionicons name="trophy" size={24} color={COLORS.SUCCESS[500]} />
             </View>
-            <Ionicons name="chevron-forward" size={24} color={COLORS.PRIMARY[600]} />
-          </TouchableOpacity>
+          ) : (
+            // Not completed - show prominent call to action
+            <TouchableOpacity
+              style={styles.weeklyCheckInCardRequired}
+              onPress={() => router.push('/assessment/weekly')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.weeklyCheckInIconRequired}>
+                <Ionicons name="clipboard-outline" size={28} color={COLORS.PRIMARY[600]} />
+              </View>
+              <View style={styles.weeklyCheckInContent}>
+                <View style={styles.weeklyCheckInTitleRow}>
+                  <Text style={styles.weeklyCheckInTitleRequired}>Weekly Check-In</Text>
+                  <View style={styles.weeklyCheckInBadge}>
+                    <Text style={styles.weeklyCheckInBadgeText}>Required</Text>
+                  </View>
+                </View>
+                <Text style={styles.weeklyCheckInSubtitle}>
+                  Share your progress and get better recommendations
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
+          )
         )}
 
         {/* Mentor tip - remind mentors they can do workouts too */}

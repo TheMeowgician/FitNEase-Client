@@ -150,11 +150,36 @@ export default function WeeklyPlanScreen() {
 
     try {
       setLoading(true);
-      const response = await planningService.getCurrentWeekPlan(parseInt(user.id));
+
+      // Check if viewing current week or a different week
+      const currentWeekStartDate = startOfWeek(new Date(), { weekStartsOn: 1 });
+      const isViewingCurrentWeek = isSameDay(currentWeekStart, currentWeekStartDate);
+
+      let response;
+      if (isViewingCurrentWeek) {
+        // Current week - use getCurrentWeekPlan (auto-generates if needed)
+        response = await planningService.getCurrentWeekPlan(parseInt(user.id));
+      } else {
+        // Different week - use getWeekPlan with the selected week's date
+        const weekDateStr = format(currentWeekStart, 'yyyy-MM-dd');
+        try {
+          response = await planningService.getWeekPlan(weekDateStr, parseInt(user.id));
+        } catch (err: any) {
+          // If no plan exists for this week, show null (empty state)
+          if (err.message?.includes('No plan found') || err.message?.includes('404')) {
+            setWeeklyPlan(null);
+            setLoading(false);
+            return;
+          }
+          throw err;
+        }
+      }
+
       const plan = (response.data as any)?.plan || response.data;
       setWeeklyPlan(plan);
     } catch (error) {
       console.error('Failed to load weekly plan:', error);
+      setWeeklyPlan(null);
     } finally {
       setLoading(false);
     }
