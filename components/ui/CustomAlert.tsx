@@ -103,11 +103,17 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
   };
 
   const handleButtonPress = (button: AlertButton) => {
-    if (button.onPress) {
-      button.onPress();
-    }
+    // First dismiss the alert, then call the callback
+    // This prevents issues when the callback shows another alert
     if (onDismiss) {
       onDismiss();
+    }
+    // Use setTimeout to ensure the dismiss happens before the callback
+    // This allows chained alerts to work properly
+    if (button.onPress) {
+      setTimeout(() => {
+        button.onPress!();
+      }, 100);
     }
   };
 

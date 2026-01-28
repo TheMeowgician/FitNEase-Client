@@ -6,26 +6,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/fonts';
 
 import { RegisterMentorForm } from '../../components/auth/RegisterMentorForm';
-import { useAlert } from '../../contexts/AlertContext';
 import { COLORS } from '../../constants/colors';
 
 export default function RegisterMentorScreen() {
-  const alert = useAlert();
 
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
-    alert.success(
-      'Mentor Registration Successful!',
-      'Please review our health disclaimer before continuing. Your mentor application will be reviewed by our team.',
-      () => {
-        // Navigate to disclaimer screen, passing email for later verification
-        router.push({
-          pathname: '/(auth)/disclaimer',
-          params: {
-            email: requiresEmailVerification ? userEmail : undefined,
-          }
-        });
+    // Navigate directly to disclaimer screen - the RegisterMentorForm already showed a success alert
+    router.push({
+      pathname: '/(auth)/disclaimer',
+      params: {
+        email: requiresEmailVerification ? userEmail : undefined,
       }
-    );
+    });
   };
 
   const navigateToLogin = () => {

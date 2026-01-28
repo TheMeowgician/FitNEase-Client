@@ -177,10 +177,11 @@ export const RegisterMentorForm: React.FC<RegisterMentorFormProps> = ({
       // Handle successful registration
       alert.success(
         'Mentor Registration Successful!',
-        'Your application has been submitted and is pending approval. ' +
+        'Your application has been submitted. ' +
         (response.requiresEmailVerification
-          ? 'Please check your email to verify your account.'
-          : 'You will be notified once your mentor application is reviewed.'),
+          ? 'Please check your email to verify your account. '
+          : '') +
+        'Next, please review our health disclaimer.',
         () => onSuccess(response.requiresEmailVerification, formData.email)
       );
 

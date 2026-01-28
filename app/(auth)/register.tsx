@@ -7,25 +7,17 @@ import { FONTS } from '../../constants/fonts';
 
 import { RegisterForm } from '../../components/auth/RegisterForm';
 import { COLORS } from '../../constants/colors';
-import { useAlert } from '../../contexts/AlertContext';
 
 export default function RegisterScreen() {
   const { selectedRole } = useLocalSearchParams<{ selectedRole?: string }>();
-  const alert = useAlert();
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
-    alert.success(
-      'Registration Successful!',
-      'Please review our health disclaimer before continuing.',
-      () => {
-        // Navigate to disclaimer screen, passing email for later verification
-        router.push({
-          pathname: '/(auth)/disclaimer',
-          params: {
-            email: requiresEmailVerification ? userEmail : undefined,
-          }
-        });
+    // Navigate directly to disclaimer screen - the RegisterForm already showed a success alert
+    router.push({
+      pathname: '/(auth)/disclaimer',
+      params: {
+        email: requiresEmailVerification ? userEmail : undefined,
       }
-    );
+    });
   };
 
   const navigateToLogin = () => {

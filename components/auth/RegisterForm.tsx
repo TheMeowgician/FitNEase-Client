@@ -170,9 +170,10 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       // Handle successful registration
       alert.success(
         'Registration Successful!',
-        response.requiresEmailVerification
-          ? 'Please check your email to verify your account before logging in.'
-          : 'Your account has been created successfully!',
+        (response.requiresEmailVerification
+          ? 'Please check your email to verify your account. '
+          : '') +
+        'Next, please review our health disclaimer.',
         () => onSuccess(response.requiresEmailVerification, formData.email)
       );
 
