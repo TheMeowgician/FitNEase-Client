@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authService, User as AuthUser, LoginRequest, RegisterRequest } from '../services/microservices/authService';
+import { workoutNotificationScheduler } from '../services/workoutNotificationScheduler';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -54,6 +55,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isAuth) {
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);
+
+        // Schedule workout reminders for returning user
+        scheduleWorkoutRemindersForUser(currentUser);
       }
     } catch (error) {
       console.error('Auth initialization failed:', error);
@@ -77,6 +81,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Small delay to ensure state propagates
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // Schedule workout reminders if user has workout days configured
+      scheduleWorkoutRemindersForUser(response.user);
+
       console.log('🔑 Login completed, user set');
       return true;
     } catch (error) {
@@ -84,6 +91,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw error;
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Schedule workout reminders for a user based on their workout days
+   */
+  const scheduleWorkoutRemindersForUser = async (userData: AuthUser) => {
+    try {
+      if (userData.workoutDays && userData.workoutDays.length > 0) {
+        console.log('📅 Scheduling workout reminders for days:', userData.workoutDays);
+
+        // Convert day IDs to proper day names (capitalize first letter)
+        const dayNames = userData.workoutDays.map((day: string) =>
+          day.charAt(0).toUpperCase() + day.slice(1)
+        );
+
+        await workoutNotificationScheduler.scheduleWorkoutReminders(dayNames, {
+          enabled: true,
+          morningReminderTime: '08:00', // Default time, can be made configurable
+          advanceNoticeMinutes: 60,
+        });
+
+        console.log('📅 Workout reminders scheduled successfully');
+      } else {
+        console.log('📅 No workout days configured, skipping reminder scheduling');
+      }
+    } catch (error) {
+      console.error('📅 Failed to schedule workout reminders:', error);
+      // Don't throw - scheduling failure shouldn't break login
     }
   };
 

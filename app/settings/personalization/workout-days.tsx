@@ -9,6 +9,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { planningService } from '../../../services/microservices/planningService';
+import { workoutNotificationScheduler } from '../../../services/workoutNotificationScheduler';
 import { useSmartBack } from '../../../hooks/useSmartBack';
 
 interface DayOfWeek {
@@ -45,6 +46,31 @@ export default function WorkoutDaysSettingsScreen() {
       ? selectedDays.filter((id) => id !== dayId)
       : [...selectedDays, dayId];
     setSelectedDays(newDays);
+  };
+
+  /**
+   * Re-schedule workout reminders after days are updated
+   */
+  const rescheduleWorkoutReminders = async (newDays: string[]) => {
+    try {
+      // Convert day IDs to proper day names (capitalize first letter)
+      const dayNames = newDays.map((day: string) =>
+        day.charAt(0).toUpperCase() + day.slice(1)
+      );
+
+      console.log('[WORKOUT_DAYS] Re-scheduling reminders for days:', dayNames);
+
+      await workoutNotificationScheduler.scheduleWorkoutReminders(dayNames, {
+        enabled: true,
+        morningReminderTime: '08:00',
+        advanceNoticeMinutes: 60,
+      });
+
+      console.log('[WORKOUT_DAYS] Reminders re-scheduled successfully');
+    } catch (error) {
+      console.error('[WORKOUT_DAYS] Failed to re-schedule reminders:', error);
+      // Don't show error to user - reminder scheduling is non-critical
+    }
   };
 
   const handleSave = async () => {
@@ -87,6 +113,8 @@ export default function WorkoutDaysSettingsScreen() {
                   // Just update profile, don't touch weekly plan
                   await authService.updateUserProfile({ preferred_workout_days: newDays });
                   await refreshUser();
+                  // Re-schedule workout reminders with new days
+                  await rescheduleWorkoutReminders(newDays);
                   alert.success('Success', 'Your workout days have been updated!', () => goBack());
                 } catch (error) {
                   console.error('Error saving workout days:', error);
@@ -114,6 +142,9 @@ export default function WorkoutDaysSettingsScreen() {
                     adaptation_strategy: 'reallocate',
                   });
 
+                  // Re-schedule workout reminders with new days
+                  await rescheduleWorkoutReminders(newDays);
+
                   alert.success(
                     'Success',
                     'Your workout days and weekly plan have been smartly adapted! Exercises from removed days have been moved to your new schedule.',
@@ -136,6 +167,8 @@ export default function WorkoutDaysSettingsScreen() {
         // No plan exists or no changes - simple update
         await authService.updateUserProfile({ preferred_workout_days: newDays });
         await refreshUser();
+        // Re-schedule workout reminders with new days
+        await rescheduleWorkoutReminders(newDays);
         alert.success('Success', 'Your workout days have been updated!', () => goBack());
         setIsSaving(false);
       }

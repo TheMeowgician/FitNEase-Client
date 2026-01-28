@@ -32,7 +32,8 @@
         "VIBRATE",
         "CAMERA",
         "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS"
+        "MODIFY_AUDIO_SETTINGS",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -67,6 +68,13 @@
           "android": {
             "usesCleartextTraffic": true
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#4A90D9",
+          "defaultChannel": "default"
         }
       ]
     ],

@@ -226,16 +226,107 @@ export default function NotificationsScreen() {
     }
 
     // Handle notification action based on type
-    if (notification.action_data?.type === 'group_invite') {
-      // Do nothing - buttons handle acceptance/decline
+    const actionType = notification.action_data?.type;
+    const notificationType = notification.notification_type;
+
+    // Group invites have action buttons - don't navigate
+    if (actionType === 'group_invite') {
       return;
     }
 
-    // Handle other notification types
-    if (notification.action_data?.achievement_id) {
-      // Navigate to achievements
-      router.push('/(tabs)/progress');
+    // Navigate based on notification type and action data
+    switch (actionType) {
+      case 'group_join_approved':
+      case 'group_invite_accepted':
+        // Navigate to the group
+        if (notification.action_data?.group_id) {
+          router.push(`/groups/${notification.action_data.group_id}`);
+        }
+        break;
+
+      case 'group_join_request':
+        // Navigate to group management to handle request
+        if (notification.action_data?.group_id) {
+          router.push(`/groups/${notification.action_data.group_id}/manage`);
+        }
+        break;
+
+      case 'achievement_unlock':
+      case 'achievement':
+        // Navigate to progress/achievements
+        router.push('/(tabs)/progress');
+        break;
+
+      case 'group_invite_declined':
+      case 'group_join_rejected':
+      case 'group_member_kicked':
+        // Informational - no navigation needed
+        break;
+
+      default:
+        // Handle by notification_type as fallback
+        switch (notificationType) {
+          case 'achievement':
+            router.push('/(tabs)/progress');
+            break;
+          case 'workout_reminder':
+            router.push('/workout');
+            break;
+          case 'social':
+            if (notification.action_data?.group_id) {
+              router.push(`/groups/${notification.action_data.group_id}`);
+            }
+            break;
+          case 'group_join_approved':
+            if (notification.action_data?.group_id) {
+              router.push(`/groups/${notification.action_data.group_id}`);
+            }
+            break;
+        }
+        break;
     }
+  };
+
+  // Check if a notification is navigable (shows chevron)
+  const isNotificationNavigable = (notification: Notification): boolean => {
+    const actionType = notification.action_data?.type;
+    const notificationType = notification.notification_type;
+
+    // Group invites show action buttons instead of navigation
+    if (actionType === 'group_invite') {
+      return false;
+    }
+
+    // These types have navigation
+    const navigableActionTypes = [
+      'group_join_approved',
+      'group_invite_accepted',
+      'group_join_request',
+      'achievement_unlock',
+      'achievement',
+    ];
+
+    if (navigableActionTypes.includes(actionType)) {
+      return true;
+    }
+
+    // Notification types with navigation
+    const navigableNotificationTypes = [
+      'achievement',
+      'workout_reminder',
+      'group_join_approved',
+    ];
+
+    if (navigableNotificationTypes.includes(notificationType)) {
+      return true;
+    }
+
+    // Social notifications with group_id are navigable
+    if (notificationType === 'social' && notification.action_data?.group_id) {
+      return true;
+    }
+
+    return false;
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -315,6 +406,7 @@ export default function NotificationsScreen() {
   const renderNotificationItem = (notification: Notification) => {
     const icon = getNotificationIcon(notification);
     const isGroupInvitation = notification.action_data?.type === 'group_invite';
+    const isNavigable = isNotificationNavigable(notification);
 
     return (
       <Swipeable
@@ -367,6 +459,13 @@ export default function NotificationsScreen() {
               </View>
             )}
           </View>
+
+          {/* Chevron indicator for navigable notifications */}
+          {isNavigable && !isGroupInvitation && (
+            <View style={styles.chevronContainer}>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+            </View>
+          )}
         </TouchableOpacity>
       </Swipeable>
     );
@@ -606,5 +705,9 @@ const styles = StyleSheet.create({
   },
   clearAllButtonTextDisabled: {
     color: COLORS.SECONDARY[300],
+  },
+  chevronContainer: {
+    justifyContent: 'center',
+    paddingLeft: 8,
   },
 });

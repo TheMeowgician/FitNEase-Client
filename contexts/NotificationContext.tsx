@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { reverbService } from '../services/reverbService';
 import { commsService } from '../services/microservices/commsService';
+import { pushNotificationService } from '../services/pushNotificationService';
 import { router } from 'expo-router';
 import GroupWorkoutInvitationModal from '../components/groups/GroupWorkoutInvitationModal';
 import { useInvitationStore } from '../stores/invitationStore';
@@ -38,6 +39,7 @@ interface NotificationContextType {
   markAsRead: (notificationId: number) => Promise<void>;
   setupRealtimeNotifications: () => Promise<void>;
   addNotificationListener: (listener: NotificationEventListener) => () => void;
+  registerPushToken: () => Promise<void>;
   // Invitation modal state
   showInvitationModal: boolean;
   invitationData: InvitationData | null;
@@ -59,6 +61,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Access invitation store for persistent queue-based invitations
   const { addInvitation } = useInvitationStore();
 
+  // Track if push token has been registered
+  const pushTokenRegisteredRef = useRef(false);
+
   useEffect(() => {
     if (user) {
       refreshUnreadCount();
@@ -67,6 +72,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       if (!isSetupRef.current) {
         setupRealtimeNotifications();
         isSetupRef.current = true;
+      }
+
+      // Initialize push notifications and register token
+      if (!pushTokenRegisteredRef.current) {
+        initializePushNotifications();
+        pushTokenRegisteredRef.current = true;
       }
     }
 
@@ -77,6 +88,52 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
     };
   }, [user]);
+
+  /**
+   * Initialize push notification service and register device token
+   */
+  const initializePushNotifications = async () => {
+    try {
+      console.log('[NOTIFICATION CONTEXT] Initializing push notifications...');
+
+      // Initialize the push notification service (sets up listeners)
+      await pushNotificationService.initialize();
+
+      // Register the device token with the backend
+      await registerPushToken();
+
+      console.log('[NOTIFICATION CONTEXT] Push notifications initialized');
+    } catch (error) {
+      console.error('[NOTIFICATION CONTEXT] Failed to initialize push notifications:', error);
+    }
+  };
+
+  /**
+   * Register device push token with the backend
+   */
+  const registerPushToken = async () => {
+    if (!user) {
+      console.warn('[NOTIFICATION CONTEXT] No user, skipping push token registration');
+      return;
+    }
+
+    try {
+      const token = await pushNotificationService.getExpoPushToken();
+
+      if (!token) {
+        console.warn('[NOTIFICATION CONTEXT] Could not get push token');
+        return;
+      }
+
+      const platform = pushNotificationService.getPlatform();
+
+      await commsService.registerDeviceToken(Number(user.id), token, platform);
+      console.log('[NOTIFICATION CONTEXT] Push token registered successfully');
+    } catch (error) {
+      console.error('[NOTIFICATION CONTEXT] Failed to register push token:', error);
+      // Don't throw - push token registration failure shouldn't break the app
+    }
+  };
 
   const refreshUnreadCount = async () => {
     if (!user) return;
@@ -250,6 +307,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         markAsRead,
         setupRealtimeNotifications,
         addNotificationListener,
+        registerPushToken,
         // Invitation modal state
         showInvitationModal,
         invitationData,

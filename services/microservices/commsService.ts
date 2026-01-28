@@ -236,4 +236,60 @@ export class CommsService {
   }
 }
 
+  /**
+   * Register device token for push notifications
+   * POST /api/comms/device-tokens
+   */
+  public async registerDeviceToken(
+    userId: number,
+    expoPushToken: string,
+    platform: 'ios' | 'android'
+  ): Promise<{ message: string; device_token_id: number }> {
+    try {
+      console.log('[COMMS] Registering device token for user:', userId);
+
+      const response = await apiClient.post(
+        'communications',
+        '/api/comms/device-tokens',
+        {
+          user_id: userId,
+          expo_push_token: expoPushToken,
+          platform,
+        }
+      );
+
+      console.log('[COMMS] Device token registered successfully');
+      return response.data;
+    } catch (error) {
+      console.error('[COMMS] Failed to register device token:', error);
+      throw new Error((error as any).message || 'Failed to register device token');
+    }
+  }
+
+  /**
+   * Remove device token (for logout or token refresh)
+   * DELETE /api/comms/device-tokens
+   */
+  public async removeDeviceToken(expoPushToken: string): Promise<{ message: string }> {
+    try {
+      console.log('[COMMS] Removing device token');
+
+      const response = await apiClient.delete(
+        'communications',
+        '/api/comms/device-tokens',
+        {
+          data: { expo_push_token: expoPushToken }
+        }
+      );
+
+      console.log('[COMMS] Device token removed successfully');
+      return response.data;
+    } catch (error) {
+      console.error('[COMMS] Failed to remove device token:', error);
+      // Don't throw - token removal failure shouldn't block logout
+      return { message: 'Token removal failed but continuing' };
+    }
+  }
+}
+
 export const commsService = new CommsService();
