@@ -141,7 +141,6 @@ export class EngagementService {
       throw new Error('Failed to load achievement progress');
     }
   }
-}
 
   /**
    * Check for newly unlocked achievements after a workout
