@@ -32,15 +32,6 @@ const MORNING_TIMES = [
   { label: '10:00', period: 'AM', value: '10:00', icon: 'sunny' },
 ];
 
-const DAY_LABELS: { [key: string]: string } = {
-  sunday: 'Sun',
-  monday: 'Mon',
-  tuesday: 'Tue',
-  wednesday: 'Wed',
-  thursday: 'Thu',
-  friday: 'Fri',
-  saturday: 'Sat',
-};
 
 export default function NotificationSettingsScreen() {
   const { user } = useAuth();
@@ -116,7 +107,7 @@ export default function NotificationSettingsScreen() {
 
       if (isEnabled && hasPermission) {
         await workoutNotificationScheduler.scheduleWorkoutReminders(user.workoutDays, settings);
-        alert.success('Settings Saved!', `You'll receive workout reminders on ${user.workoutDays.join(', ')} at ${formatTime(morningTime)}.`);
+        alert.success('Settings Saved!', `You'll receive workout reminders at ${formatTime(morningTime)} on your workout days.`);
       } else if (isEnabled && !hasPermission) {
         await requestPermission();
       } else {
@@ -139,8 +130,6 @@ export default function NotificationSettingsScreen() {
     const hour12 = hour % 12 || 12;
     return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
   };
-
-  const workoutDays = user?.workoutDays || [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -275,45 +264,6 @@ export default function NotificationSettingsScreen() {
                         )}
                       </Animated.View>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Workout Days Preview */}
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconBadge, { backgroundColor: '#DBEAFE' }]}>
-                  <Ionicons name="calendar" size={20} color="#3B82F6" />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Your Workout Days</Text>
-                  <Text style={styles.cardSubtitle}>
-                    {workoutDays.length > 0
-                      ? `${workoutDays.length} days selected`
-                      : 'No days selected'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => router.push('/settings/personalization/workout-days')}
-                  style={styles.editButton}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.daysRow}>
-                {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map((day) => {
-                  const isActive = workoutDays.includes(day);
-                  return (
-                    <View
-                      key={day}
-                      style={[styles.dayBadge, isActive && styles.dayBadgeActive]}
-                    >
-                      <Text style={[styles.dayBadgeText, isActive && styles.dayBadgeTextActive]}>
-                        {DAY_LABELS[day]}
-                      </Text>
-                    </View>
                   );
                 })}
               </View>
@@ -563,17 +513,6 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[500],
     marginTop: 2,
   },
-  editButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: COLORS.PRIMARY[50],
-  },
-  editButtonText: {
-    fontSize: 13,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[600],
-  },
   timeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -625,29 +564,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.PRIMARY[500],
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  daysRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
-  },
-  dayBadge: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.NEUTRAL[100],
-    alignItems: 'center',
-  },
-  dayBadgeActive: {
-    backgroundColor: COLORS.PRIMARY[500],
-  },
-  dayBadgeText: {
-    fontSize: 11,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[400],
-  },
-  dayBadgeTextActive: {
-    color: COLORS.NEUTRAL.WHITE,
   },
   previewCard: {
     backgroundColor: COLORS.PRIMARY[50],

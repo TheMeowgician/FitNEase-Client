@@ -171,17 +171,15 @@ export default function UserProfileScreen() {
     return age.toString();
   };
 
-  const achievements = [
-    { icon: 'flash', title: 'First Workout', description: 'Complete your first workout', earned: stats.totalWorkouts > 0 },
-    { icon: 'flame', title: 'On Fire', description: 'Complete 10 workouts', earned: stats.totalWorkouts >= 10 },
-    { icon: 'rocket', title: 'Consistent', description: '7-day workout streak', earned: stats.currentStreak >= 7 },
-    { icon: 'trophy', title: 'Dedicated', description: 'Complete 50 workouts', earned: stats.totalWorkouts >= 50 },
-    { icon: 'star', title: 'Century Club', description: 'Complete 100 workouts', earned: stats.totalWorkouts >= 100 },
-    { icon: 'medal', title: 'Time Lord', description: 'Train for 1000 minutes', earned: stats.totalMinutes >= 1000 },
+  // Quick achievements for preview (based on local stats)
+  const quickAchievements = [
+    { icon: 'flash', title: 'First Workout', earned: stats.totalWorkouts > 0, color: '#6B7280' },
+    { icon: 'flame', title: 'On Fire', earned: stats.totalWorkouts >= 10, color: '#3B82F6' },
+    { icon: 'rocket', title: 'Consistent', earned: stats.currentStreak >= 7, color: '#8B5CF6' },
+    { icon: 'trophy', title: 'Dedicated', earned: stats.totalWorkouts >= 50, color: '#F59E0B' },
   ];
 
-  const earnedAchievements = achievements.filter(a => a.earned);
-  const lockedAchievements = achievements.filter(a => !a.earned);
+  const earnedCount = quickAchievements.filter(a => a.earned).length;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -306,47 +304,62 @@ export default function UserProfileScreen() {
           <View style={styles.sectionHeader}>
             <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[600]} />
             <Text style={styles.sectionTitle}>Achievements</Text>
-            <Text style={styles.achievementCount}>
-              {earnedAchievements.length}/{achievements.length}
-            </Text>
+            <TouchableOpacity
+              onPress={() => router.push('/profile/achievements')}
+              style={styles.viewAllButton}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
           </View>
 
-          {/* Earned Achievements */}
-          {earnedAchievements.length > 0 && (
-            <View style={styles.achievementsGrid}>
-              {earnedAchievements.map((achievement, index) => (
-                <View key={index} style={styles.achievementCard}>
-                  <View style={styles.achievementIconContainer}>
-                    <Ionicons name={achievement.icon as any} size={28} color={COLORS.WARNING[500]} />
+          {/* Quick Achievement Preview */}
+          <View style={styles.achievementPreviewCard}>
+            <View style={styles.achievementPreviewRow}>
+              {quickAchievements.map((achievement, index) => (
+                <View key={index} style={styles.achievementPreviewItem}>
+                  <View
+                    style={[
+                      styles.achievementPreviewIcon,
+                      achievement.earned
+                        ? { backgroundColor: achievement.color }
+                        : styles.achievementPreviewIconLocked,
+                    ]}
+                  >
+                    {achievement.earned ? (
+                      <Ionicons name={achievement.icon as any} size={20} color="white" />
+                    ) : (
+                      <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
+                    )}
                   </View>
-                  <Text style={styles.achievementTitle}>{achievement.title}</Text>
-                  <Text style={styles.achievementDescription}>{achievement.description}</Text>
+                  <Text
+                    style={[
+                      styles.achievementPreviewLabel,
+                      !achievement.earned && styles.achievementPreviewLabelLocked,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {achievement.title}
+                  </Text>
                 </View>
               ))}
             </View>
-          )}
 
-          {/* Locked Achievements */}
-          {lockedAchievements.length > 0 && (
-            <>
-              <Text style={styles.lockedLabel}>Locked Achievements</Text>
-              <View style={styles.achievementsGrid}>
-                {lockedAchievements.slice(0, 3).map((achievement, index) => (
-                  <View key={index} style={[styles.achievementCard, styles.achievementCardLocked]}>
-                    <View style={[styles.achievementIconContainer, styles.achievementIconLocked]}>
-                      <Ionicons name="lock-closed" size={28} color={COLORS.SECONDARY[400]} />
-                    </View>
-                    <Text style={[styles.achievementTitle, styles.achievementTitleLocked]}>
-                      {achievement.title}
-                    </Text>
-                    <Text style={[styles.achievementDescription, styles.achievementDescriptionLocked]}>
-                      {achievement.description}
-                    </Text>
-                  </View>
-                ))}
+            {/* Progress Bar */}
+            <View style={styles.achievementProgressSection}>
+              <View style={styles.achievementProgressBar}>
+                <View
+                  style={[
+                    styles.achievementProgressFill,
+                    { width: `${(earnedCount / quickAchievements.length) * 100}%` },
+                  ]}
+                />
               </View>
-            </>
-          )}
+              <Text style={styles.achievementProgressText}>
+                {earnedCount} of {quickAchievements.length} unlocked
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Workout Preferences */}
@@ -548,10 +561,15 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[900],
     flex: 1,
   },
-  achievementCount: {
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  viewAllText: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[600],
+    color: COLORS.PRIMARY[600],
   },
   metricsCard: {
     backgroundColor: 'white',
@@ -597,65 +615,65 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL[200],
     marginVertical: 16,
   },
-  achievementsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-  },
-  achievementCard: {
-    width: (width - 52) / 2,
+  achievementPreviewCard: {
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  achievementCardLocked: {
-    backgroundColor: COLORS.NEUTRAL[100],
-    opacity: 0.6,
+  achievementPreviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
-  achievementIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.WARNING[100],
+  achievementPreviewItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  achievementPreviewIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  achievementIconLocked: {
+  achievementPreviewIconLocked: {
     backgroundColor: COLORS.NEUTRAL[200],
   },
-  achievementTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  achievementTitleLocked: {
-    color: COLORS.SECONDARY[600],
-  },
-  achievementDescription: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    textAlign: 'center',
-  },
-  achievementDescriptionLocked: {
-    color: COLORS.SECONDARY[500],
-  },
-  lockedLabel: {
-    fontSize: FONT_SIZES.SM,
+  achievementPreviewLabel: {
+    fontSize: 10,
     fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[500],
-    marginBottom: 12,
-    marginTop: 8,
+    color: COLORS.SECONDARY[700],
+    textAlign: 'center',
+  },
+  achievementPreviewLabelLocked: {
+    color: COLORS.SECONDARY[400],
+  },
+  achievementProgressSection: {
+    alignItems: 'center',
+  },
+  achievementProgressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: COLORS.NEUTRAL[200],
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  achievementProgressFill: {
+    height: '100%',
+    backgroundColor: COLORS.PRIMARY[500],
+    borderRadius: 3,
+  },
+  achievementProgressText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[600],
   },
   preferencesCard: {
     backgroundColor: 'white',
