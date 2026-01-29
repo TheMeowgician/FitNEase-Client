@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+  Animated,
+  Dimensions
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Button } from '../../components/ui/Button';
@@ -11,15 +21,26 @@ import { useAlert } from '../../contexts/AlertContext';
 import { workoutNotificationScheduler, NotificationSettings } from '../../services/workoutNotificationScheduler';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
+const { width } = Dimensions.get('window');
 const STORAGE_KEY = '@notification_settings';
 
 const MORNING_TIMES = [
-  { label: '6:00 AM', value: '06:00' },
-  { label: '7:00 AM', value: '07:00' },
-  { label: '8:00 AM', value: '08:00' },
-  { label: '9:00 AM', value: '09:00' },
-  { label: '10:00 AM', value: '10:00' },
+  { label: '6:00', period: 'AM', value: '06:00', icon: 'sunny-outline' },
+  { label: '7:00', period: 'AM', value: '07:00', icon: 'sunny-outline' },
+  { label: '8:00', period: 'AM', value: '08:00', icon: 'sunny' },
+  { label: '9:00', period: 'AM', value: '09:00', icon: 'sunny' },
+  { label: '10:00', period: 'AM', value: '10:00', icon: 'sunny' },
 ];
+
+const DAY_LABELS: { [key: string]: string } = {
+  sunday: 'Sun',
+  monday: 'Mon',
+  tuesday: 'Tue',
+  wednesday: 'Wed',
+  thursday: 'Thu',
+  friday: 'Fri',
+  saturday: 'Sat',
+};
 
 export default function NotificationSettingsScreen() {
   const { user } = useAuth();
@@ -28,6 +49,7 @@ export default function NotificationSettingsScreen() {
   const [isEnabled, setIsEnabled] = useState(true);
   const [morningTime, setMorningTime] = useState('08:00');
   const [hasPermission, setHasPermission] = useState(false);
+  const [scaleAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
     loadSettings();
@@ -61,6 +83,14 @@ export default function NotificationSettingsScreen() {
     }
   };
 
+  const handleTimeSelect = (value: string) => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+    setMorningTime(value);
+  };
+
   const saveSettings = async () => {
     if (!user?.workoutDays || user.workoutDays.length === 0) {
       alert.confirm(
@@ -82,17 +112,14 @@ export default function NotificationSettingsScreen() {
         advanceNoticeMinutes: 60,
       };
 
-      // Save to local storage
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 
-      // Schedule notifications if enabled
       if (isEnabled && hasPermission) {
         await workoutNotificationScheduler.scheduleWorkoutReminders(user.workoutDays, settings);
         alert.success('Settings Saved!', `You'll receive workout reminders on ${user.workoutDays.join(', ')} at ${formatTime(morningTime)}.`);
       } else if (isEnabled && !hasPermission) {
         await requestPermission();
       } else {
-        // Disabled - cancel all notifications
         await workoutNotificationScheduler.cancelAllNotifications();
         alert.info('Notifications Disabled', 'All workout reminders have been cancelled.');
       }
@@ -113,117 +140,233 @@ export default function NotificationSettingsScreen() {
     return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
   };
 
+  const workoutDays = user?.workoutDays || [];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Workout Reminders</Text>
-          <View style={styles.backButton} />
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Reminders</Text>
+        <View style={styles.backButton} />
+      </View>
 
-        {/* Intro */}
-        <View style={styles.introSection}>
-          <Ionicons name="notifications" size={48} color={COLORS.PRIMARY[500]} />
-          <Text style={styles.introTitle}>Stay on Track</Text>
-          <Text style={styles.introSubtitle}>
-            Get reminders for your scheduled workout days so you never miss a session
-          </Text>
-        </View>
-
-        {/* Permission Status */}
-        {!hasPermission && (
-          <View style={styles.permissionWarning}>
-            <Ionicons name="alert-circle" size={24} color="#EF4444" />
-            <View style={styles.permissionWarningContent}>
-              <Text style={styles.permissionWarningTitle}>Notifications Disabled</Text>
-              <Text style={styles.permissionWarningText}>
-                Enable notifications to receive workout reminders
-              </Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero Section */}
+        <LinearGradient
+          colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroSection}
+        >
+          <View style={styles.heroIconContainer}>
+            <View style={styles.heroIconOuter}>
+              <View style={styles.heroIconInner}>
+                <Ionicons name="notifications" size={32} color={COLORS.PRIMARY[500]} />
+              </View>
             </View>
-            <TouchableOpacity onPress={requestPermission} style={styles.enableButton}>
-              <Text style={styles.enableButtonText}>Enable</Text>
-            </TouchableOpacity>
+            <View style={styles.bellRing} />
           </View>
+          <Text style={styles.heroTitle}>Never Miss a Workout</Text>
+          <Text style={styles.heroSubtitle}>
+            Get timely reminders to stay consistent with your fitness goals
+          </Text>
+        </LinearGradient>
+
+        {/* Permission Warning */}
+        {!hasPermission && (
+          <TouchableOpacity onPress={requestPermission} activeOpacity={0.8}>
+            <View style={styles.permissionCard}>
+              <View style={styles.permissionIconContainer}>
+                <Ionicons name="warning" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.permissionContent}>
+                <Text style={styles.permissionTitle}>Enable Notifications</Text>
+                <Text style={styles.permissionText}>
+                  Tap here to allow notifications
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+            </View>
+          </TouchableOpacity>
         )}
 
-        {/* Enable Toggle */}
-        <View style={styles.section}>
-          <View style={styles.settingRow}>
-            <View style={styles.settingLeft}>
-              <Ionicons name="notifications-outline" size={24} color={COLORS.SECONDARY[700]} />
-              <View style={styles.settingText}>
-                <Text style={styles.settingTitle}>Workout Reminders</Text>
-                <Text style={styles.settingSubtitle}>
-                  {isEnabled ? 'Notifications enabled' : 'Notifications disabled'}
+        {/* Main Toggle Card */}
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <View style={[styles.iconBadge, { backgroundColor: isEnabled ? COLORS.PRIMARY[100] : COLORS.NEUTRAL[100] }]}>
+                <Ionicons
+                  name={isEnabled ? "notifications" : "notifications-off"}
+                  size={22}
+                  color={isEnabled ? COLORS.PRIMARY[500] : COLORS.SECONDARY[400]}
+                />
+              </View>
+              <View style={styles.toggleText}>
+                <Text style={styles.toggleTitle}>Workout Reminders</Text>
+                <Text style={[styles.toggleStatus, isEnabled && styles.toggleStatusActive]}>
+                  {isEnabled ? 'Active' : 'Paused'}
                 </Text>
               </View>
             </View>
             <Switch
               value={isEnabled}
               onValueChange={setIsEnabled}
-              trackColor={{ false: COLORS.NEUTRAL[300], true: COLORS.PRIMARY[500] }}
+              trackColor={{ false: COLORS.NEUTRAL[200], true: COLORS.PRIMARY[400] }}
               thumbColor={COLORS.NEUTRAL.WHITE}
+              ios_backgroundColor={COLORS.NEUTRAL[200]}
+              style={styles.switch}
             />
           </View>
         </View>
 
         {isEnabled && (
           <>
-            {/* Morning Reminder Time */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Morning Reminder</Text>
-              <Text style={styles.sectionSubtitle}>
-                Get a reminder in the morning on your workout days
-              </Text>
-              <View style={styles.optionsGrid}>
-                {MORNING_TIMES.map((time) => (
-                  <TouchableOpacity
-                    key={time.value}
-                    style={[
-                      styles.optionButton,
-                      morningTime === time.value && styles.optionButtonActive,
-                    ]}
-                    onPress={() => setMorningTime(time.value)}
-                  >
-                    <Ionicons
-                      name="time-outline"
-                      size={20}
-                      color={morningTime === time.value ? COLORS.PRIMARY[500] : COLORS.SECONDARY[400]}
-                    />
-                    <Text
-                      style={[
-                        styles.optionText,
-                        morningTime === time.value && styles.optionTextActive,
-                      ]}
+            {/* Time Picker Section */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.iconBadge, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="time" size={20} color="#F59E0B" />
+                </View>
+                <View style={styles.cardHeaderText}>
+                  <Text style={styles.cardTitle}>Reminder Time</Text>
+                  <Text style={styles.cardSubtitle}>When should we remind you?</Text>
+                </View>
+              </View>
+
+              <View style={styles.timeGrid}>
+                {MORNING_TIMES.map((time) => {
+                  const isSelected = morningTime === time.value;
+                  return (
+                    <TouchableOpacity
+                      key={time.value}
+                      onPress={() => handleTimeSelect(time.value)}
+                      activeOpacity={0.7}
                     >
-                      {time.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Animated.View
+                        style={[
+                          styles.timeCard,
+                          isSelected && styles.timeCardSelected,
+                          isSelected && { transform: [{ scale: scaleAnim }] },
+                        ]}
+                      >
+                        <Ionicons
+                          name={time.icon as any}
+                          size={18}
+                          color={isSelected ? COLORS.PRIMARY[500] : COLORS.SECONDARY[300]}
+                          style={styles.timeIcon}
+                        />
+                        <Text style={[styles.timeLabel, isSelected && styles.timeLabelSelected]}>
+                          {time.label}
+                        </Text>
+                        <Text style={[styles.timePeriod, isSelected && styles.timePeriodSelected]}>
+                          {time.period}
+                        </Text>
+                        {isSelected && (
+                          <View style={styles.selectedCheck}>
+                            <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />
+                          </View>
+                        )}
+                      </Animated.View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Workout Days Preview */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.iconBadge, { backgroundColor: '#DBEAFE' }]}>
+                  <Ionicons name="calendar" size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.cardHeaderText}>
+                  <Text style={styles.cardTitle}>Your Workout Days</Text>
+                  <Text style={styles.cardSubtitle}>
+                    {workoutDays.length > 0
+                      ? `${workoutDays.length} days selected`
+                      : 'No days selected'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => router.push('/settings/personalization/workout-days')}
+                  style={styles.editButton}
+                >
+                  <Text style={styles.editButtonText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.daysRow}>
+                {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map((day) => {
+                  const isActive = workoutDays.includes(day);
+                  return (
+                    <View
+                      key={day}
+                      style={[styles.dayBadge, isActive && styles.dayBadgeActive]}
+                    >
+                      <Text style={[styles.dayBadgeText, isActive && styles.dayBadgeTextActive]}>
+                        {DAY_LABELS[day]}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Preview Card */}
+            <View style={styles.previewCard}>
+              <View style={styles.previewHeader}>
+                <Ionicons name="phone-portrait-outline" size={18} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.previewTitle}>Notification Preview</Text>
+              </View>
+              <View style={styles.notificationPreview}>
+                <View style={styles.notificationIcon}>
+                  <Ionicons name="fitness" size={16} color={COLORS.NEUTRAL.WHITE} />
+                </View>
+                <View style={styles.notificationContent}>
+                  <View style={styles.notificationHeader}>
+                    <Text style={styles.notificationApp}>FitNEase</Text>
+                    <Text style={styles.notificationTime}>{formatTime(morningTime)}</Text>
+                  </View>
+                  <Text style={styles.notificationTitle}>Workout Day!</Text>
+                  <Text style={styles.notificationBody}>
+                    Time to crush your Tabata workout today.
+                  </Text>
+                </View>
               </View>
             </View>
           </>
         )}
 
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <Ionicons name="information-circle-outline" size={24} color={COLORS.PRIMARY[500]} />
-          <Text style={styles.infoText}>
-            Notifications will be sent on your selected workout days. You can change your workout days in the Weekly Plan settings.
-          </Text>
-        </View>
-
         {/* Save Button */}
-        <Button
-          title={isLoading ? 'Saving...' : 'Save Settings'}
+        <TouchableOpacity
           onPress={saveSettings}
-          loading={isLoading}
-          style={styles.saveButton}
-        />
+          disabled={isLoading}
+          activeOpacity={0.9}
+          style={styles.saveButtonContainer}
+        >
+          <LinearGradient
+            colors={isLoading ? [COLORS.NEUTRAL[300], COLORS.NEUTRAL[400]] : [COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.saveButton}
+          >
+            {isLoading ? (
+              <Text style={styles.saveButtonText}>Saving...</Text>
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
+                <Text style={styles.saveButtonText}>Save Settings</Text>
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -232,185 +375,365 @@ export default function NotificationSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 32,
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.NEUTRAL[200],
+    borderBottomColor: COLORS.NEUTRAL[100],
   },
   backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 12,
   },
   headerTitle: {
-    fontSize: FONT_SIZES.LG,
+    fontSize: 18,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
-  introSection: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 24,
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  heroSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
-  introTitle: {
-    fontSize: FONT_SIZES.XL,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-    marginTop: 16,
-    marginBottom: 8,
+  heroIconContainer: {
+    marginBottom: 16,
+    position: 'relative',
   },
-  introSubtitle: {
-    fontSize: FONT_SIZES.SM,
+  heroIconOuter: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroIconInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bellRing: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#F59E0B',
+    borderWidth: 3,
+    borderColor: COLORS.PRIMARY[500],
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 14,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
+    color: 'rgba(255,255,255,0.85)',
     textAlign: 'center',
     lineHeight: 20,
+    maxWidth: 280,
   },
-  permissionWarning: {
+  permissionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    marginHorizontal: 20,
-    marginBottom: 24,
+    backgroundColor: '#FFFBEB',
+    marginHorizontal: 16,
+    marginTop: 16,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: '#FDE68A',
   },
-  permissionWarningContent: {
+  permissionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  permissionContent: {
     flex: 1,
     marginLeft: 12,
   },
-  permissionWarningTitle: {
-    fontSize: FONT_SIZES.SM,
+  permissionTitle: {
+    fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#DC2626',
-    marginBottom: 2,
+    color: '#92400E',
   },
-  permissionWarningText: {
-    fontSize: FONT_SIZES.XS,
+  permissionText: {
+    fontSize: 12,
     fontFamily: FONTS.REGULAR,
-    color: '#B91C1C',
+    color: '#B45309',
+    marginTop: 2,
   },
-  enableButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#DC2626',
+  card: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  enableButtonText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.NEUTRAL.WHITE,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  settingRow: {
+  toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.NEUTRAL[50],
-    padding: 16,
-    borderRadius: 12,
   },
-  settingLeft: {
+  toggleLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  settingText: {
-    marginLeft: 12,
+  iconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleText: {
+    marginLeft: 14,
     flex: 1,
   },
-  settingTitle: {
-    fontSize: FONT_SIZES.BASE,
+  toggleTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  toggleStatus: {
+    fontSize: 13,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[400],
+    marginTop: 2,
+  },
+  toggleStatusActive: {
+    color: COLORS.PRIMARY[500],
+  },
+  switch: {
+    transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }],
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  cardHeaderText: {
+    marginLeft: 14,
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    marginTop: 2,
+  },
+  editButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: COLORS.PRIMARY[50],
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  timeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  timeCard: {
+    width: (width - 72) / 3,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    backgroundColor: COLORS.NEUTRAL[50],
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  timeCardSelected: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderColor: COLORS.PRIMARY[500],
+  },
+  timeIcon: {
+    marginBottom: 6,
+  },
+  timeLabel: {
+    fontSize: 18,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[700],
+  },
+  timeLabelSelected: {
+    color: COLORS.PRIMARY[600],
+  },
+  timePeriod: {
+    fontSize: 11,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[400],
+    marginTop: 2,
+  },
+  timePeriodSelected: {
+    color: COLORS.PRIMARY[500],
+  },
+  selectedCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.PRIMARY[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  dayBadge: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.NEUTRAL[100],
+    alignItems: 'center',
+  },
+  dayBadgeActive: {
+    backgroundColor: COLORS.PRIMARY[500],
+  },
+  dayBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[400],
+  },
+  dayBadgeTextActive: {
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  previewCard: {
+    backgroundColor: COLORS.PRIMARY[50],
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[100],
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  previewTitle: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[700],
+  },
+  notificationPreview: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 14,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  notificationIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.PRIMARY[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  notificationApp: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[500],
+  },
+  notificationTime: {
+    fontSize: 11,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+  },
+  notificationTitle: {
+    fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
     marginBottom: 2,
   },
-  settingSubtitle: {
-    fontSize: FONT_SIZES.SM,
+  notificationBody: {
+    fontSize: 13,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
   },
-  sectionTitle: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    marginBottom: 16,
-  },
-  optionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  optionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.NEUTRAL[200],
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    gap: 8,
-  },
-  optionButtonActive: {
-    borderColor: COLORS.PRIMARY[500],
-    backgroundColor: COLORS.PRIMARY[50],
-  },
-  optionText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-  },
-  optionTextActive: {
-    color: COLORS.PRIMARY[500],
-    fontFamily: FONTS.SEMIBOLD,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: COLORS.PRIMARY[50],
-    marginHorizontal: 20,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.PRIMARY[100],
-    gap: 12,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[700],
-    lineHeight: 20,
+  saveButtonContainer: {
+    marginHorizontal: 16,
+    marginTop: 24,
   },
   saveButton: {
-    marginHorizontal: 20,
-    backgroundColor: COLORS.PRIMARY[500],
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });

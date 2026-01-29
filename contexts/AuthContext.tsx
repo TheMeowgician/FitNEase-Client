@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService, User as AuthUser, LoginRequest, RegisterRequest } from '../services/microservices/authService';
-import { workoutNotificationScheduler } from '../services/workoutNotificationScheduler';
+import { workoutNotificationScheduler, NotificationSettings } from '../services/workoutNotificationScheduler';
+
+const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -96,22 +99,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   /**
    * Schedule workout reminders for a user based on their workout days
+   * Reads the user's saved notification settings from AsyncStorage
    */
   const scheduleWorkoutRemindersForUser = async (userData: AuthUser) => {
     try {
       if (userData.workoutDays && userData.workoutDays.length > 0) {
         console.log('📅 Scheduling workout reminders for days:', userData.workoutDays);
 
+        // Read saved notification settings from AsyncStorage
+        let settings: NotificationSettings = {
+          enabled: true,
+          morningReminderTime: '08:00',
+          advanceNoticeMinutes: 60,
+        };
+
+        try {
+          const stored = await AsyncStorage.getItem(NOTIFICATION_SETTINGS_KEY);
+          if (stored) {
+            const savedSettings = JSON.parse(stored);
+            settings = { ...settings, ...savedSettings };
+            console.log('📅 Using saved notification time:', settings.morningReminderTime);
+          }
+        } catch (storageError) {
+          console.log('📅 Could not read notification settings, using defaults');
+        }
+
+        // If notifications are disabled, don't schedule
+        if (!settings.enabled) {
+          console.log('📅 Notifications disabled in settings, skipping schedule');
+          return;
+        }
+
         // Convert day IDs to proper day names (capitalize first letter)
         const dayNames = userData.workoutDays.map((day: string) =>
           day.charAt(0).toUpperCase() + day.slice(1)
         );
 
-        await workoutNotificationScheduler.scheduleWorkoutReminders(dayNames, {
-          enabled: true,
-          morningReminderTime: '08:00', // Default time, can be made configurable
-          advanceNoticeMinutes: 60,
-        });
+        await workoutNotificationScheduler.scheduleWorkoutReminders(dayNames, settings);
 
         console.log('📅 Workout reminders scheduled successfully');
       } else {

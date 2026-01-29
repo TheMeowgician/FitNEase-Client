@@ -3,14 +3,17 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '../../../components/ui/Button';
 import { COLORS, FONTS } from '../../../constants/colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { planningService } from '../../../services/microservices/planningService';
-import { workoutNotificationScheduler } from '../../../services/workoutNotificationScheduler';
+import { workoutNotificationScheduler, NotificationSettings } from '../../../services/workoutNotificationScheduler';
 import { useSmartBack } from '../../../hooks/useSmartBack';
+
+const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
 
 interface DayOfWeek {
   id: string;
@@ -50,9 +53,34 @@ export default function WorkoutDaysSettingsScreen() {
 
   /**
    * Re-schedule workout reminders after days are updated
+   * Reads the user's saved notification settings from AsyncStorage
    */
   const rescheduleWorkoutReminders = async (newDays: string[]) => {
     try {
+      // Read saved notification settings from AsyncStorage
+      let settings: NotificationSettings = {
+        enabled: true,
+        morningReminderTime: '08:00',
+        advanceNoticeMinutes: 60,
+      };
+
+      try {
+        const stored = await AsyncStorage.getItem(NOTIFICATION_SETTINGS_KEY);
+        if (stored) {
+          const savedSettings = JSON.parse(stored);
+          settings = { ...settings, ...savedSettings };
+          console.log('[WORKOUT_DAYS] Using saved notification time:', settings.morningReminderTime);
+        }
+      } catch (storageError) {
+        console.log('[WORKOUT_DAYS] Could not read notification settings, using defaults');
+      }
+
+      // If notifications are disabled, don't schedule
+      if (!settings.enabled) {
+        console.log('[WORKOUT_DAYS] Notifications disabled in settings, skipping schedule');
+        return;
+      }
+
       // Convert day IDs to proper day names (capitalize first letter)
       const dayNames = newDays.map((day: string) =>
         day.charAt(0).toUpperCase() + day.slice(1)
@@ -60,11 +88,7 @@ export default function WorkoutDaysSettingsScreen() {
 
       console.log('[WORKOUT_DAYS] Re-scheduling reminders for days:', dayNames);
 
-      await workoutNotificationScheduler.scheduleWorkoutReminders(dayNames, {
-        enabled: true,
-        morningReminderTime: '08:00',
-        advanceNoticeMinutes: 60,
-      });
+      await workoutNotificationScheduler.scheduleWorkoutReminders(dayNames, settings);
 
       console.log('[WORKOUT_DAYS] Reminders re-scheduled successfully');
     } catch (error) {
