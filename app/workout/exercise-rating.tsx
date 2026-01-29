@@ -15,7 +15,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { COLORS, FONTS } from '../../constants/colors';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
+import AchievementUnlockModal, { UnlockedAchievement } from '../../components/achievements/AchievementUnlockModal';
 import { ratingService } from '../../services/microservices/ratingService';
+import { engagementService } from '../../services/microservices/engagementService';
 import { useProgressStore } from '../../stores/progressStore';
 
 /**
@@ -83,6 +85,8 @@ export default function ExerciseRatingScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showProgressModal, setShowProgressModal] = useState(false);
+  const [showAchievementModal, setShowAchievementModal] = useState(false);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<UnlockedAchievement[]>([]);
 
   // Current exercise being rated
   const currentExercise = exercises[currentIndex];
@@ -197,9 +201,45 @@ export default function ExerciseRatingScreen() {
       console.log('🔄 [RATING MODAL CLOSE] Refreshing progress store...');
       await refreshAfterWorkout(user.id);
       console.log('✅ [RATING MODAL CLOSE] Progress store refreshed');
+
+      // Check for newly unlocked achievements
+      console.log('🏆 [RATING MODAL CLOSE] Checking for unlocked achievements...');
+      try {
+        const newAchievements = await engagementService.checkAchievementsAfterWorkout(user.id);
+
+        if (newAchievements && newAchievements.length > 0) {
+          console.log('🏆 [RATING MODAL CLOSE] Found unlocked achievements:', newAchievements.length);
+
+          // Map to the format expected by the modal
+          const formattedAchievements: UnlockedAchievement[] = newAchievements.map((a: any) => ({
+            achievement_id: a.achievement_id || a.achievement?.achievement_id,
+            achievement_name: a.achievement_name || a.achievement?.achievement_name || 'Achievement',
+            description: a.description || a.achievement?.description || 'Congratulations!',
+            badge_icon: a.badge_icon || a.achievement?.badge_icon || 'trophy',
+            badge_color: a.badge_color || a.achievement?.badge_color || '#F59E0B',
+            rarity_level: a.rarity_level || a.achievement?.rarity_level || 'common',
+            points_value: a.points_value || a.achievement?.points_value || a.points_earned || 100,
+          }));
+
+          setUnlockedAchievements(formattedAchievements);
+          setShowAchievementModal(true);
+          return; // Don't navigate yet, wait for achievement modal to close
+        }
+      } catch (error) {
+        console.warn('🏆 [RATING MODAL CLOSE] Achievement check failed:', error);
+        // Continue to navigation even if achievement check fails
+      }
     }
 
     // Navigate to home tab and replace history to prevent going back
+    router.replace('/(tabs)');
+  };
+
+  const handleAchievementModalClose = () => {
+    setShowAchievementModal(false);
+    setUnlockedAchievements([]);
+
+    // Now navigate to home tab
     router.replace('/(tabs)');
   };
 
@@ -460,6 +500,13 @@ export default function ExerciseRatingScreen() {
           workoutData={parsedWorkoutData}
         />
       )}
+
+      {/* Achievement Unlock Modal */}
+      <AchievementUnlockModal
+        visible={showAchievementModal}
+        achievements={unlockedAchievements}
+        onClose={handleAchievementModalClose}
+      />
     </SafeAreaView>
   );
 }

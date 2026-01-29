@@ -143,4 +143,47 @@ export class EngagementService {
   }
 }
 
+  /**
+   * Check for newly unlocked achievements after a workout
+   * This should be called after saving a workout session
+   */
+  public async checkAchievementsAfterWorkout(userId: string | number): Promise<any[]> {
+    try {
+      const response = await apiClient.post<{ success: boolean; data: { newly_unlocked: any[] } }>(
+        this.serviceName,
+        '/api/engagement/check-achievements',
+        { user_id: Number(userId) }
+      );
+
+      const newlyUnlocked = response.data.data?.newly_unlocked || [];
+
+      if (newlyUnlocked.length > 0) {
+        console.log('🏆 [ENGAGEMENT] Newly unlocked achievements:', newlyUnlocked.length);
+      }
+
+      return newlyUnlocked;
+    } catch (error) {
+      console.warn('Engagement service unavailable - achievement check skipped:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get achievements that were recently unlocked (within last hour)
+   * Used to show achievement modal if user missed it
+   */
+  public async getRecentlyUnlockedAchievements(userId: string | number): Promise<any[]> {
+    try {
+      const response = await apiClient.get<{ success: boolean; data: any[] }>(
+        this.serviceName,
+        `/api/engagement/recently-unlocked/${userId}`
+      );
+      return response.data.data || [];
+    } catch (error) {
+      console.warn('Could not fetch recently unlocked achievements:', error);
+      return [];
+    }
+  }
+}
+
 export const engagementService = new EngagementService();
