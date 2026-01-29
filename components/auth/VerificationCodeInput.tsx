@@ -141,7 +141,7 @@ export const VerificationCodeInput = forwardRef<VerificationCodeInputRef, Verifi
         {Array.from({ length }, (_, index) => (
           <TextInput
             key={index}
-            ref={(ref) => (inputRefs.current[index] = ref)}
+            ref={(ref) => { inputRefs.current[index] = ref; }}
             style={[
               inputStyle,
               { borderColor: getInputBorderColor(index) },

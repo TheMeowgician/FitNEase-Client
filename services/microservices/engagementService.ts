@@ -41,7 +41,7 @@ export interface LeaderboardEntry {
 }
 
 export class EngagementService {
-  private serviceName = 'engagement';
+  private serviceName = 'engagement' as const;
 
   public async getUserAchievements(userId: string): Promise<UserAchievement[]> {
     try {

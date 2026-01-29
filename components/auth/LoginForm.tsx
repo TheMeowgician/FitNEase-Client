@@ -224,8 +224,8 @@ const styles = {
     borderColor: '#BBF7D0',
   },
   successRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   successText: {
     fontSize: FONT_SIZES.SM,

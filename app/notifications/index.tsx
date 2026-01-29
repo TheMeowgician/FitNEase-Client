@@ -166,6 +166,127 @@ export default function NotificationsScreen() {
     );
   };
 
+  // Handle approving a group join request
+  const handleApproveJoinRequest = async (notification: Notification) => {
+    const groupId = notification.action_data?.group_id;
+    const requesterUserId = notification.action_data?.requester_user_id;
+    const groupName = notification.action_data?.group_name || 'the group';
+    const requesterUsername = notification.action_data?.requester_username || 'User';
+
+    if (!groupId || !requesterUserId) {
+      alert.error('Error', 'Invalid join request data');
+      return;
+    }
+
+    try {
+      // First, fetch join requests to get the request_id
+      const response = await socialService.getJoinRequests(groupId.toString());
+      const requests = response.data?.requests || [];
+
+      // Find the request matching this user
+      const matchingRequest = requests.find(
+        (req: any) => req.user_id === requesterUserId
+      );
+
+      if (!matchingRequest) {
+        // Request might have been already processed or cancelled
+        await handleMarkAsRead(notification.notification_id);
+        alert.info('Request Not Found', 'This join request has already been processed or was cancelled by the user.');
+        return;
+      }
+
+      // Approve the request
+      await socialService.approveJoinRequest(groupId.toString(), matchingRequest.request_id);
+
+      // Mark notification as read
+      await handleMarkAsRead(notification.notification_id);
+
+      alert.success('Approved', `${requesterUsername} has been added to ${groupName}!`);
+    } catch (error: any) {
+      console.error('Error approving join request:', error);
+
+      // Handle specific error cases
+      const errorMessage = error.message?.toLowerCase() || '';
+
+      if (errorMessage.includes('group not found') || errorMessage.includes('no longer exists')) {
+        await handleMarkAsRead(notification.notification_id);
+        alert.error('Group Deleted', 'This group no longer exists.');
+      } else if (errorMessage.includes('not found') || errorMessage.includes('already processed')) {
+        await handleMarkAsRead(notification.notification_id);
+        alert.info('Already Processed', 'This join request has already been handled.');
+      } else if (errorMessage.includes('permission') || errorMessage.includes('unauthorized')) {
+        alert.error('Permission Denied', 'You do not have permission to approve this request.');
+      } else {
+        alert.error('Error', error.message || 'Failed to approve join request');
+      }
+    }
+  };
+
+  // Handle rejecting a group join request
+  const handleRejectJoinRequest = async (notification: Notification) => {
+    const groupId = notification.action_data?.group_id;
+    const requesterUserId = notification.action_data?.requester_user_id;
+    const groupName = notification.action_data?.group_name || 'the group';
+    const requesterUsername = notification.action_data?.requester_username || 'User';
+
+    if (!groupId || !requesterUserId) {
+      alert.error('Error', 'Invalid join request data');
+      return;
+    }
+
+    alert.confirm(
+      'Decline Request',
+      `Are you sure you want to decline ${requesterUsername}'s request to join ${groupName}?`,
+      async () => {
+        try {
+          // First, fetch join requests to get the request_id
+          const response = await socialService.getJoinRequests(groupId.toString());
+          const requests = response.data?.requests || [];
+
+          // Find the request matching this user
+          const matchingRequest = requests.find(
+            (req: any) => req.user_id === requesterUserId
+          );
+
+          if (!matchingRequest) {
+            // Request might have been already processed or cancelled
+            await handleMarkAsRead(notification.notification_id);
+            alert.info('Request Not Found', 'This join request has already been processed or was cancelled by the user.');
+            return;
+          }
+
+          // Reject the request
+          await socialService.rejectJoinRequest(groupId.toString(), matchingRequest.request_id);
+
+          // Mark notification as read
+          await handleMarkAsRead(notification.notification_id);
+
+          alert.info('Declined', `${requesterUsername}'s request has been declined.`);
+        } catch (error: any) {
+          console.error('Error rejecting join request:', error);
+
+          // Handle specific error cases
+          const errorMessage = error.message?.toLowerCase() || '';
+
+          if (errorMessage.includes('group not found') || errorMessage.includes('no longer exists')) {
+            await handleMarkAsRead(notification.notification_id);
+            alert.error('Group Deleted', 'This group no longer exists.');
+          } else if (errorMessage.includes('not found') || errorMessage.includes('already processed')) {
+            await handleMarkAsRead(notification.notification_id);
+            alert.info('Already Processed', 'This join request has already been handled.');
+          } else if (errorMessage.includes('permission') || errorMessage.includes('unauthorized')) {
+            alert.error('Permission Denied', 'You do not have permission to decline this request.');
+          } else {
+            alert.error('Error', error.message || 'Failed to decline join request');
+          }
+        }
+      },
+      undefined,
+      'Decline',
+      'Cancel'
+    );
+  };
+
   const handleDeleteNotification = async (notificationId: number) => {
     try {
       // Delete from backend
@@ -220,22 +341,30 @@ export default function NotificationsScreen() {
   };
 
   const handleNotificationPress = async (notification: Notification) => {
+    // Handle notification action based on type
+    const actionType = notification.action_data?.type;
+    const notificationType = notification.notification_type;
+
+    // Group invites have action buttons - don't mark as read on tap
+    // They will be marked as read when the action is taken
+    if (actionType === 'group_invite') {
+      return;
+    }
+
     // Mark as read when pressed
     if (!notification.is_read) {
       await handleMarkAsRead(notification.notification_id);
     }
 
-    // Handle notification action based on type
-    const actionType = notification.action_data?.type;
-    const notificationType = notification.notification_type;
-
-    // Group invites have action buttons - don't navigate
-    if (actionType === 'group_invite') {
-      return;
-    }
-
     // Navigate based on notification type and action data
     switch (actionType) {
+      case 'group_join_request':
+        // Navigate to the group page where owner can see pending requests
+        if (notification.action_data?.group_id) {
+          router.push(`/groups/${notification.action_data.group_id}`);
+        }
+        break;
+
       case 'group_join_approved':
       case 'group_invite_accepted':
         // Navigate to the group
@@ -244,17 +373,10 @@ export default function NotificationsScreen() {
         }
         break;
 
-      case 'group_join_request':
-        // Navigate to group management to handle request
-        if (notification.action_data?.group_id) {
-          router.push(`/groups/${notification.action_data.group_id}/manage`);
-        }
-        break;
-
       case 'achievement_unlock':
       case 'achievement':
-        // Navigate to progress/achievements
-        router.push('/(tabs)/progress');
+        // Navigate to achievements page
+        router.push('/achievements');
         break;
 
       case 'group_invite_declined':
@@ -267,7 +389,7 @@ export default function NotificationsScreen() {
         // Handle by notification_type as fallback
         switch (notificationType) {
           case 'achievement':
-            router.push('/(tabs)/progress');
+            router.push('/achievements');
             break;
           case 'workout_reminder':
             router.push('/workout');
@@ -278,6 +400,11 @@ export default function NotificationsScreen() {
             }
             break;
           case 'group_join_approved':
+            if (notification.action_data?.group_id) {
+              router.push(`/groups/${notification.action_data.group_id}`);
+            }
+            break;
+          case 'group_join_request':
             if (notification.action_data?.group_id) {
               router.push(`/groups/${notification.action_data.group_id}`);
             }
@@ -299,9 +426,9 @@ export default function NotificationsScreen() {
 
     // These types have navigation
     const navigableActionTypes = [
+      'group_join_request',
       'group_join_approved',
       'group_invite_accepted',
-      'group_join_request',
       'achievement_unlock',
       'achievement',
     ];
@@ -386,6 +513,18 @@ export default function NotificationsScreen() {
       return { name: 'person-add' as const, color: '#10B981' };
     }
 
+    if (notification.action_data?.type === 'group_join_request') {
+      return { name: 'person-add' as const, color: '#F59E0B' }; // Amber/orange for pending request
+    }
+
+    if (notification.action_data?.type === 'group_join_approved') {
+      return { name: 'checkmark-circle' as const, color: '#10B981' };
+    }
+
+    if (notification.action_data?.type === 'group_join_rejected') {
+      return { name: 'close-circle' as const, color: '#EF4444' };
+    }
+
     // Fall back to notification_type
     switch (notification.notification_type) {
       case 'group_invite':
@@ -406,6 +545,7 @@ export default function NotificationsScreen() {
   const renderNotificationItem = (notification: Notification) => {
     const icon = getNotificationIcon(notification);
     const isGroupInvitation = notification.action_data?.type === 'group_invite';
+    const hasActionButtons = isGroupInvitation;
     const isNavigable = isNotificationNavigable(notification);
 
     return (
@@ -458,10 +598,11 @@ export default function NotificationsScreen() {
                 </TouchableOpacity>
               </View>
             )}
+
           </View>
 
           {/* Chevron indicator for navigable notifications */}
-          {isNavigable && !isGroupInvitation && (
+          {isNavigable && !hasActionButtons && (
             <View style={styles.chevronContainer}>
               <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
             </View>

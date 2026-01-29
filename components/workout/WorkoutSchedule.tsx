@@ -35,11 +35,20 @@ const WORKOUT_TYPES = [
   { key: 'mixed', label: 'Mixed', icon: 'fitness', color: '#F59E0B' },
 ];
 
+type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced';
+
 interface WorkoutScheduleProps {
   onClose: () => void;
   initialFitnessLevel?: string;
   initialFitnessAssessment?: any;
 }
+
+const validateDifficulty = (level: string | undefined): DifficultyLevel => {
+  if (level === 'beginner' || level === 'intermediate' || level === 'advanced') {
+    return level;
+  }
+  return 'beginner';
+};
 
 export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAssessment }: WorkoutScheduleProps) {
   const { user } = useAuth();
@@ -89,7 +98,7 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
         if (fitnessAssessment && fitnessAssessment.length > 0) {
           const assessmentFitnessLevel = fitnessAssessment[0].assessment_data.fitness_level;
           const assessmentDuration = fitnessAssessment[0].assessment_data.time_constraints_minutes;
-          setDifficulty(assessmentFitnessLevel || 'beginner');
+          setDifficulty(validateDifficulty(assessmentFitnessLevel));
           setSessionDuration(assessmentDuration || 30);
         }
 
@@ -104,12 +113,12 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
           // Use personalized settings from onboarding
           const personalizedDays = assessmentData.preferred_workout_days || ['monday', 'wednesday', 'friday'];
           const personalizedDuration = assessmentData.time_constraints_minutes || 30;
-          const personalizedDifficulty = assessmentData.fitness_level || initialFitnessLevel || 'beginner';
+          const personalizedDifficulty = assessmentData.fitness_level || initialFitnessLevel;
 
           setSelectedDays(personalizedDays);
           setSessionsPerWeek(personalizedDays.length);
           setSessionDuration(personalizedDuration);
-          setDifficulty(personalizedDifficulty);
+          setDifficulty(validateDifficulty(personalizedDifficulty));
 
           console.log('✅ Applied personalized defaults from assessment');
         } else {
@@ -117,7 +126,7 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
           setSelectedDays(['monday', 'wednesday', 'friday']);
           setSessionsPerWeek(3);
           setSessionDuration(30);
-          setDifficulty(initialFitnessLevel || 'beginner');
+          setDifficulty(validateDifficulty(initialFitnessLevel));
           console.log('⚠️ Using app defaults');
         }
       }
@@ -128,7 +137,7 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
       setSelectedDays(['monday', 'wednesday', 'friday']);
       setSessionsPerWeek(3);
       setSessionDuration(30);
-      setDifficulty(initialFitnessLevel || 'beginner');
+      setDifficulty(validateDifficulty(initialFitnessLevel));
     }
   };
 
@@ -363,18 +372,18 @@ export function WorkoutSchedule({ onClose, initialFitnessLevel, initialFitnessAs
           </Text>
 
           <View style={styles.difficultyOptions}>
-            {[
-              { key: 'beginner', label: 'Beginner', desc: 'New to fitness' },
-              { key: 'intermediate', label: 'Intermediate', desc: 'Some experience' },
-              { key: 'advanced', label: 'Advanced', desc: 'Very experienced' },
-            ].map((level) => (
+            {([
+              { key: 'beginner' as DifficultyLevel, label: 'Beginner', desc: 'New to fitness' },
+              { key: 'intermediate' as DifficultyLevel, label: 'Intermediate', desc: 'Some experience' },
+              { key: 'advanced' as DifficultyLevel, label: 'Advanced', desc: 'Very experienced' },
+            ]).map((level) => (
               <TouchableOpacity
                 key={level.key}
                 style={[
                   styles.difficultyCard,
                   difficulty === level.key && styles.difficultyCardSelected,
                 ]}
-                onPress={() => setDifficulty(level.key as any)}
+                onPress={() => setDifficulty(level.key)}
                 activeOpacity={0.7}
               >
                 <Text style={[

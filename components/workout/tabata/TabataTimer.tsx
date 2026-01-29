@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { COLORS, FONTS, FONT_SIZES } from '../../../constants/colors';
 import { TABATA_CONFIG } from '../../../constants/tabata';
 
+type TimerState = typeof TABATA_CONFIG.TIMER_STATES[keyof typeof TABATA_CONFIG.TIMER_STATES];
+
 interface TabataTimerProps {
   isActive: boolean;
   onRoundComplete: (round: number) => void;
@@ -18,12 +20,12 @@ export const TabataTimer: React.FC<TabataTimerProps> = ({
   onStateChange,
   style,
 }) => {
-  const [currentState, setCurrentState] = useState(TABATA_CONFIG.TIMER_STATES.PREPARATION);
+  const [currentState, setCurrentState] = useState<TimerState>(TABATA_CONFIG.TIMER_STATES.PREPARATION);
   const [timeRemaining, setTimeRemaining] = useState(TABATA_CONFIG.PREPARATION_TIME);
   const [currentRound, setCurrentRound] = useState(1);
   const [isWorkPhase, setIsWorkPhase] = useState(false);
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (isActive) {

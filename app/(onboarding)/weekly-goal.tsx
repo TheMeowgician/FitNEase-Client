@@ -358,16 +358,14 @@ export default function WeeklyGoalScreen() {
           onPress={handleContinue}
           loading={isLoading}
           disabled={!isValidSelection}
-          style={[
-            styles.continueButton,
-            {
-              backgroundColor: isValidSelection ? COLORS.PRIMARY[500] : COLORS.NEUTRAL[300],
-              shadowColor: isValidSelection ? COLORS.PRIMARY[500] : 'transparent',
-              shadowOpacity: isValidSelection ? 0.3 : 0,
-              shadowRadius: isValidSelection ? 8 : 0,
-              elevation: isValidSelection ? 8 : 0,
-            }
-          ]}
+          style={{
+            ...styles.continueButton,
+            backgroundColor: isValidSelection ? COLORS.PRIMARY[500] : COLORS.NEUTRAL[300],
+            shadowColor: isValidSelection ? COLORS.PRIMARY[500] : 'transparent',
+            shadowOpacity: isValidSelection ? 0.3 : 0,
+            shadowRadius: isValidSelection ? 8 : 0,
+            elevation: isValidSelection ? 8 : 0,
+          }}
         />
       </View>
     </SafeAreaView>

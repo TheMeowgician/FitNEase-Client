@@ -21,7 +21,7 @@ export interface PollingSubscription {
 
 class PollingService {
   private subscriptions: Map<string, PollingSubscription> = new Map();
-  private intervals: Map<string, NodeJS.Timeout> = new Map();
+  private intervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private lastVersions: Map<string, number> = new Map();
   private failedAttempts: Map<string, number> = new Map();
   private isPolling: Map<string, boolean> = new Map();

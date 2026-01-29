@@ -358,16 +358,14 @@ export default function FitnessGoalsScreen() {
           onPress={handleContinue}
           loading={isLoading}
           disabled={selectedGoals.length === 0}
-          style={[
-            styles.continueButton,
-            {
-              backgroundColor: selectedGoals.length > 0 ? COLORS.PRIMARY[500] : COLORS.NEUTRAL[300],
-              shadowColor: selectedGoals.length > 0 ? COLORS.PRIMARY[500] : 'transparent',
-              shadowOpacity: selectedGoals.length > 0 ? 0.3 : 0,
-              shadowRadius: selectedGoals.length > 0 ? 8 : 0,
-              elevation: selectedGoals.length > 0 ? 8 : 0,
-            }
-          ]}
+          style={{
+            ...styles.continueButton,
+            backgroundColor: selectedGoals.length > 0 ? COLORS.PRIMARY[500] : COLORS.NEUTRAL[300],
+            shadowColor: selectedGoals.length > 0 ? COLORS.PRIMARY[500] : 'transparent',
+            shadowOpacity: selectedGoals.length > 0 ? 0.3 : 0,
+            shadowRadius: selectedGoals.length > 0 ? 8 : 0,
+            elevation: selectedGoals.length > 0 ? 8 : 0,
+          }}
         />
       </View>
     </SafeAreaView>

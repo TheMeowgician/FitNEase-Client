@@ -14,7 +14,7 @@ class EventDeduplicationManager {
   private processedEvents: Map<string, EventCacheEntry> = new Map();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
   private readonly MAX_CACHE_SIZE = 1000;
-  private cleanupInterval: NodeJS.Timeout | null = null;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     // Start automatic cleanup every minute
