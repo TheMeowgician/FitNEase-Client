@@ -7,14 +7,11 @@ import {
   Animated,
   Dimensions,
   TouchableOpacity,
-  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { COLORS, FONTS } from '../../constants/colors';
+import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 export interface UnlockedAchievement {
   achievement_id: number;
@@ -34,23 +31,23 @@ interface AchievementUnlockModalProps {
 
 const RARITY_CONFIG = {
   common: {
-    gradient: ['#6B7280', '#4B5563'],
-    glow: '#9CA3AF',
+    color: '#6B7280',
+    bgColor: '#F3F4F6',
     label: 'COMMON',
   },
   rare: {
-    gradient: ['#3B82F6', '#2563EB'],
-    glow: '#60A5FA',
+    color: '#3B82F6',
+    bgColor: '#DBEAFE',
     label: 'RARE',
   },
   epic: {
-    gradient: ['#8B5CF6', '#7C3AED'],
-    glow: '#A78BFA',
+    color: '#8B5CF6',
+    bgColor: '#EDE9FE',
     label: 'EPIC',
   },
   legendary: {
-    gradient: ['#F59E0B', '#D97706'],
-    glow: '#FBBF24',
+    color: '#F59E0B',
+    bgColor: '#FEF3C7',
     label: 'LEGENDARY',
   },
 };
@@ -63,17 +60,11 @@ export default function AchievementUnlockModal({
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // Animations
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const cardScale = useRef(new Animated.Value(0.3)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const badgeScale = useRef(new Animated.Value(0)).current;
-  const badgeRotation = useRef(new Animated.Value(0)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
-  const glowScale = useRef(new Animated.Value(0.8)).current;
-  const sparkleOpacity = useRef(new Animated.Value(0)).current;
-  const textOpacity = useRef(new Animated.Value(0)).current;
-  const pointsScale = useRef(new Animated.Value(0)).current;
-  const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const badgeScaleAnim = useRef(new Animated.Value(0)).current;
+  const textOpacityAnim = useRef(new Animated.Value(0)).current;
+  const pointsScaleAnim = useRef(new Animated.Value(0)).current;
 
   const currentAchievement = achievements[currentIndex];
   const rarityConfig = currentAchievement
@@ -90,17 +81,11 @@ export default function AchievementUnlockModal({
   }, [visible, achievements]);
 
   const resetAnimations = () => {
-    backdropOpacity.setValue(0);
-    cardScale.setValue(0.3);
-    cardOpacity.setValue(0);
-    badgeScale.setValue(0);
-    badgeRotation.setValue(0);
-    glowOpacity.setValue(0);
-    glowScale.setValue(0.8);
-    sparkleOpacity.setValue(0);
-    textOpacity.setValue(0);
-    pointsScale.setValue(0);
-    buttonOpacity.setValue(0);
+    fadeAnim.setValue(0);
+    scaleAnim.setValue(0.9);
+    badgeScaleAnim.setValue(0);
+    textOpacityAnim.setValue(0);
+    pointsScaleAnim.setValue(0);
   };
 
   const playEntryAnimation = () => {
@@ -108,113 +93,51 @@ export default function AchievementUnlockModal({
 
     // Sequence of animations
     Animated.sequence([
-      // 1. Fade in backdrop
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      // 2. Card appears with bounce
+      // 1. Fade in backdrop and card
       Animated.parallel([
-        Animated.spring(cardScale, {
-          toValue: 1,
-          friction: 6,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.timing(cardOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 3. Glow pulse starts
-      Animated.parallel([
-        Animated.timing(glowOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowScale, {
-          toValue: 1.2,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 4. Badge appears with spin
-      Animated.parallel([
-        Animated.spring(badgeScale, {
-          toValue: 1,
-          friction: 4,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-        Animated.timing(badgeRotation, {
-          toValue: 1,
-          duration: 600,
-          easing: Easing.out(Easing.back(1.5)),
-          useNativeDriver: true,
-        }),
-        Animated.timing(sparkleOpacity, {
+        Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
         }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        }),
       ]),
-      // 5. Text fades in
-      Animated.timing(textOpacity, {
+      // 2. Badge appears with bounce
+      Animated.spring(badgeScaleAnim, {
+        toValue: 1,
+        friction: 4,
+        tension: 50,
+        useNativeDriver: true,
+      }),
+      // 3. Text fades in
+      Animated.timing(textOpacityAnim, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }),
-      // 6. Points pop
-      Animated.spring(pointsScale, {
+      // 4. Points pop
+      Animated.spring(pointsScaleAnim, {
         toValue: 1,
         friction: 5,
         tension: 60,
         useNativeDriver: true,
       }),
-      // 7. Button appears
-      Animated.timing(buttonOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
     ]).start();
-
-    // Start continuous glow pulse
-    startGlowPulse();
-  };
-
-  const startGlowPulse = () => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowScale, {
-          toValue: 1.4,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowScale, {
-          toValue: 1.2,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
   };
 
   const handleNext = () => {
     if (currentIndex < achievements.length - 1) {
       // Animate out, then in for next achievement
       Animated.parallel([
-        Animated.timing(cardScale, { toValue: 0.8, duration: 200, useNativeDriver: true }),
-        Animated.timing(cardOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.9, duration: 200, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0.5, duration: 200, useNativeDriver: true }),
       ]).start(() => {
         setCurrentIndex(currentIndex + 1);
-        resetAnimations();
-        backdropOpacity.setValue(1);
         playEntryAnimation();
       });
     } else {
@@ -224,179 +147,110 @@ export default function AchievementUnlockModal({
 
   const handleClose = () => {
     Animated.parallel([
-      Animated.timing(cardScale, { toValue: 0.8, duration: 200, useNativeDriver: true }),
-      Animated.timing(cardOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 0.9, duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start(() => {
       onClose();
     });
   };
 
-  const rotationInterpolate = badgeRotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   if (!currentAchievement) return null;
 
   const badgeIcon = currentAchievement.badge_icon || 'trophy';
+  const badgeColor = currentAchievement.badge_color || rarityConfig.color;
 
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-        <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" />
-
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
+      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
         <Animated.View
           style={[
-            styles.cardContainer,
+            styles.container,
             {
-              opacity: cardOpacity,
-              transform: [{ scale: cardScale }],
+              transform: [{ scale: scaleAnim }],
             },
           ]}
         >
-          {/* Glow Effect */}
-          <Animated.View
-            style={[
-              styles.glowEffect,
-              {
-                backgroundColor: rarityConfig.glow,
-                opacity: Animated.multiply(glowOpacity, 0.4),
-                transform: [{ scale: glowScale }],
-              },
-            ]}
-          />
-
-          {/* Main Card */}
-          <LinearGradient
-            colors={['#1F2937', '#111827']}
-            style={styles.card}
-          >
-            {/* Achievement Unlocked Header */}
-            <Animated.View style={[styles.header, { opacity: textOpacity }]}>
-              <View style={styles.unlockedBadge}>
-                <Ionicons name="star" size={12} color="#FBBF24" />
-                <Text style={styles.unlockedText}>ACHIEVEMENT UNLOCKED</Text>
-                <Ionicons name="star" size={12} color="#FBBF24" />
-              </View>
-            </Animated.View>
-
-            {/* Badge Container */}
-            <View style={styles.badgeContainer}>
-              {/* Sparkles */}
-              <Animated.View style={[styles.sparkleContainer, { opacity: sparkleOpacity }]}>
-                {[...Array(8)].map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.sparkle,
-                      {
-                        transform: [
-                          { rotate: `${i * 45}deg` },
-                          { translateY: -60 },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Ionicons name="sparkles" size={16} color={rarityConfig.glow} />
-                  </View>
-                ))}
-              </Animated.View>
-
-              {/* Badge */}
-              <Animated.View
-                style={[
-                  styles.badge,
-                  {
-                    transform: [
-                      { scale: badgeScale },
-                      { rotate: rotationInterpolate },
-                    ],
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={rarityConfig.gradient}
-                  style={styles.badgeGradient}
-                >
-                  <Ionicons
-                    name={badgeIcon as any}
-                    size={48}
-                    color="white"
-                  />
-                </LinearGradient>
-              </Animated.View>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.starsRow}>
+              <Ionicons name="star" size={16} color={COLORS.WARNING[500]} />
+              <Text style={styles.unlockedText}>ACHIEVEMENT UNLOCKED</Text>
+              <Ionicons name="star" size={16} color={COLORS.WARNING[500]} />
             </View>
+          </View>
 
-            {/* Rarity Label */}
-            <Animated.View style={{ opacity: textOpacity }}>
-              <LinearGradient
-                colors={rarityConfig.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.rarityBadge}
-              >
-                <Text style={styles.rarityText}>{rarityConfig.label}</Text>
-              </LinearGradient>
-            </Animated.View>
-
-            {/* Achievement Name & Description */}
-            <Animated.View style={[styles.textContainer, { opacity: textOpacity }]}>
-              <Text style={styles.achievementName}>{currentAchievement.achievement_name}</Text>
-              <Text style={styles.achievementDescription}>{currentAchievement.description}</Text>
-            </Animated.View>
-
-            {/* Points */}
+          {/* Badge */}
+          <View style={styles.badgeContainer}>
             <Animated.View
               style={[
-                styles.pointsContainer,
-                { transform: [{ scale: pointsScale }] },
+                styles.badge,
+                {
+                  backgroundColor: badgeColor,
+                  transform: [{ scale: badgeScaleAnim }],
+                },
               ]}
             >
-              <Ionicons name="trophy" size={20} color="#FBBF24" />
-              <Text style={styles.pointsText}>+{currentAchievement.points_value}</Text>
-              <Text style={styles.pointsLabel}>POINTS</Text>
+              <Ionicons name={badgeIcon as any} size={48} color={COLORS.NEUTRAL.WHITE} />
             </Animated.View>
+          </View>
 
-            {/* Action Button */}
-            <Animated.View style={{ opacity: buttonOpacity, width: '100%' }}>
-              <TouchableOpacity onPress={handleNext} activeOpacity={0.8}>
-                <LinearGradient
-                  colors={rarityConfig.gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.actionButton}
-                >
-                  <Text style={styles.actionButtonText}>
-                    {currentIndex < achievements.length - 1
-                      ? `NEXT (${currentIndex + 1}/${achievements.length})`
-                      : 'AWESOME!'}
-                  </Text>
-                  <Ionicons
-                    name={currentIndex < achievements.length - 1 ? 'arrow-forward' : 'checkmark'}
-                    size={20}
-                    color="white"
-                  />
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
+          {/* Rarity Badge */}
+          <View style={[styles.rarityBadge, { backgroundColor: rarityConfig.bgColor }]}>
+            <Text style={[styles.rarityText, { color: rarityConfig.color }]}>
+              {rarityConfig.label}
+            </Text>
+          </View>
 
-            {/* Progress dots */}
-            {achievements.length > 1 && (
-              <View style={styles.dotsContainer}>
-                {achievements.map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.dot,
-                      i === currentIndex && styles.dotActive,
-                      i === currentIndex && { backgroundColor: rarityConfig.glow },
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
-          </LinearGradient>
+          {/* Achievement Info */}
+          <Animated.View style={[styles.infoContainer, { opacity: textOpacityAnim }]}>
+            <Text style={styles.achievementName}>{currentAchievement.achievement_name}</Text>
+            <Text style={styles.achievementDescription}>{currentAchievement.description}</Text>
+          </Animated.View>
+
+          {/* Points */}
+          <Animated.View
+            style={[
+              styles.pointsContainer,
+              { transform: [{ scale: pointsScaleAnim }] },
+            ]}
+          >
+            <Ionicons name="trophy" size={20} color={COLORS.WARNING[500]} />
+            <Text style={styles.pointsText}>+{currentAchievement.points_value}</Text>
+            <Text style={styles.pointsLabel}>POINTS</Text>
+          </Animated.View>
+
+          {/* Progress Dots */}
+          {achievements.length > 1 && (
+            <View style={styles.dotsContainer}>
+              {achievements.map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    i === currentIndex && styles.dotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Action Button */}
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: rarityConfig.color }]}
+            onPress={handleNext}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.actionButtonText}>
+              {currentIndex < achievements.length - 1
+                ? `Next (${currentIndex + 1}/${achievements.length})`
+                : 'Awesome!'}
+            </Text>
+            <Ionicons
+              name={currentIndex < achievements.length - 1 ? 'arrow-forward' : 'checkmark'}
+              size={20}
+              color={COLORS.NEUTRAL.WHITE}
+            />
+          </TouchableOpacity>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -404,87 +258,54 @@ export default function AchievementUnlockModal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  overlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  },
-  cardContainer: {
-    alignItems: 'center',
     justifyContent: 'center',
-  },
-  glowEffect: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    top: 20,
-  },
-  card: {
-    width: width * 0.85,
-    maxWidth: 340,
-    borderRadius: 28,
-    padding: 28,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 20,
+  },
+  container: {
+    width: width - 40,
+    maxWidth: 340,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: COLORS.NEUTRAL.BLACK,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  unlockedBadge: {
+  starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
   },
   unlockedText: {
-    fontSize: 11,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.BOLD,
-    color: '#FBBF24',
+    color: COLORS.WARNING[600],
     letterSpacing: 1.5,
   },
   badgeContainer: {
-    width: 120,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  sparkleContainer: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sparkle: {
-    position: 'absolute',
+    marginBottom: 16,
   },
   badge: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  badgeGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: COLORS.NEUTRAL.BLACK,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   rarityBadge: {
     paddingHorizontal: 16,
@@ -493,26 +314,25 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rarityText: {
-    fontSize: 11,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.BOLD,
-    color: 'white',
-    letterSpacing: 2,
+    letterSpacing: 1.5,
   },
-  textContainer: {
+  infoContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   achievementName: {
-    fontSize: 22,
+    fontSize: FONT_SIZES.XL,
     fontFamily: FONTS.BOLD,
-    color: 'white',
+    color: COLORS.SECONDARY[900],
     textAlign: 'center',
     marginBottom: 8,
   },
   achievementDescription: {
-    fontSize: 14,
+    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: COLORS.SECONDARY[600],
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 8,
@@ -521,52 +341,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    backgroundColor: COLORS.WARNING[50],
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 16,
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.2)',
+    borderColor: COLORS.WARNING[200],
   },
   pointsText: {
-    fontSize: 24,
+    fontSize: FONT_SIZES.XL,
     fontFamily: FONTS.BOLD,
-    color: '#FBBF24',
+    color: COLORS.WARNING[600],
   },
   pointsLabel: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.SEMIBOLD,
-    color: 'rgba(251, 191, 36, 0.8)',
+    color: COLORS.WARNING[500],
     letterSpacing: 1,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    gap: 8,
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontFamily: FONTS.BOLD,
-    color: 'white',
-    letterSpacing: 0.5,
   },
   dotsContainer: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 20,
+    marginBottom: 20,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: COLORS.SECONDARY[200],
   },
   dotActive: {
     width: 24,
+    backgroundColor: COLORS.PRIMARY[500],
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  actionButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });
