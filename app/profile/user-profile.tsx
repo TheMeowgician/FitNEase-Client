@@ -305,7 +305,7 @@ export default function UserProfileScreen() {
             <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[600]} />
             <Text style={styles.sectionTitle}>Achievements</Text>
             <TouchableOpacity
-              onPress={() => router.push('/profile/achievements')}
+              onPress={() => router.push('/achievements')}
               style={styles.viewAllButton}
             >
               <Text style={styles.viewAllText}>View All</Text>
