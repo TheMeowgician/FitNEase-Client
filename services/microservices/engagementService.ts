@@ -60,7 +60,7 @@ export class EngagementService {
     try {
       const response = await apiClient.get<{ success: boolean; data: Achievement[] }>(
         this.serviceName,
-        '/engagement/available-achievements'
+        '/api/engagement/available-achievements'
       );
       return response.data.data;
     } catch (error) {
@@ -86,7 +86,7 @@ export class EngagementService {
     try {
       const response = await apiClient.get<{ success: boolean; data: LeaderboardEntry[] }>(
         this.serviceName,
-        `/engagement/leaderboard?timeframe=${timeframe}&limit=${limit}`
+        `/api/engagement/leaderboard?timeframe=${timeframe}&limit=${limit}`
       );
       return response.data.data;
     } catch (error) {
@@ -99,7 +99,7 @@ export class EngagementService {
     try {
       const response = await apiClient.post<{ success: boolean; data: UserAchievement }>(
         this.serviceName,
-        '/engagement/unlock-achievement',
+        '/api/engagement/unlock-achievement',
         {
           user_id: userId,
           achievement_id: achievementId
@@ -116,7 +116,7 @@ export class EngagementService {
     try {
       const response = await apiClient.put<{ success: boolean; data: UserAchievement }>(
         this.serviceName,
-        `/engagement/achievement-progress/${userId}`,
+        `/api/engagement/achievement-progress/${userId}`,
         {
           achievement_id: achievementId,
           progress_percentage: progress
@@ -133,7 +133,7 @@ export class EngagementService {
     try {
       const response = await apiClient.get<{ success: boolean; data: any[] }>(
         this.serviceName,
-        `/engagement/achievement-progress/${userId}`
+        `/api/engagement/achievement-progress/${userId}`
       );
       return response.data.data;
     } catch (error) {
