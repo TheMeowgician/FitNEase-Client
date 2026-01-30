@@ -87,6 +87,7 @@ export default function ExerciseRatingScreen() {
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showAchievementModal, setShowAchievementModal] = useState(false);
   const [unlockedAchievements, setUnlockedAchievements] = useState<UnlockedAchievement[]>([]);
+  const [achievementIdsToMark, setAchievementIdsToMark] = useState<number[]>([]);
 
   // Current exercise being rated
   const currentExercise = exercises[currentIndex];
@@ -210,6 +211,12 @@ export default function ExerciseRatingScreen() {
         if (newAchievements && newAchievements.length > 0) {
           console.log('🏆 [RATING MODAL CLOSE] Found unlocked achievements:', newAchievements.length);
 
+          // Extract user_achievement_ids for marking as seen later
+          const idsToMark = newAchievements
+            .filter((a: any) => a.user_achievement_id)
+            .map((a: any) => a.user_achievement_id);
+          setAchievementIdsToMark(idsToMark);
+
           // Map to the format expected by the modal
           const formattedAchievements: UnlockedAchievement[] = newAchievements.map((a: any) => ({
             achievement_id: a.achievement_id || a.achievement?.achievement_id,
@@ -235,9 +242,16 @@ export default function ExerciseRatingScreen() {
     router.replace('/(tabs)');
   };
 
-  const handleAchievementModalClose = () => {
+  const handleAchievementModalClose = async () => {
     setShowAchievementModal(false);
     setUnlockedAchievements([]);
+
+    // Mark achievements as seen so they don't show again on app reopen
+    if (achievementIdsToMark.length > 0 && user?.id) {
+      console.log('🏆 [RATING] Marking achievements as seen:', achievementIdsToMark);
+      await engagementService.markAchievementsSeen(user.id, achievementIdsToMark);
+      setAchievementIdsToMark([]);
+    }
 
     // Now navigate to home tab
     router.replace('/(tabs)');

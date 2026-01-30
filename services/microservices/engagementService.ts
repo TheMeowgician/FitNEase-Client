@@ -183,6 +183,70 @@ export class EngagementService {
       return [];
     }
   }
+
+  /**
+   * Get achievements that user hasn't seen yet (seen_at IS NULL)
+   * Used to show achievement modal when app opens
+   */
+  public async getUnseenAchievements(userId: string | number): Promise<any[]> {
+    try {
+      const response = await apiClient.get<{ success: boolean; data: any[] }>(
+        this.serviceName,
+        `/api/engagement/unseen-achievements/${userId}`
+      );
+      return response.data.data || [];
+    } catch (error) {
+      console.warn('Could not fetch unseen achievements:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Mark achievements as seen after user dismisses the modal
+   */
+  public async markAchievementsSeen(userId: string | number, userAchievementIds: number[]): Promise<boolean> {
+    try {
+      await apiClient.post(
+        this.serviceName,
+        '/api/engagement/mark-achievements-seen',
+        {
+          user_id: Number(userId),
+          user_achievement_ids: userAchievementIds
+        }
+      );
+      console.log('🏆 [ENGAGEMENT] Marked achievements as seen:', userAchievementIds.length);
+      return true;
+    } catch (error) {
+      console.warn('Could not mark achievements as seen:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Unlock level-based achievement (beginner, intermediate, advanced)
+   * Called when user's fitness level changes
+   */
+  public async unlockLevelAchievement(userId: string | number, level: 'beginner' | 'intermediate' | 'advanced'): Promise<any | null> {
+    try {
+      const response = await apiClient.post<{ success: boolean; data: any }>(
+        this.serviceName,
+        '/api/engagement/unlock-level-achievement',
+        {
+          user_id: Number(userId),
+          level
+        }
+      );
+
+      if (response.data.data) {
+        console.log('🏆 [ENGAGEMENT] Level achievement unlocked:', level);
+      }
+
+      return response.data.data || null;
+    } catch (error) {
+      console.warn('Could not unlock level achievement:', error);
+      return null;
+    }
+  }
 }
 
 export const engagementService = new EngagementService();

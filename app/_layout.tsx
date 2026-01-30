@@ -22,6 +22,9 @@ import { GlobalLobbyIndicator } from '../components/lobby/GlobalLobbyIndicator';
 import { ReadyCheckHandler } from '../components/lobby/ReadyCheckHandler';
 import { ReadyCheckModal } from '../components/lobby/ReadyCheckModal';
 
+// Achievement Handler - Global achievement notification modal
+import { AchievementHandler } from '../components/achievements/AchievementHandler';
+
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
@@ -66,6 +69,8 @@ export default function RootLayout() {
                             <GlobalLobbyIndicator />
                             <ReadyCheckHandler />
                             <ReadyCheckModal />
+                            {/* Achievement notification modal - shows unlocked achievements */}
+                            <AchievementHandler />
                           </View>
                         </WebSocketProvider>
                       </NotificationProvider>
