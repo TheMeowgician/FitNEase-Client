@@ -14,6 +14,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
+import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 import { useSmartBack } from '../../hooks/useSmartBack';
@@ -36,6 +37,8 @@ export default function UserProfileScreen() {
     weight: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
+  const [availableAchievements, setAvailableAchievements] = useState<Achievement[]>([]);
 
   useEffect(() => {
     loadUserData();
@@ -112,6 +115,19 @@ export default function UserProfileScreen() {
           longestStreak: 0, // TODO: Calculate longest streak
         });
       }
+
+      // Load achievements from engagement service
+      try {
+        const [available, userAch] = await Promise.all([
+          engagementService.getAvailableAchievements(),
+          engagementService.getUserAchievements(String(user.id)),
+        ]);
+        setAvailableAchievements(available);
+        setUserAchievements(userAch);
+        console.log('🏆 [PROFILE] Loaded achievements:', userAch.length, 'unlocked of', available.length);
+      } catch (achError) {
+        console.warn('Failed to load achievements:', achError);
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {
@@ -171,15 +187,51 @@ export default function UserProfileScreen() {
     return age.toString();
   };
 
-  // Quick achievements for preview (based on local stats)
-  const quickAchievements = [
-    { icon: 'flash', title: 'First Workout', earned: stats.totalWorkouts > 0, color: '#6B7280' },
-    { icon: 'flame', title: 'On Fire', earned: stats.totalWorkouts >= 10, color: '#3B82F6' },
-    { icon: 'rocket', title: 'Consistent', earned: stats.currentStreak >= 7, color: '#8B5CF6' },
-    { icon: 'trophy', title: 'Dedicated', earned: stats.totalWorkouts >= 50, color: '#F59E0B' },
-  ];
+  // Get achievement preview from real backend data
+  const getAchievementPreview = () => {
+    // Create a set of unlocked achievement IDs for quick lookup
+    const unlockedIds = new Set(
+      userAchievements.filter(ua => ua.is_completed).map(ua => ua.achievement_id)
+    );
 
-  const earnedCount = quickAchievements.filter(a => a.earned).length;
+    // Get first 4 achievements (prioritize unlocked ones)
+    const sortedAchievements = [...availableAchievements].sort((a, b) => {
+      const aUnlocked = unlockedIds.has(a.achievement_id);
+      const bUnlocked = unlockedIds.has(b.achievement_id);
+      if (aUnlocked !== bUnlocked) return aUnlocked ? -1 : 1;
+      return a.achievement_id - b.achievement_id;
+    });
+
+    const previewAchievements = sortedAchievements.slice(0, 4);
+
+    // Map to display format with icons based on achievement type
+    const iconMap: Record<string, string> = {
+      workout_count: 'fitness',
+      streak: 'flame',
+      calories: 'flash',
+      time: 'time',
+      social: 'people',
+    };
+
+    const colorMap: Record<string, string> = {
+      common: '#6B7280',
+      rare: '#3B82F6',
+      epic: '#8B5CF6',
+      legendary: '#F59E0B',
+    };
+
+    return previewAchievements.map(ach => ({
+      icon: iconMap[ach.achievement_type] || 'trophy',
+      title: ach.achievement_name,
+      earned: unlockedIds.has(ach.achievement_id),
+      color: colorMap[ach.rarity_level] || '#6B7280',
+    }));
+  };
+
+  const quickAchievements = getAchievementPreview();
+  const earnedCount = userAchievements.filter(a => a.is_completed).length;
+  const totalAchievements = availableAchievements.length;
+  const hasAchievementsData = availableAchievements.length > 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -315,50 +367,61 @@ export default function UserProfileScreen() {
 
           {/* Quick Achievement Preview */}
           <View style={styles.achievementPreviewCard}>
-            <View style={styles.achievementPreviewRow}>
-              {quickAchievements.map((achievement, index) => (
-                <View key={index} style={styles.achievementPreviewItem}>
-                  <View
-                    style={[
-                      styles.achievementPreviewIcon,
-                      achievement.earned
-                        ? { backgroundColor: achievement.color }
-                        : styles.achievementPreviewIconLocked,
-                    ]}
-                  >
-                    {achievement.earned ? (
-                      <Ionicons name={achievement.icon as any} size={20} color="white" />
-                    ) : (
-                      <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
-                    )}
+            {hasAchievementsData ? (
+              <>
+                <View style={styles.achievementPreviewRow}>
+                  {quickAchievements.map((achievement, index) => (
+                    <View key={index} style={styles.achievementPreviewItem}>
+                      <View
+                        style={[
+                          styles.achievementPreviewIcon,
+                          achievement.earned
+                            ? { backgroundColor: achievement.color }
+                            : styles.achievementPreviewIconLocked,
+                        ]}
+                      >
+                        {achievement.earned ? (
+                          <Ionicons name={achievement.icon as any} size={20} color="white" />
+                        ) : (
+                          <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
+                        )}
+                      </View>
+                      <Text
+                        style={[
+                          styles.achievementPreviewLabel,
+                          !achievement.earned && styles.achievementPreviewLabelLocked,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {achievement.title}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Progress Bar */}
+                <View style={styles.achievementProgressSection}>
+                  <View style={styles.achievementProgressBar}>
+                    <View
+                      style={[
+                        styles.achievementProgressFill,
+                        { width: `${totalAchievements > 0 ? (earnedCount / totalAchievements) * 100 : 0}%` },
+                      ]}
+                    />
                   </View>
-                  <Text
-                    style={[
-                      styles.achievementPreviewLabel,
-                      !achievement.earned && styles.achievementPreviewLabelLocked,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {achievement.title}
+                  <Text style={styles.achievementProgressText}>
+                    {earnedCount} of {totalAchievements} unlocked
                   </Text>
                 </View>
-              ))}
-            </View>
-
-            {/* Progress Bar */}
-            <View style={styles.achievementProgressSection}>
-              <View style={styles.achievementProgressBar}>
-                <View
-                  style={[
-                    styles.achievementProgressFill,
-                    { width: `${(earnedCount / quickAchievements.length) * 100}%` },
-                  ]}
-                />
+              </>
+            ) : (
+              <View style={styles.achievementEmptyState}>
+                <Ionicons name="trophy-outline" size={32} color={COLORS.SECONDARY[300]} />
+                <Text style={styles.achievementEmptyText}>
+                  Achievements unavailable
+                </Text>
               </View>
-              <Text style={styles.achievementProgressText}>
-                {earnedCount} of {quickAchievements.length} unlocked
-              </Text>
-            </View>
+            )}
           </View>
         </View>
 
@@ -674,6 +737,16 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.MEDIUM,
     color: COLORS.SECONDARY[600],
+  },
+  achievementEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  achievementEmptyText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginTop: 8,
   },
   preferencesCard: {
     backgroundColor: 'white',
