@@ -7,9 +7,11 @@ import {
   Animated,
   Dimensions,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { getAchievementIcon } from '../../constants/achievementIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -183,14 +185,21 @@ export default function AchievementUnlockModal({
           <View style={styles.badgeContainer}>
             <Animated.View
               style={[
-                styles.badge,
-                {
-                  backgroundColor: badgeColor,
-                  transform: [{ scale: badgeScaleAnim }],
-                },
+                styles.badgeWrapper,
+                { transform: [{ scale: badgeScaleAnim }] },
               ]}
             >
-              <Ionicons name={badgeIcon as any} size={48} color={COLORS.NEUTRAL.WHITE} />
+              {getAchievementIcon(currentAchievement.achievement_name) ? (
+                <Image
+                  source={getAchievementIcon(currentAchievement.achievement_name)!}
+                  style={styles.achievementImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={[styles.badge, { backgroundColor: badgeColor }]}>
+                  <Ionicons name={badgeIcon as any} size={48} color={COLORS.NEUTRAL.WHITE} />
+                </View>
+              )}
             </Animated.View>
           </View>
 
@@ -295,6 +304,10 @@ const styles = StyleSheet.create({
   badgeContainer: {
     marginBottom: 16,
   },
+  badgeWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   badge: {
     width: 96,
     height: 96,
@@ -306,6 +319,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 6,
+  },
+  achievementImage: {
+    width: 120,
+    height: 120,
   },
   rarityBadge: {
     paddingHorizontal: 16,

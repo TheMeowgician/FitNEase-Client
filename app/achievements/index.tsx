@@ -9,6 +9,7 @@ import {
   StatusBar,
   Dimensions,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { getAchievementIcon } from '../../constants/achievementIcons';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 52) / 2;
@@ -253,20 +255,31 @@ export default function AchievementsScreen() {
                   </View>
 
                   {/* Icon */}
-                  <View
-                    style={[
-                      styles.iconContainer,
-                      achievement.isUnlocked
-                        ? { backgroundColor: achievement.badge_color || rarityConfig.color }
-                        : styles.iconContainerLocked,
-                    ]}
-                  >
-                    {achievement.isUnlocked ? (
-                      <Ionicons name={(achievement.badge_icon || 'trophy') as any} size={28} color="white" />
+                  {achievement.isUnlocked ? (
+                    // Show custom image for unlocked achievements
+                    getAchievementIcon(achievement.achievement_name) ? (
+                      <Image
+                        source={getAchievementIcon(achievement.achievement_name)!}
+                        style={styles.achievementImage}
+                        resizeMode="contain"
+                      />
                     ) : (
+                      // Fallback to Ionicon if no custom image
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          { backgroundColor: achievement.badge_color || rarityConfig.color },
+                        ]}
+                      >
+                        <Ionicons name={(achievement.badge_icon || 'trophy') as any} size={28} color="white" />
+                      </View>
+                    )
+                  ) : (
+                    // Show locked icon for locked achievements
+                    <View style={[styles.iconContainer, styles.iconContainerLocked]}>
                       <Ionicons name="lock-closed" size={24} color={COLORS.SECONDARY[400]} />
-                    )}
-                  </View>
+                    </View>
+                  )}
 
                   {/* Name & Description */}
                   <Text
@@ -479,6 +492,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 4,
+  },
+  achievementImage: {
+    width: 72,
+    height: 72,
+    marginTop: 4,
+    marginBottom: 8,
   },
   iconContainerLocked: {
     backgroundColor: COLORS.NEUTRAL[200],
