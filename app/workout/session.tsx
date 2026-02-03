@@ -37,6 +37,8 @@ import { useLobbyStore } from '../../stores/lobbyStore';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 import AgoraVideoCall from '../../components/video/AgoraVideoCall';
+import ExerciseDemoModal from '../../components/workout/ExerciseDemoModal';
+import { hasExerciseDemo } from '../../constants/exerciseDemos';
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
 type SessionStatus = 'ready' | 'running' | 'paused' | 'completed';
@@ -94,6 +96,9 @@ export default function WorkoutSessionScreen() {
   const [progressBeforeStats, setProgressBeforeStats] = useState<any>(null);
   const [progressAfterStats, setProgressAfterStats] = useState<any>(null);
   const [completedWorkoutData, setCompletedWorkoutData] = useState<any>(null);
+
+  // Exercise demo modal state
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   // Video call state
   const [showVideoCall, setShowVideoCall] = useState(false);
@@ -1676,6 +1681,16 @@ export default function WorkoutSessionScreen() {
           <View style={styles.exerciseCardHeader}>
             <Ionicons name="barbell" size={18} color="white" />
             <Text style={styles.exerciseCardTitle}>Current Exercise</Text>
+            {/* View Demo Button */}
+            {getCurrentExercise()?.exercise_name && hasExerciseDemo(getCurrentExercise()?.exercise_name || '') && (
+              <TouchableOpacity
+                style={styles.viewDemoButton}
+                onPress={() => setShowDemoModal(true)}
+              >
+                <Ionicons name="play-circle" size={16} color="white" />
+                <Text style={styles.viewDemoButtonText}>Demo</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <Text style={styles.exerciseName}>
             {getCurrentExercise()?.exercise_name || 'Get Ready'}
@@ -1843,6 +1858,13 @@ export default function WorkoutSessionScreen() {
           workoutData={completedWorkoutData}
         />
       )}
+
+      {/* Exercise Demo Modal */}
+      <ExerciseDemoModal
+        visible={showDemoModal}
+        exerciseName={getCurrentExercise()?.exercise_name || ''}
+        onClose={() => setShowDemoModal(false)}
+      />
 
       {/* Floating Video Call - Render once with dynamic wrapper */}
       {showVideoCall && agoraCredentials && (
@@ -2136,6 +2158,21 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    flex: 1,
+  },
+  viewDemoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 4,
+  },
+  viewDemoButtonText: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: 'white',
   },
   exerciseName: {
     fontSize: 22,
