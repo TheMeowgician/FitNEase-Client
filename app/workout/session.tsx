@@ -1702,7 +1702,7 @@ export default function WorkoutSessionScreen() {
                   <Text style={styles.viewDemoButtonText}>Demo</Text>
                 </TouchableOpacity>
               ) : null;
-            })()
+            })()}
           </View>
           <Text style={styles.exerciseName}>
             {getCurrentExercise()?.exercise_name || 'Get Ready'}
