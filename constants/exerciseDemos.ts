@@ -178,6 +178,11 @@ const keywordDemoMap: Array<{ keywords: string[]; demo: ImageSourcePropType }> =
   { keywords: ['bird dog', 'bird-dog'], demo: require('../assets/images/exercise-demos/bird_dog.gif') },
   { keywords: ['dead bug'], demo: require('../assets/images/exercise-demos/dead_bug.gif') },
   { keywords: ['heel touch'], demo: require('../assets/images/exercise-demos/heel_touch.gif') },
+  { keywords: ['wiper', 'wipers', 'windshield'], demo: require('../assets/images/exercise-demos/plank.gif') },
+  { keywords: ['twist', 'rotation', 'russian'], demo: require('../assets/images/exercise-demos/modified_crunches.gif') },
+  { keywords: ['v-up', 'v up', 'v-sit', 'v sit'], demo: require('../assets/images/exercise-demos/modified_crunches.gif') },
+  { keywords: ['flutter', 'scissor kick'], demo: require('../assets/images/exercise-demos/lying_leg_raises.gif') },
+  { keywords: ['hollow', 'boat'], demo: require('../assets/images/exercise-demos/plank.gif') },
 
   // Glute/hip exercises
   { keywords: ['glute bridge', 'hip bridge', 'bridge'], demo: require('../assets/images/exercise-demos/glutes_bridge.gif') },
@@ -200,6 +205,18 @@ const keywordDemoMap: Array<{ keywords: string[]; demo: ImageSourcePropType }> =
   // Pull exercises (use related demos)
   { keywords: ['pull-up', 'pull up', 'pullup', 'chin-up', 'chin up', 'chinup'], demo: require('../assets/images/exercise-demos/plank.gif') },
   { keywords: ['row', 'rowing'], demo: require('../assets/images/exercise-demos/plank.gif') },
+
+  // Additional common exercises
+  { keywords: ['jack knife', 'jackknife', 'pike'], demo: require('../assets/images/exercise-demos/modified_crunches.gif') },
+  { keywords: ['superman', 'super man', 'back extension'], demo: require('../assets/images/exercise-demos/bird_dog.gif') },
+  { keywords: ['donkey kick', 'kickback'], demo: require('../assets/images/exercise-demos/glutes_bridge.gif') },
+  { keywords: ['fire hydrant'], demo: require('../assets/images/exercise-demos/glutes_bridge.gif') },
+  { keywords: ['wall sit', 'wall squat'], demo: require('../assets/images/exercise-demos/squat_hold.gif') },
+  { keywords: ['jump', 'jumping', 'hop', 'bound'], demo: require('../assets/images/exercise-demos/jumping_jacks.gif') },
+  { keywords: ['run', 'running', 'jog', 'sprint'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
+  { keywords: ['skip', 'skipping'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
+  { keywords: ['box', 'bench'], demo: require('../assets/images/exercise-demos/step_ups_low.gif') },
+  { keywords: ['isometric', 'hold', 'static'], demo: require('../assets/images/exercise-demos/plank.gif') },
 ];
 
 /**
