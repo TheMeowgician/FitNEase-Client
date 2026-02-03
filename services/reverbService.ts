@@ -328,6 +328,13 @@ class ReverbService {
   }
 
   /**
+   * Check if a channel is currently subscribed
+   */
+  public isChannelSubscribed(channelName: string): boolean {
+    return this.channels.has(channelName);
+  }
+
+  /**
    * Subscribe to group workout invitations
    */
   public subscribeToGroupWorkoutInvitations(

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useLobby } from '../../contexts/LobbyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { reverbService } from '../../services/reverbService';
@@ -24,60 +24,78 @@ export function ReadyCheckHandler() {
   const setResult = useReadyCheckStore((state) => state.setResult);
   const clearReadyCheck = useReadyCheckStore((state) => state.clearReadyCheck);
 
-  const channelRef = useRef<any>(null);
+  const channelRef = useRef<string | null>(null);
   const isSubscribedRef = useRef(false);
+  const activeLobbyRef = useRef(activeLobby);
+  const lobbyMembersRef = useRef(lobbyMembers);
+
+  // Keep refs updated for use in callbacks
+  useEffect(() => {
+    activeLobbyRef.current = activeLobby;
+  }, [activeLobby]);
 
   useEffect(() => {
-    // Only subscribe if user is in an active lobby
-    if (!isInLobby || !activeLobby || !user) {
-      // Cleanup if we were subscribed
-      if (isSubscribedRef.current && channelRef.current) {
-        console.log('🔕 [READY CHECK HANDLER] Unsubscribing from ready check channel');
-        reverbService.unsubscribe(`private-lobby.${channelRef.current}`);
-        channelRef.current = null;
-        isSubscribedRef.current = false;
-        clearReadyCheck();
-      }
-      return;
+    lobbyMembersRef.current = lobbyMembers;
+  }, [lobbyMembers]);
+
+  // Subscription function that can be called to ensure subscription is active
+  const ensureSubscription = useCallback((sessionId: string) => {
+    const channelName = `private-lobby.${sessionId}`;
+
+    // Check if channel is actually subscribed in reverbService
+    const isActuallySubscribed = reverbService.isChannelSubscribed(channelName);
+
+    console.log('🔍 [READY CHECK HANDLER] Checking subscription:', {
+      sessionId,
+      channelName,
+      isSubscribedRef: isSubscribedRef.current,
+      channelRef: channelRef.current,
+      isActuallySubscribed,
+    });
+
+    // If we think we're subscribed but the channel isn't actually subscribed, reset our state
+    if (isSubscribedRef.current && !isActuallySubscribed) {
+      console.log('⚠️ [READY CHECK HANDLER] Subscription was lost, re-subscribing...');
+      isSubscribedRef.current = false;
     }
 
-    const sessionId = activeLobby.sessionId;
-
-    // Don't re-subscribe if already subscribed to the same session
-    if (isSubscribedRef.current && channelRef.current === sessionId) {
+    // Don't re-subscribe if already subscribed to the same session AND channel is actually subscribed
+    if (isSubscribedRef.current && channelRef.current === sessionId && isActuallySubscribed) {
+      console.log('✅ [READY CHECK HANDLER] Already subscribed to session:', sessionId);
       return;
     }
 
     // Unsubscribe from old channel if different session
-    if (isSubscribedRef.current && channelRef.current !== sessionId) {
-      console.log('🔕 [READY CHECK HANDLER] Switching lobby session, unsubscribing from old');
+    if (channelRef.current && channelRef.current !== sessionId) {
+      console.log('🔕 [READY CHECK HANDLER] Switching lobby session, unsubscribing from old:', channelRef.current);
       reverbService.unsubscribe(`private-lobby.${channelRef.current}`);
       clearReadyCheck();
     }
 
     console.log('🔔 [READY CHECK HANDLER] Subscribing to ready check events for session:', sessionId);
 
-    // Subscribe to lobby channel for ready check events only
-    // Note: We use the same channel as the lobby but only listen for ready check events
-    // The main lobby screen also subscribes to this channel for other events
+    // Update refs
     channelRef.current = sessionId;
     isSubscribedRef.current = true;
 
     // Subscribe using a separate listener for ready check events
-    const channel = reverbService.subscribeToLobby(sessionId, {
+    // Note: We use the same channel as the lobby but only listen for ready check events
+    reverbService.subscribeToLobby(sessionId, {
       onReadyCheckStarted: (data: any) => {
         console.log('🔔 [READY CHECK HANDLER] Ready check started:', data);
 
-        // Get members from data or from store
-        const members = data.members || lobbyMembers.map((m) => ({
+        // Get members from data or from ref (use ref for current value)
+        const currentMembers = lobbyMembersRef.current;
+        const members = data.members || currentMembers.map((m) => ({
           user_id: m.user_id,
           user_name: m.user_name,
         }));
 
+        const currentLobby = activeLobbyRef.current;
         startReadyCheck({
           sessionId: data.session_id || sessionId,
-          groupId: activeLobby.groupId,
-          groupName: activeLobby.groupName || `Group ${activeLobby.groupId}`,
+          groupId: currentLobby?.groupId || '',
+          groupName: currentLobby?.groupName || `Group ${currentLobby?.groupId}`,
           initiatorId: data.initiator_id,
           initiatorName: data.initiator_name || 'Host',
           members,
@@ -101,11 +119,60 @@ export function ReadyCheckHandler() {
       },
     });
 
+    console.log('✅ [READY CHECK HANDLER] Subscription complete for session:', sessionId);
+  }, [startReadyCheck, updateResponse, setResult, clearReadyCheck]);
+
+  useEffect(() => {
+    // Only subscribe if user is in an active lobby
+    if (!isInLobby || !activeLobby || !user) {
+      console.log('🔍 [READY CHECK HANDLER] Not subscribing:', {
+        isInLobby,
+        hasActiveLobby: !!activeLobby,
+        hasUser: !!user,
+      });
+
+      // Cleanup if we were subscribed
+      if (isSubscribedRef.current && channelRef.current) {
+        console.log('🔕 [READY CHECK HANDLER] Unsubscribing from ready check channel:', channelRef.current);
+        reverbService.unsubscribe(`private-lobby.${channelRef.current}`);
+        channelRef.current = null;
+        isSubscribedRef.current = false;
+        clearReadyCheck();
+      }
+      return;
+    }
+
+    const sessionId = activeLobby.sessionId;
+    ensureSubscription(sessionId);
+
     return () => {
-      // Don't unsubscribe on component unmount - let the effect cleanup handle it
+      // Don't unsubscribe on effect cleanup - let the explicit cleanup handle it
       // This prevents issues with React's strict mode double-mounting
     };
-  }, [isInLobby, activeLobby?.sessionId, user?.id]);
+  }, [isInLobby, activeLobby?.sessionId, user?.id, ensureSubscription, clearReadyCheck]);
+
+  // Periodic check to ensure subscription is still active (every 10 seconds when in lobby)
+  useEffect(() => {
+    if (!isInLobby || !activeLobby) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      if (activeLobby?.sessionId && isSubscribedRef.current) {
+        const channelName = `private-lobby.${activeLobby.sessionId}`;
+        const isActuallySubscribed = reverbService.isChannelSubscribed(channelName);
+
+        if (!isActuallySubscribed) {
+          console.log('⚠️ [READY CHECK HANDLER] Subscription lost during interval check, re-subscribing...');
+          ensureSubscription(activeLobby.sessionId);
+        }
+      }
+    }, 10000); // Check every 10 seconds
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isInLobby, activeLobby?.sessionId, ensureSubscription]);
 
   // Cleanup on unmount
   useEffect(() => {

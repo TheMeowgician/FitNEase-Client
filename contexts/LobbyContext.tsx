@@ -30,7 +30,7 @@ const LobbyContext = createContext<LobbyContextType | undefined>(undefined);
 export function LobbyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [activeLobby, setActiveLobby] = useState<LobbySession | null>(null);
-  const [autoCleanupOnReload, setAutoCleanupOnReload] = useState(true); // Default to true for easy development
+  const [autoCleanupOnReload, setAutoCleanupOnReload] = useState(false); // Default to false - only enable for development hot-reload scenarios
 
   // Check for active lobby on mount
   useEffect(() => {

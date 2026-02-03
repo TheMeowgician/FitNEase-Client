@@ -1409,13 +1409,26 @@ export default function GroupLobbyScreen() {
   };
 
   /**
-   * Start a ready check (initiator only)
+   * Start a ready check (any member can start)
    * This sends a ready check modal to ALL lobby members
    * They have 25 seconds to accept or decline
-   * If all accept, exercises are auto-generated
+   * If all accept, exercises are auto-generated (by initiator only to prevent duplicates)
    */
   const handleStartReadyCheck = async () => {
-    if (!isInitiator || isStartingReadyCheck || isReadyCheckActive) return;
+    console.log('🔔 [READY CHECK] handleStartReadyCheck called:', {
+      userId: currentUser?.id,
+      username: currentUser?.username,
+      isInitiator,
+      isStartingReadyCheck,
+      isReadyCheckActive,
+      canStartReadyCheck,
+      lobbyMemberCount: lobbyMembers.length,
+    });
+
+    if (isStartingReadyCheck || isReadyCheckActive) {
+      console.log('⚠️ [READY CHECK] Blocked: already starting or active');
+      return;
+    }
 
     // Need at least 2 members for a ready check
     if (lobbyMembers.length < 2) {

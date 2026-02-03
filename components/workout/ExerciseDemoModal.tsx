@@ -18,16 +18,18 @@ const { width, height } = Dimensions.get('window');
 interface ExerciseDemoModalProps {
   visible: boolean;
   exerciseName: string;
+  targetMuscleGroup?: string;
   onClose: () => void;
 }
 
 export default function ExerciseDemoModal({
   visible,
   exerciseName,
+  targetMuscleGroup,
   onClose,
 }: ExerciseDemoModalProps) {
   const [isLoading, setIsLoading] = React.useState(true);
-  const demoSource = getExerciseDemo(exerciseName);
+  const demoSource = getExerciseDemo(exerciseName, targetMuscleGroup);
 
   React.useEffect(() => {
     if (visible) {

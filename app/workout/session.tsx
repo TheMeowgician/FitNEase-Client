@@ -1681,16 +1681,28 @@ export default function WorkoutSessionScreen() {
           <View style={styles.exerciseCardHeader}>
             <Ionicons name="barbell" size={18} color="white" />
             <Text style={styles.exerciseCardTitle}>Current Exercise</Text>
-            {/* View Demo Button */}
-            {getCurrentExercise()?.exercise_name && hasExerciseDemo(getCurrentExercise()?.exercise_name || '') && (
-              <TouchableOpacity
-                style={styles.viewDemoButton}
-                onPress={() => setShowDemoModal(true)}
-              >
-                <Ionicons name="play-circle" size={16} color="white" />
-                <Text style={styles.viewDemoButtonText}>Demo</Text>
-              </TouchableOpacity>
-            )}
+            {/* View Demo Button - with smart matching + category fallback */}
+            {(() => {
+              const exercise = getCurrentExercise();
+              const exerciseName = exercise?.exercise_name;
+              const muscleGroup = (exercise as any)?.target_muscle_group;
+              const hasDemoResult = exerciseName ? hasExerciseDemo(exerciseName, muscleGroup) : false;
+              console.log('🎬 [DEMO CHECK]', {
+                exerciseName,
+                muscleGroup,
+                hasDemo: hasDemoResult,
+                phase: sessionState.phase
+              });
+              return hasDemoResult ? (
+                <TouchableOpacity
+                  style={styles.viewDemoButton}
+                  onPress={() => setShowDemoModal(true)}
+                >
+                  <Ionicons name="play-circle" size={16} color="white" />
+                  <Text style={styles.viewDemoButtonText}>Demo</Text>
+                </TouchableOpacity>
+              ) : null;
+            })()
           </View>
           <Text style={styles.exerciseName}>
             {getCurrentExercise()?.exercise_name || 'Get Ready'}
@@ -1863,6 +1875,7 @@ export default function WorkoutSessionScreen() {
       <ExerciseDemoModal
         visible={showDemoModal}
         exerciseName={getCurrentExercise()?.exercise_name || ''}
+        targetMuscleGroup={(getCurrentExercise() as any)?.target_muscle_group}
         onClose={() => setShowDemoModal(false)}
       />
 
