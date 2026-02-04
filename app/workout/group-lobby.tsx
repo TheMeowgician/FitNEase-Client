@@ -135,6 +135,16 @@ export default function GroupLobbyScreen() {
   const [selectedExerciseForSwap, setSelectedExerciseForSwap] = useState<{ index: number; exercise: any } | null>(null);
   const [isSwappingExercise, setIsSwappingExercise] = useState(false);
 
+  // Check if current user can customize (mentor or advanced fitness level)
+  const currentUserMember = lobbyMembers.find(m => m.user_id === parseInt(currentUser?.id || '0'));
+  const canUserCustomize = currentUserMember?.user_role === 'mentor' ||
+                           currentUserMember?.fitness_level === 'advanced';
+
+  // Check if ANY member in lobby can customize (for showing customize vote counts)
+  const hasCustomizableMembers = lobbyMembers.some(
+    m => m.user_role === 'mentor' || m.fitness_level === 'advanced'
+  );
+
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
@@ -948,6 +958,8 @@ export default function GroupLobbyScreen() {
         // Guard against updates during cleanup
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('[REAL-TIME] Voting started:', data);
+        console.log('[REAL-TIME] Alternatives received:', data.alternative_pool?.length || 0);
+        console.log('[REAL-TIME] Alternative data sample:', JSON.stringify((data.alternative_pool || []).slice(0, 2)));
 
         // Start voting in store
         startVoting({
@@ -1505,9 +1517,15 @@ export default function GroupLobbyScreen() {
         console.log('✅ Generated', response.workout.exercises.length, 'exercises');
         const alternatives = response.workout.alternative_pool || [];
         console.log('✅ Generated', alternatives.length, 'alternatives for voting');
+        console.log('📋 [DEBUG] Alternatives data:', JSON.stringify(alternatives.slice(0, 2)));
 
         // Store alternatives for voting
         setAlternativePool(alternatives);
+
+        // If no alternatives from ML, warn but continue
+        if (alternatives.length === 0) {
+          console.warn('⚠️ [ML] No alternatives returned. Exercise database may have limited data.');
+        }
 
         // Check if user is still in lobby before updating (race condition prevention)
         if (isLeaving || !isMountedRef.current || isCleaningUpRef.current) {
@@ -2072,20 +2090,26 @@ export default function GroupLobbyScreen() {
               </View>
 
               <Text style={styles.votingDescription}>
-                Accept the recommended workout or vote to customize?
+                {canUserCustomize
+                  ? 'Accept the recommended workout or vote to customize?'
+                  : 'Vote to accept the recommended workout.'}
               </Text>
 
-              {/* Vote Counts */}
+              {/* Vote Counts - Only show customize count if there are customizable members */}
               <View style={styles.voteCountsContainer}>
                 <View style={styles.voteCount}>
                   <Text style={styles.voteCountNumber}>{getVoteCounts().accept}</Text>
                   <Text style={styles.voteCountLabel}>Accept</Text>
                 </View>
-                <View style={styles.voteCountDivider} />
-                <View style={styles.voteCount}>
-                  <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
-                  <Text style={styles.voteCountLabel}>Customize</Text>
-                </View>
+                {hasCustomizableMembers && (
+                  <>
+                    <View style={styles.voteCountDivider} />
+                    <View style={styles.voteCount}>
+                      <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
+                      <Text style={styles.voteCountLabel}>Customize</Text>
+                    </View>
+                  </>
+                )}
                 <View style={styles.voteCountDivider} />
                 <View style={styles.voteCount}>
                   <Text style={styles.voteCountNumber}>{getVoteCounts().pending}</Text>
@@ -2097,7 +2121,7 @@ export default function GroupLobbyScreen() {
               {currentUser && !hasUserVoted(parseInt(currentUser.id)) ? (
                 <View style={styles.voteButtonsContainer}>
                   <TouchableOpacity
-                    style={[styles.voteButton, styles.voteButtonAccept]}
+                    style={[styles.voteButton, styles.voteButtonAccept, !canUserCustomize && styles.voteButtonFull]}
                     onPress={() => handleVoteSubmit('accept')}
                     disabled={isSubmittingVote}
                   >
@@ -2110,20 +2134,23 @@ export default function GroupLobbyScreen() {
                       </>
                     )}
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.voteButton, styles.voteButtonCustomize]}
-                    onPress={() => handleVoteSubmit('customize')}
-                    disabled={isSubmittingVote}
-                  >
-                    {isSubmittingVote ? (
-                      <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
-                    ) : (
-                      <>
-                        <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
-                        <Text style={styles.voteButtonText}>Customize</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  {/* Only show Customize button for mentors and advanced users */}
+                  {canUserCustomize && (
+                    <TouchableOpacity
+                      style={[styles.voteButton, styles.voteButtonCustomize]}
+                      onPress={() => handleVoteSubmit('customize')}
+                      disabled={isSubmittingVote}
+                    >
+                      {isSubmittingVote ? (
+                        <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                      ) : (
+                        <>
+                          <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
+                          <Text style={styles.voteButtonText}>Customize</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
               ) : (
                 <View style={styles.votedIndicator}>
@@ -2132,6 +2159,13 @@ export default function GroupLobbyScreen() {
                     You voted: {currentUser ? memberVotes[parseInt(currentUser.id)]?.vote || 'pending' : 'pending'}
                   </Text>
                 </View>
+              )}
+
+              {/* Info text for non-customizable users */}
+              {!canUserCustomize && hasCustomizableMembers && (
+                <Text style={styles.votingInfoText}>
+                  Only mentors and advanced users can vote to customize.
+                </Text>
               )}
             </View>
           )}
@@ -3507,10 +3541,21 @@ const styles = StyleSheet.create({
   voteButtonCustomize: {
     backgroundColor: COLORS.WARNING[600],
   },
+  voteButtonFull: {
+    flex: 1,
+  },
   voteButtonText: {
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
+  },
+  votingInfoText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   votedIndicator: {
     flexDirection: 'row',
