@@ -37,6 +37,12 @@ export default function WorkoutsScreen() {
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false);
 
+  // NEW: State for workout customization (advanced/mentor users)
+  const [alternativePool, setAlternativePool] = useState<any[]>([]);
+
+  // NEW: Determine if user can customize based on fitness level
+  const canCustomize = user?.fitnessLevel === 'advanced' || user?.fitnessLevel === 'expert';
+
   useEffect(() => {
     loadWorkoutData();
   }, []);
@@ -156,6 +162,29 @@ export default function WorkoutsScreen() {
         type: 'tabata'
       }
     });
+  };
+
+  // NEW: Handler for exercise swap (customization feature for advanced/mentor users)
+  const handleExerciseSwap = (exerciseIndex: number, newExercise: any) => {
+    if (!currentWorkoutSet) return;
+
+    // Create a copy of the workout set with the swapped exercise
+    const updatedExercises = [...currentWorkoutSet.exercises];
+    updatedExercises[exerciseIndex] = newExercise;
+
+    // Recalculate totals
+    const totalCalories = updatedExercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0);
+
+    setCurrentWorkoutSet({
+      ...currentWorkoutSet,
+      exercises: updatedExercises,
+      total_calories: totalCalories,
+    });
+
+    // Remove swapped exercise from alternative pool to prevent duplicate swaps
+    setAlternativePool(prev => prev.filter(ex => ex.exercise_id !== newExercise.exercise_id));
+
+    console.log(`[WORKOUTS] Swapped exercise at index ${exerciseIndex} with ${newExercise.exercise_name}`);
   };
 
   const getWorkoutStats = () => {
@@ -341,6 +370,10 @@ export default function WorkoutsScreen() {
         onClose={() => setShowWorkoutSetModal(false)}
         workoutSet={currentWorkoutSet}
         onStartWorkout={handleStartWorkoutSet}
+        // NEW: Customization props for advanced/mentor users
+        alternativePool={alternativePool}
+        canCustomize={canCustomize}
+        onExerciseSwap={handleExerciseSwap}
       />
     </SafeAreaView>
   );

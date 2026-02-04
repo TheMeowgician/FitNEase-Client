@@ -1941,6 +1941,116 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to cancel ready check');
     }
   }
+
+  // ============================================================================
+  // VOTING METHODS (Group Workout Voting System)
+  // ============================================================================
+
+  /**
+   * Start voting for exercises
+   * POST /api/v2/lobby/{sessionId}/voting/start
+   */
+  public async startVoting(
+    sessionId: string,
+    data: {
+      exercises: any[];
+      alternative_pool?: any[];
+      timeout_seconds?: number;
+    }
+  ): Promise<{
+    status: string;
+    message: string;
+    data?: {
+      voting_id: string;
+      expires_at: number;
+    };
+  }> {
+    try {
+      console.log('[SOCIAL V2] Starting voting:', { sessionId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/voting/start`,
+        data
+      );
+
+      console.log('[SOCIAL V2] Voting started successfully');
+      return response.data;
+    } catch (error) {
+      console.error('[SOCIAL V2] Failed to start voting:', error);
+      throw new Error((error as any).message || 'Failed to start voting');
+    }
+  }
+
+  /**
+   * Submit a vote (accept or customize)
+   * POST /api/v2/lobby/{sessionId}/voting/submit
+   */
+  public async submitVote(
+    sessionId: string,
+    data: {
+      vote: 'accept' | 'customize';
+    }
+  ): Promise<{
+    status: string;
+    message: string;
+    data?: {
+      accept_count: number;
+      customize_count: number;
+      total_votes: number;
+      total_members: number;
+    };
+  }> {
+    try {
+      console.log('[SOCIAL V2] Submitting vote:', { sessionId, vote: data.vote });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/voting/submit`,
+        data
+      );
+
+      console.log('[SOCIAL V2] Vote submitted successfully');
+      return response.data;
+    } catch (error) {
+      console.error('[SOCIAL V2] Failed to submit vote:', error);
+      throw new Error((error as any).message || 'Failed to submit vote');
+    }
+  }
+
+  /**
+   * Force complete voting (on timeout)
+   * POST /api/v2/lobby/{sessionId}/voting/complete
+   */
+  public async forceCompleteVoting(
+    sessionId: string
+  ): Promise<{
+    status: string;
+    message: string;
+    data?: {
+      result: string;
+      reason: string;
+      accept_count: number;
+      customize_count: number;
+      final_exercises: any[];
+    };
+  }> {
+    try {
+      console.log('[SOCIAL V2] Force completing voting:', { sessionId });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/voting/complete`,
+        {}
+      );
+
+      console.log('[SOCIAL V2] Voting completed successfully');
+      return response.data;
+    } catch (error) {
+      console.error('[SOCIAL V2] Failed to complete voting:', error);
+      throw new Error((error as any).message || 'Failed to complete voting');
+    }
+  }
 }
 
 export const socialService = new SocialService();

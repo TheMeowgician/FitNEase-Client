@@ -535,6 +535,10 @@ class ReverbService {
       onReadyCheckResponse?: (data: any) => void;
       onReadyCheckComplete?: (data: any) => void;
       onReadyCheckCancelled?: (data: any) => void;
+      // Voting events
+      onVotingStarted?: (data: any) => void;
+      onVoteSubmitted?: (data: any) => void;
+      onVotingComplete?: (data: any) => void;
     }
   ) {
     const channelName = `private-lobby.${sessionId}`;
@@ -581,6 +585,16 @@ class ReverbService {
             break;
           case 'ReadyCheckCancelled':
             callbacks.onReadyCheckCancelled?.(data);
+            break;
+          // Voting events
+          case 'VotingStarted':
+            callbacks.onVotingStarted?.(data);
+            break;
+          case 'VoteSubmitted':
+            callbacks.onVoteSubmitted?.(data);
+            break;
+          case 'VotingComplete':
+            callbacks.onVotingComplete?.(data);
             break;
         }
       },

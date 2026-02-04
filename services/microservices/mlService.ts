@@ -64,11 +64,15 @@ export interface SimilarExercises {
 
 // Response type for recommendations with metadata
 export interface RecommendationResponse {
-  recommendations: MLRecommendation[];
+  recommendations: MLRecommendation[];  // KEPT for backward compatibility
+  recommended_exercises?: MLRecommendation[];  // NEW: Same as recommendations
+  alternative_pool?: MLRecommendation[];  // NEW: Alternative exercises for customization
   algorithm: string;  // e.g., "hybrid", "hybrid_fallback_to_content", "content"
   algorithmDisplay?: string; // Human-readable version for UI
   weights?: { content_weight: number; collaborative_weight: number };
   count: number;
+  can_customize?: boolean;  // NEW: Whether user can customize (true for advanced/mentor)
+  alternative_count?: number;  // NEW: Number of alternatives available
 }
 
 export class MLService {
@@ -76,12 +80,15 @@ export class MLService {
   private baseUrl = '/api/v1'; // Flask API base path
 
   // Main hybrid recommendations (PRIMARY ENDPOINT)
+  // Supports workout customization for advanced/mentor users
   public async getRecommendations(
     userId: string | number,
     options?: {
       num_recommendations?: number;
       content_weight?: number;
       collaborative_weight?: number;
+      include_alternatives?: boolean;  // NEW: Request alternatives for customization
+      num_alternatives?: number;       // NEW: Number of alternatives (default: 6)
     }
   ): Promise<RecommendationResponse> {
     const maxRetries = 2;
@@ -99,6 +106,13 @@ export class MLService {
         if (options?.collaborative_weight) {
           params.append('collaborative_weight', options.collaborative_weight.toString());
         }
+        // NEW: Add customization parameters
+        if (options?.include_alternatives) {
+          params.append('include_alternatives', 'true');
+        }
+        if (options?.num_alternatives) {
+          params.append('num_alternatives', options.num_alternatives.toString());
+        }
 
         const url = `${this.baseUrl}/recommendations/${userId}?${params.toString()}`;
 
@@ -108,11 +122,15 @@ export class MLService {
 
         const response = await apiClient.get<{
           recommendations: MLRecommendation[];
+          recommended_exercises?: MLRecommendation[];  // NEW
+          alternative_pool?: MLRecommendation[];       // NEW
           algorithm: string;
           count: number;
           status: string;
           user_id: number;
           weights?: { collaborative_weight: number; content_weight: number };
+          can_customize?: boolean;         // NEW
+          alternative_count?: number;      // NEW
         }>(
           this.serviceName,
           url,
@@ -121,16 +139,23 @@ export class MLService {
 
         console.log(`✅ [ML SERVICE] Success on attempt ${attempt}`);
         console.log(`🎯 [ML SERVICE] Algorithm used: ${response.data.algorithm}`);
+        if (response.data.can_customize !== undefined) {
+          console.log(`🔧 [ML SERVICE] Can customize: ${response.data.can_customize}, Alternatives: ${response.data.alternative_count || 0}`);
+        }
 
         // Convert algorithm to display-friendly format
         const algorithmDisplay = this._getAlgorithmDisplay(response.data.algorithm);
 
         return {
           recommendations: response.data.recommendations,
+          recommended_exercises: response.data.recommended_exercises,  // NEW
+          alternative_pool: response.data.alternative_pool,            // NEW
           algorithm: response.data.algorithm,
           algorithmDisplay,
           weights: response.data.weights,
-          count: response.data.count
+          count: response.data.count,
+          can_customize: response.data.can_customize,                  // NEW
+          alternative_count: response.data.alternative_count           // NEW
         };
       } catch (error) {
         lastError = error;
@@ -148,7 +173,8 @@ export class MLService {
       recommendations: [],
       algorithm: 'unavailable',
       algorithmDisplay: 'Service Unavailable',
-      count: 0
+      count: 0,
+      can_customize: false
     };
   }
 
@@ -327,16 +353,22 @@ export class MLService {
     }
   }
 
-  // Group workout recommendations (NEW)
+  // Group workout recommendations
+  // Supports alternatives for group voting/customization
   public async getGroupWorkoutRecommendations(
     userIds: number[],
     options?: {
       workout_format?: 'tabata' | 'generic';
       target_exercises?: number;
+      include_alternatives?: boolean;  // NEW: Request alternatives for voting
+      num_alternatives?: number;       // NEW: Number of alternatives (default: 6)
     }
   ): Promise<any> {
     try {
       console.log(`🔥 [ML SERVICE] Generating group workout for ${userIds.length} users:`, userIds);
+      if (options?.include_alternatives) {
+        console.log(`🔧 [ML SERVICE] Including ${options.num_alternatives || 6} alternatives for group voting`);
+      }
 
       const response = await apiClient.post<any>(
         this.serviceName,
@@ -344,12 +376,17 @@ export class MLService {
         {
           user_ids: userIds,
           workout_format: options?.workout_format || 'tabata',
-          target_exercises: options?.target_exercises || 8
+          target_exercises: options?.target_exercises || 8,
+          include_alternatives: options?.include_alternatives || false,  // NEW
+          num_alternatives: options?.num_alternatives || 6               // NEW
         },
         { timeout: 60000 } // 60 seconds for group workout generation
       );
 
       console.log('✅ [ML SERVICE] Group workout generated successfully:', response.data);
+      if (response.data.workout?.alternative_pool) {
+        console.log(`🔧 [ML SERVICE] Included ${response.data.workout.alternative_pool.length} alternatives`);
+      }
       return response.data;
     } catch (error: any) {
       console.error('❌ [ML SERVICE] Group workout generation failed:', error);
@@ -557,13 +594,15 @@ export const useMLService = () => {
     });
   };
 
-  // Full options version
+  // Full options version (supports customization for advanced/mentor users)
   const getRecommendationsWithOptions = async (
     userId: string | number,
     options?: {
       num_recommendations?: number;
       content_weight?: number;
       collaborative_weight?: number;
+      include_alternatives?: boolean;  // NEW: Request alternatives for customization
+      num_alternatives?: number;       // NEW: Number of alternatives (default: 6)
     }
   ): Promise<RecommendationResponse> => {
     return mlService.getRecommendations(userId, options);
@@ -641,6 +680,8 @@ export const useMLService = () => {
     options?: {
       workout_format?: 'tabata' | 'generic';
       target_exercises?: number;
+      include_alternatives?: boolean;  // NEW: Request alternatives for voting
+      num_alternatives?: number;       // NEW: Number of alternatives (default: 6)
     }
   ) => {
     return mlService.getGroupWorkoutRecommendations(userIds, options);

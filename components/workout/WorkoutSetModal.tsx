@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/colors';
+import { ExerciseSwapModal } from './ExerciseSwapModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,6 +38,10 @@ interface WorkoutSetModalProps {
   onClose: () => void;
   workoutSet: WorkoutSet | null;
   onStartWorkout: () => void;
+  // NEW: Customization support for advanced/mentor users
+  alternativePool?: Exercise[];  // Alternative exercises for swapping
+  canCustomize?: boolean;         // Whether user can customize (advanced/mentor)
+  onExerciseSwap?: (exerciseIndex: number, newExercise: Exercise) => void;  // Callback when exercise is swapped
 }
 
 export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
@@ -44,9 +49,36 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
   onClose,
   workoutSet,
   onStartWorkout,
+  alternativePool = [],
+  canCustomize = false,
+  onExerciseSwap,
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const pan = useRef(new Animated.Value(0)).current;
+
+  // NEW: State for exercise swap modal
+  const [swapModalVisible, setSwapModalVisible] = useState(false);
+  const [exerciseToSwap, setExerciseToSwap] = useState<{ exercise: Exercise; index: number } | null>(null);
+
+  // NEW: Handler for opening swap modal
+  const handleOpenSwapModal = (exercise: Exercise, index: number) => {
+    setExerciseToSwap({ exercise, index });
+    setSwapModalVisible(true);
+  };
+
+  // NEW: Handler for closing swap modal
+  const handleCloseSwapModal = () => {
+    setSwapModalVisible(false);
+    setExerciseToSwap(null);
+  };
+
+  // NEW: Handler for swapping exercise
+  const handleSwapExercise = (newExercise: Exercise) => {
+    if (exerciseToSwap && onExerciseSwap) {
+      onExerciseSwap(exerciseToSwap.index, newExercise);
+    }
+    handleCloseSwapModal();
+  };
 
   // Animation values for smooth slide up/down and backdrop fade
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -287,6 +319,16 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
                       })}
                     </View>
                   </View>
+                  {/* NEW: Swap button for advanced/mentor users */}
+                  {canCustomize && alternativePool.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.swapButton}
+                      onPress={() => handleOpenSwapModal(exercise, index)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="swap-horizontal" size={18} color={COLORS.PRIMARY[600]} />
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <View style={styles.exerciseCardBody}>
                   <Text style={styles.exerciseDetailsLine}>
@@ -305,6 +347,16 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
             ))}
           </ScrollView>
 
+          {/* Customization Info Banner (for advanced/mentor users) */}
+          {canCustomize && alternativePool.length > 0 && (
+            <View style={styles.customizationBanner}>
+              <Ionicons name="sparkles" size={16} color={COLORS.PRIMARY[600]} />
+              <Text style={styles.customizationBannerText}>
+                Tap <Ionicons name="swap-horizontal" size={14} color={COLORS.PRIMARY[600]} /> to swap exercises
+              </Text>
+            </View>
+          )}
+
           {/* Start Button */}
           <View style={styles.footer}>
             <TouchableOpacity
@@ -317,6 +369,15 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
             </TouchableOpacity>
           </View>
         </Animated.View>
+
+        {/* NEW: Exercise Swap Modal */}
+        <ExerciseSwapModal
+          visible={swapModalVisible}
+          currentExercise={exerciseToSwap?.exercise || null}
+          alternatives={alternativePool}
+          onSwap={handleSwapExercise}
+          onClose={handleCloseSwapModal}
+        />
       </View>
     </Modal>
   );
@@ -521,6 +582,39 @@ const styles = StyleSheet.create({
     width: 1,
     height: 16,
     backgroundColor: COLORS.SECONDARY[300],
+  },
+  // NEW: Swap button styles for customization
+  swapButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.PRIMARY[50],
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[200],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  // NEW: Customization banner styles
+  customizationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.PRIMARY[50],
+    marginHorizontal: 24,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[200],
+    gap: 8,
+  },
+  customizationBannerText: {
+    fontSize: 13,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[700],
   },
   footer: {
     paddingHorizontal: 24,

@@ -19,6 +19,7 @@ import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAlert } from '../../contexts/AlertContext';
 import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMembersReady, selectIsLobbyInitiator, selectUnreadMessageCount, selectLeftSessionId } from '../../stores/lobbyStore';
 import { useReadyCheckStore, selectIsReadyCheckActive, selectReadyCheckResult } from '../../stores/readyCheckStore';
+import { useVotingStore, selectIsVotingActive, selectVotingResult, selectMemberVotes, selectVotingExpiresAt } from '../../stores/votingStore';
 import { useConnectionStore, selectIsConnected, selectConnectionState } from '../../stores/connectionStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
@@ -92,6 +93,18 @@ export default function GroupLobbyScreen() {
   const setReadyCheckResult = useReadyCheckStore((state) => state.setResult);
   const clearReadyCheck = useReadyCheckStore((state) => state.clearReadyCheck);
 
+  // Voting store
+  const isVotingActive = useVotingStore(selectIsVotingActive);
+  const votingResult = useVotingStore(selectVotingResult);
+  const memberVotes = useVotingStore(selectMemberVotes);
+  const votingExpiresAt = useVotingStore(selectVotingExpiresAt);
+  const startVoting = useVotingStore((state) => state.startVoting);
+  const submitVote = useVotingStore((state) => state.submitVote);
+  const completeVoting = useVotingStore((state) => state.completeVoting);
+  const clearVoting = useVotingStore((state) => state.clearVoting);
+  const getVoteCounts = useVotingStore((state) => state.getVoteCounts);
+  const hasUserVoted = useVotingStore((state) => state.hasUserVoted);
+
   // Local state
   const [isReady, setIsReady] = useState(false);
   const [isInitiator, setIsInitiator] = useState(false);
@@ -113,6 +126,9 @@ export default function GroupLobbyScreen() {
   const [exerciseDetails, setExerciseDetails] = useState<Exercise[]>([]);
   const [isLoadingExercises, setIsLoadingExercises] = useState(false);
   const [isWorkoutDetailsExpanded, setIsWorkoutDetailsExpanded] = useState(false);
+  const [alternativePool, setAlternativePool] = useState<any[]>([]);
+  const [isSubmittingVote, setIsSubmittingVote] = useState(false);
+  const [votingTimeRemaining, setVotingTimeRemaining] = useState<number>(0);
 
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -162,6 +178,37 @@ export default function GroupLobbyScreen() {
       autoGenerateExercises(lobbyMembers.length);
     }
   }, [readyCheckResult, isInitiator, hasExercises, isGenerating, lobbyMembers.length]);
+
+  /**
+   * Voting countdown timer
+   * Updates every second while voting is active
+   */
+  useEffect(() => {
+    if (!isVotingActive || !votingExpiresAt) {
+      setVotingTimeRemaining(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((votingExpiresAt - now) / 1000));
+      setVotingTimeRemaining(remaining);
+
+      // Auto-complete voting on timeout (initiator only)
+      if (remaining === 0 && isInitiator) {
+        console.log('[VOTING] Timeout reached, forcing completion');
+        socialService.forceCompleteVoting(sessionId).catch(console.error);
+      }
+    };
+
+    // Initial update
+    updateTimer();
+
+    // Update every second
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [isVotingActive, votingExpiresAt, isInitiator, sessionId]);
 
   /**
    * Initialize lobby on mount
@@ -872,6 +919,48 @@ export default function GroupLobbyScreen() {
         // Clear ready check in store
         clearReadyCheck();
       },
+      // Voting events
+      onVotingStarted: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('[REAL-TIME] Voting started:', data);
+
+        // Start voting in store
+        startVoting({
+          sessionId: data.session_id,
+          votingId: data.voting_id,
+          initiatorId: data.initiator_id,
+          initiatorName: data.initiator_name,
+          members: data.members,
+          exercises: data.exercises,
+          alternativePool: data.alternative_pool || [],
+          timeoutSeconds: data.timeout_seconds,
+          expiresAt: data.expires_at,
+        });
+      },
+      onVoteSubmitted: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('[REAL-TIME] Vote submitted:', data);
+
+        // Update vote in store
+        submitVote(data.user_id, data.user_name, data.vote);
+      },
+      onVotingComplete: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('[REAL-TIME] Voting complete:', data);
+
+        // Complete voting in store
+        completeVoting({
+          result: data.result,
+          reason: data.reason,
+          finalVotes: data.final_votes,
+          acceptCount: data.accept_count,
+          customizeCount: data.customize_count,
+          finalExercises: data.final_exercises,
+        });
+      },
     });
 
       console.log('✅ Subscribed to lobby channel');
@@ -1352,14 +1441,21 @@ export default function GroupLobbyScreen() {
       // Import ML service
       const { mlService } = await import('../../services/microservices/mlService');
 
-      // Call ML group recommendations API
+      // Call ML group recommendations API with alternatives for voting
       const response = await mlService.getGroupWorkoutRecommendations(userIds, {
         workout_format: 'tabata',
-        target_exercises: 8
+        target_exercises: 8,
+        include_alternatives: true,
+        num_alternatives: 6
       });
 
       if (response?.success && response?.workout?.exercises) {
         console.log('✅ Generated', response.workout.exercises.length, 'exercises');
+        const alternatives = response.workout.alternative_pool || [];
+        console.log('✅ Generated', alternatives.length, 'alternatives for voting');
+
+        // Store alternatives for voting
+        setAlternativePool(alternatives);
 
         // Check if user is still in lobby before updating (race condition prevention)
         if (isLeaving || !isMountedRef.current || isCleaningUpRef.current) {
@@ -1374,6 +1470,13 @@ export default function GroupLobbyScreen() {
         });
 
         console.log('✅ Exercises saved to lobby successfully');
+
+        // Auto-start voting after a short delay (allow exercise reveal animation)
+        setTimeout(() => {
+          if (!isCleaningUpRef.current && isMountedRef.current) {
+            triggerVoting(response.workout.exercises, alternatives);
+          }
+        }, 2000);
       } else {
         throw new Error('No exercises generated');
       }
@@ -1382,6 +1485,64 @@ export default function GroupLobbyScreen() {
       alert.warning('Notice', 'Could not generate personalized workout. Please try again later.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  /**
+   * Trigger voting via backend API (initiator only)
+   */
+  const triggerVoting = async (exercises: any[], alternatives: any[]) => {
+    if (!isInitiator || !sessionId || isVotingActive) {
+      console.log('[VOTING] Skipping trigger - not initiator or already active');
+      return;
+    }
+
+    console.log('[VOTING] Triggering voting for exercises');
+
+    try {
+      const response = await socialService.startVoting(sessionId, {
+        exercises,
+        alternative_pool: alternatives,
+        timeout_seconds: 60,
+      });
+
+      if (response.status !== 'success') {
+        console.error('[VOTING] Failed to start voting:', response);
+      } else {
+        console.log('[VOTING] Voting started successfully:', response.data);
+      }
+    } catch (error) {
+      console.error('[VOTING] Error starting voting:', error);
+    }
+  };
+
+  /**
+   * Submit vote (accept or customize)
+   */
+  const handleVoteSubmit = async (vote: 'accept' | 'customize') => {
+    if (!sessionId || !currentUser || isSubmittingVote) return;
+
+    // Check if already voted
+    if (hasUserVoted(parseInt(currentUser.id))) {
+      console.log('[VOTING] User already voted');
+      return;
+    }
+
+    setIsSubmittingVote(true);
+
+    try {
+      const response = await socialService.submitVote(sessionId, { vote });
+
+      if (response.status !== 'success') {
+        throw new Error(response.message || 'Failed to submit vote');
+      }
+
+      console.log('[VOTING] Vote submitted:', vote);
+    } catch (error) {
+      console.error('[VOTING] Error submitting vote:', error);
+      alert.error('Error', 'Failed to submit vote. Please try again.');
+    } finally {
+      setIsSubmittingVote(false);
     }
   };
 
@@ -1787,6 +1948,101 @@ export default function GroupLobbyScreen() {
               isGenerating={isGenerating}
             />
           </ScrollView>
+
+          {/* Voting Panel - Shows when voting is active */}
+          {isVotingActive && (
+            <View style={styles.votingPanel}>
+              <View style={styles.votingHeader}>
+                <Ionicons name="people" size={20} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.votingTitle}>Group Vote</Text>
+                <View style={styles.votingTimer}>
+                  <Ionicons name="time-outline" size={16} color={votingTimeRemaining <= 10 ? COLORS.ERROR[500] : COLORS.SECONDARY[600]} />
+                  <Text style={[styles.votingTimerText, votingTimeRemaining <= 10 && styles.votingTimerTextUrgent]}>
+                    {votingTimeRemaining}s
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.votingDescription}>
+                Accept the recommended workout or vote to customize?
+              </Text>
+
+              {/* Vote Counts */}
+              <View style={styles.voteCountsContainer}>
+                <View style={styles.voteCount}>
+                  <Text style={styles.voteCountNumber}>{getVoteCounts().accept}</Text>
+                  <Text style={styles.voteCountLabel}>Accept</Text>
+                </View>
+                <View style={styles.voteCountDivider} />
+                <View style={styles.voteCount}>
+                  <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
+                  <Text style={styles.voteCountLabel}>Customize</Text>
+                </View>
+                <View style={styles.voteCountDivider} />
+                <View style={styles.voteCount}>
+                  <Text style={styles.voteCountNumber}>{getVoteCounts().pending}</Text>
+                  <Text style={styles.voteCountLabel}>Pending</Text>
+                </View>
+              </View>
+
+              {/* Vote Buttons */}
+              {currentUser && !hasUserVoted(parseInt(currentUser.id)) ? (
+                <View style={styles.voteButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.voteButton, styles.voteButtonAccept]}
+                    onPress={() => handleVoteSubmit('accept')}
+                    disabled={isSubmittingVote}
+                  >
+                    {isSubmittingVote ? (
+                      <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
+                        <Text style={styles.voteButtonText}>Accept</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.voteButton, styles.voteButtonCustomize]}
+                    onPress={() => handleVoteSubmit('customize')}
+                    disabled={isSubmittingVote}
+                  >
+                    {isSubmittingVote ? (
+                      <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                    ) : (
+                      <>
+                        <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
+                        <Text style={styles.voteButtonText}>Customize</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.votedIndicator}>
+                  <Ionicons name="checkmark-done" size={20} color={COLORS.SUCCESS[600]} />
+                  <Text style={styles.votedText}>
+                    You voted: {currentUser ? memberVotes[parseInt(currentUser.id)]?.vote || 'pending' : 'pending'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Voting Result Banner */}
+          {votingResult && votingResult !== 'pending' && (
+            <View style={[styles.votingResultBanner, votingResult === 'accept_recommended' ? styles.votingResultAccept : styles.votingResultCustomize]}>
+              <Ionicons
+                name={votingResult === 'accept_recommended' ? 'checkmark-circle' : 'options'}
+                size={20}
+                color={COLORS.NEUTRAL.WHITE}
+              />
+              <Text style={styles.votingResultText}>
+                {votingResult === 'accept_recommended'
+                  ? 'Group accepted the recommended workout!'
+                  : 'Group voted to customize (coming soon)'}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -2959,5 +3215,137 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[600],
+  },
+  // Voting Panel Styles
+  votingPanel: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[200],
+  },
+  votingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  votingTitle: {
+    flex: 1,
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  votingTimer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  votingTimerText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[600],
+  },
+  votingTimerTextUrgent: {
+    color: COLORS.ERROR[500],
+  },
+  votingDescription: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginBottom: 12,
+  },
+  voteCountsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  voteCount: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  voteCountNumber: {
+    fontSize: FONT_SIZES.XL,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  voteCountLabel: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[500],
+    marginTop: 2,
+  },
+  voteCountDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: COLORS.SECONDARY[200],
+  },
+  voteButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  voteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  voteButtonAccept: {
+    backgroundColor: COLORS.SUCCESS[600],
+  },
+  voteButtonCustomize: {
+    backgroundColor: COLORS.WARNING[600],
+  },
+  voteButtonText: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  votedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: COLORS.SUCCESS[50],
+    borderRadius: 12,
+  },
+  votedText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SUCCESS[700],
+    textTransform: 'capitalize',
+  },
+  votingResultBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  votingResultAccept: {
+    backgroundColor: COLORS.SUCCESS[600],
+  },
+  votingResultCustomize: {
+    backgroundColor: COLORS.WARNING[600],
+  },
+  votingResultText: {
+    flex: 1,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
   },
 });
