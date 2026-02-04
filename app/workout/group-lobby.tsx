@@ -373,6 +373,18 @@ export default function GroupLobbyScreen() {
   }, [exerciseIdsString]); // STABLE DEPENDENCY - only changes when IDs actually change
 
   const initializeLobby = async () => {
+    // CRITICAL: Reset refs on initialization to handle component reuse
+    // This ensures a fresh start when the user is re-invited to a lobby they left
+    // NOTE: Only reset if this is a fresh join via invitation (not a stale cleanup state)
+    if (joinedViaInvite === 'true') {
+      console.log('🔄 [INIT] Resetting refs for re-invitation to lobby');
+      isCleaningUpRef.current = false;
+      isLobbyDeletedRef.current = false;
+      hasJoinedRef.current = false;
+      hasInitializedRef.current = false;
+      isMountedRef.current = true;
+    }
+
     // CRITICAL: Prevent re-initialization if cleanup is in progress
     // This prevents the lobby from being re-saved after leaving
     if (isCleaningUpRef.current) {
@@ -388,12 +400,19 @@ export default function GroupLobbyScreen() {
 
     // CRITICAL: Check if we just left this lobby (Zustand flag persists across component mounts)
     // This prevents the lobby indicator from reappearing after leaving
-    if (leftSessionId && leftSessionId === sessionId) {
+    // EXCEPTION: If user explicitly accepted an invitation, allow re-joining
+    if (leftSessionId && leftSessionId === sessionId && joinedViaInvite !== 'true') {
       console.log('🛡️ [INIT] Skipping initialization - just left this lobby:', sessionId);
       // Clear the left session marker and navigate back
       clearLeftSession();
       router.back();
       return;
+    }
+
+    // If user is re-joining via invitation, clear the leftSessionId marker
+    if (leftSessionId && leftSessionId === sessionId && joinedViaInvite === 'true') {
+      console.log('🔄 [INIT] Clearing leftSessionId - user accepted re-invitation');
+      clearLeftSession();
     }
 
     if (!sessionId || !currentUser) {
