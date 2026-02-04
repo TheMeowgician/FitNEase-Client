@@ -156,6 +156,8 @@ export default function GroupLobbyScreen() {
   const presenceChannelRef = useRef<any>(null);
   const groupPresenceChannelRef = useRef<any>(null);
   const userChannelRef = useRef<any>(null);
+  // Track pending exercise swap for WebSocket confirmation (handles HTTP timeout but WebSocket success)
+  const pendingSwapRef = useRef<{ slotIndex: number; exerciseId: number; confirmed: boolean } | null>(null);
 
   // Check if current user is initiator
   // IMPORTANT: This syncs with currentLobby.initiator_id (which updates via WebSocket)
@@ -1003,6 +1005,14 @@ export default function GroupLobbyScreen() {
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('[REAL-TIME] Exercise swapped:', data);
 
+        // Mark pending swap as confirmed (handles case where HTTP times out but WebSocket succeeds)
+        if (pendingSwapRef.current &&
+            pendingSwapRef.current.slotIndex === data.slot_index &&
+            pendingSwapRef.current.exerciseId === data.new_exercise?.exercise_id) {
+          console.log('[REAL-TIME] Pending swap confirmed via WebSocket');
+          pendingSwapRef.current.confirmed = true;
+        }
+
         // Update exercise details with the swapped exercise
         if (data.slot_index !== undefined && data.new_exercise) {
           setExerciseDetails((prev) => {
@@ -1645,11 +1655,21 @@ export default function GroupLobbyScreen() {
   /**
    * Handle exercise swap (initiator only)
    * This is called when the user confirms a swap in the ExerciseSwapModal
+   *
+   * Note: Sometimes HTTP response fails but WebSocket confirms success.
+   * We track pending swaps and check WebSocket confirmation before showing errors.
    */
   const handleExerciseSwap = async (newExercise: any) => {
     if (!isInitiator || !sessionId || !selectedExerciseForSwap || isSwappingExercise) return;
 
     setIsSwappingExercise(true);
+
+    // Track this pending swap for WebSocket confirmation
+    pendingSwapRef.current = {
+      slotIndex: selectedExerciseForSwap.index,
+      exerciseId: newExercise.exercise_id,
+      confirmed: false,
+    };
 
     try {
       const response = await socialService.swapExercise(sessionId, {
@@ -1670,7 +1690,10 @@ export default function GroupLobbyScreen() {
         throw new Error(response.message || 'Failed to swap exercise');
       }
 
-      console.log('[CUSTOMIZATION] Exercise swapped successfully');
+      console.log('[CUSTOMIZATION] Exercise swapped successfully via HTTP');
+
+      // Clear pending swap
+      pendingSwapRef.current = null;
 
       // Close modal
       setShowSwapModal(false);
@@ -1679,8 +1702,29 @@ export default function GroupLobbyScreen() {
       // Show success feedback
       alert.success('Exercise Swapped', `Swapped to "${newExercise.exercise_name}"`);
     } catch (error) {
-      console.error('[CUSTOMIZATION] Error swapping exercise:', error);
-      alert.error('Error', 'Failed to swap exercise. Please try again.');
+      console.error('[CUSTOMIZATION] HTTP error swapping exercise:', error);
+
+      // Wait briefly for WebSocket confirmation (in case HTTP failed but backend succeeded)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Check if WebSocket confirmed the swap despite HTTP error
+      if (pendingSwapRef.current?.confirmed) {
+        console.log('[CUSTOMIZATION] Swap confirmed via WebSocket despite HTTP error');
+
+        // Clear pending swap
+        pendingSwapRef.current = null;
+
+        // Close modal
+        setShowSwapModal(false);
+        setSelectedExerciseForSwap(null);
+
+        // Show success feedback
+        alert.success('Exercise Swapped', `Swapped to "${newExercise.exercise_name}"`);
+      } else {
+        // WebSocket also didn't confirm - show error
+        pendingSwapRef.current = null;
+        alert.error('Error', 'Failed to swap exercise. Please try again.');
+      }
     } finally {
       setIsSwappingExercise(false);
     }
