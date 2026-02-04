@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, StatusBar, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, StatusBar, Platform, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +25,51 @@ import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '..
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 import { getAlgorithmDisplayName } from '../../utils/mlUtils';
+
+// Achievement icons mapping - maps achievement names to image files
+const ACHIEVEMENT_ICONS: { [key: string]: any } = {
+  // Workout count achievements
+  'First Workout': require('../../assets/images/achievements/first_workout.png'),
+  'Getting Started': require('../../assets/images/achievements/getting_started.png'),
+  'Dedicated Trainer': require('../../assets/images/achievements/dedicated_trainer.png'),
+  'Fitness Warrior': require('../../assets/images/achievements/fitness_warrior.png'),
+  'Century Club': require('../../assets/images/achievements/century_club.png'),
+  'Workout Master': require('../../assets/images/achievements/workout_master.png'),
+  // Streak achievements
+  '3-Day Spark': require('../../assets/images/achievements/3_day_spark.png'),
+  'Week Warrior': require('../../assets/images/achievements/week_warrior.png'),
+  'Two Week Terror': require('../../assets/images/achievements/two_week_terror.png'),
+  'Month Master': require('../../assets/images/achievements/month_master.png'),
+  'Iron Will': require('../../assets/images/achievements/iron_will.png'),
+  'Unstoppable': require('../../assets/images/achievements/unstoppable.png'),
+  // Time duration achievements
+  'First Hour': require('../../assets/images/achievements/first_hour.png'),
+  'Dedicated': require('../../assets/images/achievements/dedicated.png'),
+  'Time Investor': require('../../assets/images/achievements/time_investor.png'),
+  'Marathon Mind': require('../../assets/images/achievements/marathon_mind.png'),
+  'Time Lord': require('../../assets/images/achievements/time_lord.png'),
+  // Social achievements
+  'Team Player': require('../../assets/images/achievements/team_player.png'),
+  'Group Regular': require('../../assets/images/achievements/group_regular.png'),
+  'Pack Leader': require('../../assets/images/achievements/pack_leader.png'),
+  'Motivator': require('../../assets/images/achievements/motivator.png'),
+  'Community Legend': require('../../assets/images/achievements/community_legend.png'),
+  // Calorie achievements
+  'First Thousand': require('../../assets/images/achievements/first_thousand.png'),
+  'Calorie Burner': require('../../assets/images/achievements/calorie_burner.png'),
+  'Heat Generator': require('../../assets/images/achievements/heat_generator.png'),
+  'Calorie Crusher': require('../../assets/images/achievements/calorie_crusher.png'),
+  'Furnace Master': require('../../assets/images/achievements/furnace_master.png'),
+  // Fitness level badges
+  'Beginner': require('../../assets/images/achievements/beginner.png'),
+  'Intermediate': require('../../assets/images/achievements/intermediate.png'),
+  'Advanced': require('../../assets/images/achievements/advanced.png'),
+};
+
+// Helper to get achievement icon with fallback
+const getAchievementIcon = (achievementName: string) => {
+  return ACHIEVEMENT_ICONS[achievementName] || null;
+};
 
 // ====================================================================
 // 🧪 TESTING FLAG: Daily Workout Limit Control
@@ -912,23 +957,31 @@ export default function HomeScreen() {
           <Text style={styles.sectionHeader}>Recent Achievements</Text>
           {achievements && achievements.length > 0 ? (
             <View style={styles.achievementsGrid}>
-              {achievements.slice(0, 3).map((userAchievement: any, index: number) => (
-                <View key={index} style={styles.achievementCard}>
-                  <View style={[styles.achievementBadge, { backgroundColor: userAchievement.achievement?.badge_color || COLORS.PRIMARY[600] }]}>
-                    <Ionicons
-                      name={userAchievement.achievement?.badge_icon as any || "trophy"}
-                      size={24}
-                      color="white"
-                    />
+              {achievements.slice(0, 3).map((userAchievement: any, index: number) => {
+                const achievementName = userAchievement.achievement?.achievement_name || 'Achievement';
+                const achievementIcon = getAchievementIcon(achievementName);
+                return (
+                  <View key={index} style={styles.achievementCard}>
+                    <View style={[styles.achievementBadge, { backgroundColor: achievementIcon ? 'transparent' : (userAchievement.achievement?.badge_color || COLORS.PRIMARY[600]) }]}>
+                      {achievementIcon ? (
+                        <Image source={achievementIcon} style={styles.achievementIconImage} />
+                      ) : (
+                        <Ionicons
+                          name={userAchievement.achievement?.badge_icon as any || "trophy"}
+                          size={24}
+                          color="white"
+                        />
+                      )}
+                    </View>
+                    <Text style={styles.achievementName}>
+                      {achievementName}
+                    </Text>
+                    <Text style={styles.achievementPoints}>
+                      {userAchievement.points_earned || 0} pts
+                    </Text>
                   </View>
-                  <Text style={styles.achievementName}>
-                    {userAchievement.achievement?.achievement_name || 'Achievement'}
-                  </Text>
-                  <Text style={styles.achievementPoints}>
-                    {userAchievement.points_earned || 0} pts
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyAchievements}>
@@ -1231,6 +1284,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+    overflow: 'hidden',
+  },
+  achievementIconImage: {
+    width: 40,
+    height: 40,
+    resizeMode: 'contain',
   },
   achievementName: {
     fontSize: 12,

@@ -8,6 +8,7 @@ import {
   Dimensions,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,14 @@ import ProgressionCard from '../../components/ProgressionCard';
 import { progressionService } from '../../services/microservices/progressionService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
+
+// Achievement icons for milestones
+const MILESTONE_ICONS = {
+  first_workout: require('../../assets/images/achievements/first_workout.png'),
+  getting_started: require('../../assets/images/achievements/getting_started.png'),
+  week_warrior: require('../../assets/images/achievements/week_warrior.png'),
+  dedicated: require('../../assets/images/achievements/dedicated.png'),
+};
 
 const { width } = Dimensions.get('window');
 
@@ -253,9 +262,9 @@ export default function ProgressScreen() {
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  (overallStats?.totalWorkouts || 0) >= 1 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  (overallStats?.totalWorkouts || 0) >= 1 ? styles.milestoneIconCompleted : styles.milestoneIconPending
                 ]}>
-                  <Ionicons name={(overallStats?.totalWorkouts || 0) >= 1 ? "checkmark" : "flash"} size={20} color="white" />
+                  <Image source={MILESTONE_ICONS.first_workout} style={styles.milestoneIconImage} />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>First Workout</Text>
@@ -270,9 +279,9 @@ export default function ProgressScreen() {
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  (overallStats?.totalWorkouts || 0) >= 10 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  (overallStats?.totalWorkouts || 0) >= 10 ? styles.milestoneIconCompleted : styles.milestoneIconPending
                 ]}>
-                  <Ionicons name={(overallStats?.totalWorkouts || 0) >= 10 ? "checkmark" : "rocket"} size={20} color="white" />
+                  <Image source={MILESTONE_ICONS.getting_started} style={styles.milestoneIconImage} />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>Getting Started</Text>
@@ -287,9 +296,9 @@ export default function ProgressScreen() {
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  engagementStreak >= 7 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  engagementStreak >= 7 ? styles.milestoneIconCompleted : styles.milestoneIconPending
                 ]}>
-                  <Ionicons name={engagementStreak >= 7 ? "checkmark" : "flame"} size={20} color="white" />
+                  <Image source={MILESTONE_ICONS.week_warrior} style={styles.milestoneIconImage} />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>On Fire</Text>
@@ -304,9 +313,9 @@ export default function ProgressScreen() {
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
-                  (overallStats?.activeDays || 0) >= 28 ? { backgroundColor: COLORS.SUCCESS[500] } : { backgroundColor: COLORS.NEUTRAL[300] }
+                  (overallStats?.activeDays || 0) >= 28 ? styles.milestoneIconCompleted : styles.milestoneIconPending
                 ]}>
-                  <Ionicons name={(overallStats?.activeDays || 0) >= 28 ? "checkmark" : "calendar"} size={20} color="white" />
+                  <Image source={MILESTONE_ICONS.dedicated} style={styles.milestoneIconImage} />
                 </View>
                 <View style={styles.milestoneText}>
                   <Text style={styles.milestoneTitle}>Dedicated</Text>
@@ -522,6 +531,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  milestoneIconImage: {
+    width: 36,
+    height: 36,
+    resizeMode: 'contain',
+  },
+  milestoneIconCompleted: {
+    opacity: 1,
+  },
+  milestoneIconPending: {
+    opacity: 0.5,
   },
   milestoneText: {
     flex: 1,
