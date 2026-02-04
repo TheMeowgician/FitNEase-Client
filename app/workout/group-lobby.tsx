@@ -1560,6 +1560,8 @@ export default function GroupLobbyScreen() {
 
   /**
    * Trigger voting via backend API (initiator only)
+   * Voting only occurs if there's at least one mentor/advanced user in the lobby.
+   * If no mentor/advanced exists, skip voting and use recommended exercises directly.
    */
   const triggerVoting = async (exercises: any[], alternatives: any[]) => {
     if (!isInitiator || !sessionId || isVotingActive) {
@@ -1567,7 +1569,19 @@ export default function GroupLobbyScreen() {
       return;
     }
 
-    console.log('[VOTING] Triggering voting for exercises');
+    // Check if any mentor or advanced user exists in the lobby
+    const hasCustomizableUser = lobbyMembers.some(
+      m => m.user_role === 'mentor' || m.fitness_level === 'advanced'
+    );
+
+    if (!hasCustomizableUser) {
+      console.log('[VOTING] Skipping voting - no mentor/advanced users in lobby');
+      console.log('[VOTING] Using recommended exercises directly (no customization available)');
+      // No voting needed - exercises are already saved, workout can start
+      return;
+    }
+
+    console.log('[VOTING] Triggering voting (mentor/advanced user present in lobby)');
 
     try {
       const response = await socialService.startVoting(sessionId, {
@@ -2090,26 +2104,20 @@ export default function GroupLobbyScreen() {
               </View>
 
               <Text style={styles.votingDescription}>
-                {canUserCustomize
-                  ? 'Accept the recommended workout or vote to customize?'
-                  : 'Vote to accept the recommended workout.'}
+                Accept the recommended workout or vote to customize?
               </Text>
 
-              {/* Vote Counts - Only show customize count if there are customizable members */}
+              {/* Vote Counts */}
               <View style={styles.voteCountsContainer}>
                 <View style={styles.voteCount}>
                   <Text style={styles.voteCountNumber}>{getVoteCounts().accept}</Text>
                   <Text style={styles.voteCountLabel}>Accept</Text>
                 </View>
-                {hasCustomizableMembers && (
-                  <>
-                    <View style={styles.voteCountDivider} />
-                    <View style={styles.voteCount}>
-                      <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
-                      <Text style={styles.voteCountLabel}>Customize</Text>
-                    </View>
-                  </>
-                )}
+                <View style={styles.voteCountDivider} />
+                <View style={styles.voteCount}>
+                  <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
+                  <Text style={styles.voteCountLabel}>Customize</Text>
+                </View>
                 <View style={styles.voteCountDivider} />
                 <View style={styles.voteCount}>
                   <Text style={styles.voteCountNumber}>{getVoteCounts().pending}</Text>
@@ -2117,11 +2125,11 @@ export default function GroupLobbyScreen() {
                 </View>
               </View>
 
-              {/* Vote Buttons */}
+              {/* Vote Buttons - ALL members can vote for both options */}
               {currentUser && !hasUserVoted(parseInt(currentUser.id)) ? (
                 <View style={styles.voteButtonsContainer}>
                   <TouchableOpacity
-                    style={[styles.voteButton, styles.voteButtonAccept, !canUserCustomize && styles.voteButtonFull]}
+                    style={[styles.voteButton, styles.voteButtonAccept]}
                     onPress={() => handleVoteSubmit('accept')}
                     disabled={isSubmittingVote}
                   >
@@ -2134,23 +2142,20 @@ export default function GroupLobbyScreen() {
                       </>
                     )}
                   </TouchableOpacity>
-                  {/* Only show Customize button for mentors and advanced users */}
-                  {canUserCustomize && (
-                    <TouchableOpacity
-                      style={[styles.voteButton, styles.voteButtonCustomize]}
-                      onPress={() => handleVoteSubmit('customize')}
-                      disabled={isSubmittingVote}
-                    >
-                      {isSubmittingVote ? (
-                        <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
-                      ) : (
-                        <>
-                          <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
-                          <Text style={styles.voteButtonText}>Customize</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={[styles.voteButton, styles.voteButtonCustomize]}
+                    onPress={() => handleVoteSubmit('customize')}
+                    disabled={isSubmittingVote}
+                  >
+                    {isSubmittingVote ? (
+                      <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                    ) : (
+                      <>
+                        <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
+                        <Text style={styles.voteButtonText}>Customize</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               ) : (
                 <View style={styles.votedIndicator}>
@@ -2161,10 +2166,10 @@ export default function GroupLobbyScreen() {
                 </View>
               )}
 
-              {/* Info text for non-customizable users */}
-              {!canUserCustomize && hasCustomizableMembers && (
+              {/* Info text explaining customization privileges */}
+              {!canUserCustomize && (
                 <Text style={styles.votingInfoText}>
-                  Only mentors and advanced users can vote to customize.
+                  If "Customize" wins, mentors/advanced users will modify the workout.
                 </Text>
               )}
             </View>
