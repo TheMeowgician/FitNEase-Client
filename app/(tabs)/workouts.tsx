@@ -114,7 +114,7 @@ export default function WorkoutsScreen() {
     setRefreshing(false);
   };
 
-  const handleViewWorkoutSet = () => {
+  const handleViewWorkoutSet = async () => {
     if (!exercises || exercises.length === 0) {
       alert.info('No Exercises', 'No exercises available for today.');
       return;
@@ -136,6 +136,33 @@ export default function WorkoutsScreen() {
     };
 
     setCurrentWorkoutSet(workoutSet);
+
+    // Fetch alternatives for advanced/expert users to enable customization
+    if (canCustomize && user) {
+      try {
+        console.log('[WORKOUTS] Fetching alternatives for customization...');
+        const { mlService } = await import('../../services/microservices/mlService');
+        const response = await mlService.getRecommendations(String(user.id), {
+          count: 6,
+          include_alternatives: true,
+          num_alternatives: 6,
+        });
+
+        if (response?.alternative_pool && response.alternative_pool.length > 0) {
+          // Filter out exercises that are already in the workout
+          const workoutExerciseIds = new Set(workoutExercises.map((ex: any) => ex.exercise_id));
+          const filteredAlternatives = response.alternative_pool.filter(
+            (alt: any) => !workoutExerciseIds.has(alt.exercise_id)
+          );
+          setAlternativePool(filteredAlternatives);
+          console.log(`[WORKOUTS] Loaded ${filteredAlternatives.length} alternatives for customization`);
+        }
+      } catch (error) {
+        console.error('[WORKOUTS] Failed to fetch alternatives:', error);
+        // Continue without alternatives - swap feature just won't be available
+      }
+    }
+
     setShowWorkoutSetModal(true);
   };
 

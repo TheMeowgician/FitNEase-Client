@@ -1070,22 +1070,22 @@ export default function GroupLobbyScreen() {
     if (!sessionId || isLeaving) return;
 
     setIsLeaving(true);
-    isCleaningUpRef.current = true; // Prevent any pending async operations
+    // NOTE: Do NOT set isCleaningUpRef.current here - let cleanup() handle it
+    // Setting it here would cause cleanup() to return early without doing anything
 
     try {
       console.log('📤 [LEAVE] Calling leaveLobbyV2 API...');
       await socialService.leaveLobbyV2(sessionId);
       console.log('✅ [LEAVE] Successfully left lobby on backend');
-      await cleanup();
-      router.back();
     } catch (error) {
       console.error('❌ [LEAVE] Error leaving lobby:', error);
-      // Still cleanup and go back even if API fails
-      await cleanup();
-      router.back();
-    } finally {
-      setIsLeaving(false);
+      // Continue with cleanup even if API fails
     }
+
+    // Always cleanup regardless of API success/failure
+    await cleanup();
+    router.back();
+    setIsLeaving(false);
   };
 
   /**
