@@ -1702,14 +1702,15 @@ export default function GroupLobbyScreen() {
       // Show success feedback
       alert.success('Exercise Swapped', `Swapped to "${newExercise.exercise_name}"`);
     } catch (error) {
-      console.error('[CUSTOMIZATION] HTTP error swapping exercise:', error);
+      // Don't log error yet - wait to check if WebSocket confirmed success
 
       // Wait briefly for WebSocket confirmation (in case HTTP failed but backend succeeded)
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Check if WebSocket confirmed the swap despite HTTP error
       if (pendingSwapRef.current?.confirmed) {
-        console.log('[CUSTOMIZATION] Swap confirmed via WebSocket despite HTTP error');
+        // WebSocket confirmed - this is actually a success, just log as info
+        console.log('[CUSTOMIZATION] Swap succeeded (confirmed via WebSocket, HTTP response failed)');
 
         // Clear pending swap
         pendingSwapRef.current = null;
@@ -1721,7 +1722,8 @@ export default function GroupLobbyScreen() {
         // Show success feedback
         alert.success('Exercise Swapped', `Swapped to "${newExercise.exercise_name}"`);
       } else {
-        // WebSocket also didn't confirm - show error
+        // WebSocket also didn't confirm - NOW log as error since it truly failed
+        console.error('[CUSTOMIZATION] Exercise swap failed (both HTTP and WebSocket):', error);
         pendingSwapRef.current = null;
         alert.error('Error', 'Failed to swap exercise. Please try again.');
       }

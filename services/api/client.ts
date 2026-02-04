@@ -432,6 +432,9 @@ export class APIClient {
                              errorMessage.includes('no longer valid') ||
                              errorMessage.includes('Invitation is no longer valid');
 
+      // Check if this is a swap endpoint (has WebSocket fallback, caller will verify)
+      const isSwapEndpoint = config.url?.includes('/exercises/swap');
+
       // For non-critical services (ML, tracking, engagement, planning), log as warning instead of error
       const isNonCriticalService = service === 'ml' || service === 'tracking' || service === 'engagement' || service === 'planning';
 
@@ -452,6 +455,13 @@ export class APIClient {
         // These will be handled appropriately by the calling service
         console.log(`ℹ️ [${service}] Expected error (will be handled gracefully):`, {
           message: errorMessage,
+          url: config.url
+        });
+        throw error;
+      } else if (isSwapEndpoint) {
+        // Swap endpoints have WebSocket fallback - caller will verify success via WebSocket
+        // Log as info to avoid confusing ERROR logs when swap actually succeeds
+        console.log(`ℹ️ [${service}] Swap request HTTP failed (will verify via WebSocket):`, {
           url: config.url
         });
         throw error;

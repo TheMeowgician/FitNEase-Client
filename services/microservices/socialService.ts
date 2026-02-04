@@ -2100,7 +2100,8 @@ export class SocialService {
       console.log('[SOCIAL V2] Exercise swapped successfully');
       return response.data;
     } catch (error) {
-      console.error('[SOCIAL V2] Failed to swap exercise:', error);
+      // Log as info, not error - caller will verify success via WebSocket fallback
+      console.log('[SOCIAL V2] Swap HTTP failed (caller will verify via WebSocket)');
       throw new Error((error as any).message || 'Failed to swap exercise');
     }
   }
