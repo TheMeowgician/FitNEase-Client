@@ -539,6 +539,8 @@ class ReverbService {
       onVotingStarted?: (data: any) => void;
       onVoteSubmitted?: (data: any) => void;
       onVotingComplete?: (data: any) => void;
+      // Exercise customization events
+      onExerciseSwapped?: (data: any) => void;
     }
   ) {
     const channelName = `private-lobby.${sessionId}`;
@@ -595,6 +597,10 @@ class ReverbService {
             break;
           case 'VotingComplete':
             callbacks.onVotingComplete?.(data);
+            break;
+          // Exercise customization events
+          case 'ExerciseSwapped':
+            callbacks.onExerciseSwapped?.(data);
             break;
         }
       },

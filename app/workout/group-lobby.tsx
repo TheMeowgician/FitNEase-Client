@@ -19,7 +19,7 @@ import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAlert } from '../../contexts/AlertContext';
 import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMembersReady, selectIsLobbyInitiator, selectUnreadMessageCount, selectLeftSessionId } from '../../stores/lobbyStore';
 import { useReadyCheckStore, selectIsReadyCheckActive, selectReadyCheckResult } from '../../stores/readyCheckStore';
-import { useVotingStore, selectIsVotingActive, selectVotingResult, selectMemberVotes, selectVotingExpiresAt } from '../../stores/votingStore';
+import { useVotingStore, selectIsVotingActive, selectVotingResult, selectMemberVotes, selectVotingExpiresAt, selectVotingAlternatives } from '../../stores/votingStore';
 import { useConnectionStore, selectIsConnected, selectConnectionState } from '../../stores/connectionStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
@@ -30,6 +30,7 @@ import { contentService, Exercise } from '../../services/microservices/contentSe
 import LobbyChat from '../../components/groups/LobbyChat';
 import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
 import { AnimatedExerciseReveal } from '../../components/lobby/AnimatedExerciseReveal';
+import { ExerciseSwapModal } from '../../components/workout/ExerciseSwapModal';
 
 /**
  * Group Lobby Screen
@@ -98,6 +99,7 @@ export default function GroupLobbyScreen() {
   const votingResult = useVotingStore(selectVotingResult);
   const memberVotes = useVotingStore(selectMemberVotes);
   const votingExpiresAt = useVotingStore(selectVotingExpiresAt);
+  const votingAlternatives = useVotingStore(selectVotingAlternatives);
   const startVoting = useVotingStore((state) => state.startVoting);
   const submitVote = useVotingStore((state) => state.submitVote);
   const completeVoting = useVotingStore((state) => state.completeVoting);
@@ -129,6 +131,9 @@ export default function GroupLobbyScreen() {
   const [alternativePool, setAlternativePool] = useState<any[]>([]);
   const [isSubmittingVote, setIsSubmittingVote] = useState(false);
   const [votingTimeRemaining, setVotingTimeRemaining] = useState<number>(0);
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [selectedExerciseForSwap, setSelectedExerciseForSwap] = useState<{ index: number; exercise: any } | null>(null);
+  const [isSwappingExercise, setIsSwappingExercise] = useState(false);
 
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -980,6 +985,34 @@ export default function GroupLobbyScreen() {
           finalExercises: data.final_exercises,
         });
       },
+      // Exercise swap event (during group customization)
+      onExerciseSwapped: (data: any) => {
+        // Guard against updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('[REAL-TIME] Exercise swapped:', data);
+
+        // Update exercise details with the swapped exercise
+        if (data.slot_index !== undefined && data.new_exercise) {
+          setExerciseDetails((prev) => {
+            const updated = [...prev];
+            if (updated[data.slot_index]) {
+              updated[data.slot_index] = {
+                ...updated[data.slot_index],
+                ...data.new_exercise,
+              };
+            }
+            return updated;
+          });
+
+          // Show feedback to non-initiator users
+          if (currentUser && parseInt(currentUser.id) !== data.swapped_by) {
+            alert.info(
+              'Exercise Changed',
+              `${data.swapped_by_name} swapped "${data.old_exercise?.exercise_name}" with "${data.new_exercise?.exercise_name}"`
+            );
+          }
+        }
+      },
     });
 
       console.log('✅ Subscribed to lobby channel');
@@ -1566,6 +1599,62 @@ export default function GroupLobbyScreen() {
   };
 
   /**
+   * Open swap modal for an exercise (initiator only)
+   */
+  const handleOpenSwapModal = (index: number, exercise: any) => {
+    if (!isInitiator) {
+      alert.info('Initiator Only', 'Only the lobby initiator can swap exercises.');
+      return;
+    }
+    setSelectedExerciseForSwap({ index, exercise });
+    setShowSwapModal(true);
+  };
+
+  /**
+   * Handle exercise swap (initiator only)
+   * This is called when the user confirms a swap in the ExerciseSwapModal
+   */
+  const handleExerciseSwap = async (newExercise: any) => {
+    if (!isInitiator || !sessionId || !selectedExerciseForSwap || isSwappingExercise) return;
+
+    setIsSwappingExercise(true);
+
+    try {
+      const response = await socialService.swapExercise(sessionId, {
+        slot_index: selectedExerciseForSwap.index,
+        new_exercise: {
+          exercise_id: newExercise.exercise_id,
+          exercise_name: newExercise.exercise_name,
+          difficulty_level: newExercise.difficulty_level,
+          target_muscle_group: newExercise.target_muscle_group,
+          default_duration_seconds: newExercise.default_duration_seconds,
+          estimated_calories_burned: newExercise.estimated_calories_burned,
+          equipment_needed: newExercise.equipment_needed,
+          exercise_category: newExercise.exercise_category,
+        },
+      });
+
+      if (response.status !== 'success') {
+        throw new Error(response.message || 'Failed to swap exercise');
+      }
+
+      console.log('[CUSTOMIZATION] Exercise swapped successfully');
+
+      // Close modal
+      setShowSwapModal(false);
+      setSelectedExerciseForSwap(null);
+
+      // Show success feedback
+      alert.success('Exercise Swapped', `Swapped to "${newExercise.exercise_name}"`);
+    } catch (error) {
+      console.error('[CUSTOMIZATION] Error swapping exercise:', error);
+      alert.error('Error', 'Failed to swap exercise. Please try again.');
+    } finally {
+      setIsSwappingExercise(false);
+    }
+  };
+
+  /**
    * Start workout (initiator only)
    */
   const handleStartWorkout = async () => {
@@ -2048,18 +2137,97 @@ export default function GroupLobbyScreen() {
           )}
 
           {/* Voting Result Banner */}
-          {votingResult && votingResult !== 'pending' && (
-            <View style={[styles.votingResultBanner, votingResult === 'accept_recommended' ? styles.votingResultAccept : styles.votingResultCustomize]}>
+          {votingResult && votingResult !== 'pending' && votingResult === 'accept_recommended' && (
+            <View style={[styles.votingResultBanner, styles.votingResultAccept]}>
               <Ionicons
-                name={votingResult === 'accept_recommended' ? 'checkmark-circle' : 'options'}
+                name="checkmark-circle"
                 size={20}
                 color={COLORS.NEUTRAL.WHITE}
               />
               <Text style={styles.votingResultText}>
-                {votingResult === 'accept_recommended'
-                  ? 'Group accepted the recommended workout!'
-                  : 'Group voted to customize (coming soon)'}
+                Group accepted the recommended workout!
               </Text>
+            </View>
+          )}
+
+          {/* Customization Mode - Shows when group voted to customize */}
+          {votingResult === 'customize' && (
+            <View style={styles.customizationPanel}>
+              <View style={styles.customizationHeader}>
+                <Ionicons name="options" size={20} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.customizationTitle}>Customize Workout</Text>
+                {isInitiator && (
+                  <View style={styles.initiatorBadge}>
+                    <Text style={styles.initiatorBadgeText}>You Control</Text>
+                  </View>
+                )}
+              </View>
+
+              {isInitiator ? (
+                <Text style={styles.customizationDescription}>
+                  Tap the swap button on any exercise to replace it with an alternative.
+                </Text>
+              ) : (
+                <Text style={styles.customizationDescription}>
+                  The initiator is customizing the workout. Changes will appear here in real-time.
+                </Text>
+              )}
+
+              {/* Exercise List with Swap Buttons */}
+              <ScrollView style={styles.customizationExerciseList} showsVerticalScrollIndicator={false}>
+                {exerciseDetails.map((exercise, index) => (
+                  <View key={exercise.exercise_id || index} style={styles.customizationExerciseCard}>
+                    <View style={styles.customizationExerciseInfo}>
+                      <Text style={styles.customizationExerciseIndex}>{index + 1}</Text>
+                      <View style={styles.customizationExerciseDetails}>
+                        <Text style={styles.customizationExerciseName}>{exercise.exercise_name}</Text>
+                        <View style={styles.customizationExerciseTags}>
+                          <View style={styles.customizationTag}>
+                            <Ionicons name="body-outline" size={12} color={COLORS.SECONDARY[600]} />
+                            <Text style={styles.customizationTagText}>
+                              {(exercise.target_muscle_group || 'core').replace(/_/g, ' ')}
+                            </Text>
+                          </View>
+                          {(exercise as any).estimated_calories_burned && (
+                            <View style={styles.customizationTag}>
+                              <Ionicons name="flame-outline" size={12} color="#F59E0B" />
+                              <Text style={styles.customizationTagText}>{(exercise as any).estimated_calories_burned} cal</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Swap Button - Only for initiator */}
+                    {isInitiator && (
+                      <TouchableOpacity
+                        style={styles.swapButton}
+                        onPress={() => handleOpenSwapModal(index, exercise)}
+                        disabled={isSwappingExercise}
+                      >
+                        {isSwappingExercise && selectedExerciseForSwap?.index === index ? (
+                          <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
+                        ) : (
+                          <>
+                            <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
+                            <Text style={styles.swapButtonText}>Swap</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Alternatives Pool Info */}
+              {votingAlternatives && votingAlternatives.length > 0 && (
+                <View style={styles.alternativesInfo}>
+                  <Ionicons name="information-circle-outline" size={16} color={COLORS.SECONDARY[600]} />
+                  <Text style={styles.alternativesInfoText}>
+                    {votingAlternatives.length} alternative exercises available
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -2415,6 +2583,18 @@ export default function GroupLobbyScreen() {
           isReady: selectedLobbyMember.status === 'ready',
         } : null}
         context="lobby"
+      />
+
+      {/* Exercise Swap Modal - For group customization */}
+      <ExerciseSwapModal
+        visible={showSwapModal}
+        currentExercise={selectedExerciseForSwap?.exercise || null}
+        alternatives={votingAlternatives || alternativePool || []}
+        onSwap={handleExerciseSwap}
+        onClose={() => {
+          setShowSwapModal(false);
+          setSelectedExerciseForSwap(null);
+        }}
       />
 
     </SafeAreaView>
@@ -3366,5 +3546,136 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
+  },
+  // ============================================
+  // CUSTOMIZATION PANEL STYLES
+  // ============================================
+  customizationPanel: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[200],
+  },
+  customizationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  customizationTitle: {
+    flex: 1,
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[700],
+  },
+  initiatorBadge: {
+    backgroundColor: COLORS.PRIMARY[600],
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  initiatorBadgeText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  customizationDescription: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  customizationExerciseList: {
+    maxHeight: 280,
+  },
+  customizationExerciseCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: COLORS.SECONDARY[200],
+  },
+  customizationExerciseInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  customizationExerciseIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.PRIMARY[100],
+    textAlign: 'center',
+    lineHeight: 28,
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[700],
+    marginRight: 12,
+  },
+  customizationExerciseDetails: {
+    flex: 1,
+  },
+  customizationExerciseName: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+    marginBottom: 4,
+  },
+  customizationExerciseTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  customizationTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.SECONDARY[100],
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  customizationTagText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    textTransform: 'capitalize',
+  },
+  swapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.PRIMARY[50],
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[300],
+  },
+  swapButtonText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  alternativesInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.PRIMARY[200],
+  },
+  alternativesInfoText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
   },
 });

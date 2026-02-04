@@ -2051,6 +2051,59 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to complete voting');
     }
   }
+
+  /**
+   * Swap an exercise in the group workout (initiator only)
+   * POST /api/v2/lobby/{sessionId}/exercises/swap
+   *
+   * This endpoint is only available after the group has voted "customize".
+   * The swap is broadcast to all members in real-time via WebSocket.
+   */
+  public async swapExercise(
+    sessionId: string,
+    data: {
+      slot_index: number;
+      new_exercise: {
+        exercise_id: number;
+        exercise_name: string;
+        difficulty_level?: number;
+        target_muscle_group?: string;
+        default_duration_seconds?: number;
+        estimated_calories_burned?: number;
+        equipment_needed?: string;
+        exercise_category?: string;
+      };
+    }
+  ): Promise<{
+    status: string;
+    message: string;
+    data?: {
+      slot_index: number;
+      old_exercise: any;
+      new_exercise: any;
+      updated_exercises: any[];
+    };
+  }> {
+    try {
+      console.log('[SOCIAL V2] Swapping exercise:', {
+        sessionId,
+        slotIndex: data.slot_index,
+        newExercise: data.new_exercise.exercise_name,
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/exercises/swap`,
+        data
+      );
+
+      console.log('[SOCIAL V2] Exercise swapped successfully');
+      return response.data;
+    } catch (error) {
+      console.error('[SOCIAL V2] Failed to swap exercise:', error);
+      throw new Error((error as any).message || 'Failed to swap exercise');
+    }
+  }
 }
 
 export const socialService = new SocialService();
