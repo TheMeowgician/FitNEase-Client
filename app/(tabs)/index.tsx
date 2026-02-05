@@ -22,6 +22,7 @@ import { useProgressStore } from '../../stores/progressStore';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
+import { engagementService } from '../../services/microservices/engagementService';
 import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
@@ -113,6 +114,7 @@ export default function HomeScreen() {
     this_week_assessment: { id: number; submitted_at: string; score: number } | null;
   }>({ completed_this_week: false, this_week_assessment: null }); // Track weekly assessment status
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
+  const fitnessLevelAchievementCheckedRef = React.useRef(false); // Track if we've checked for fitness level achievement
 
   // Achievement detail modal state
   const [showAchievementModal, setShowAchievementModal] = useState(false);
@@ -248,6 +250,47 @@ export default function HomeScreen() {
     }
   };
 
+  /**
+   * Check if user has their fitness level achievement unlocked.
+   * If not, unlock it. This handles existing users who completed onboarding
+   * before the achievement unlock was implemented.
+   */
+  const checkAndUnlockFitnessLevelAchievement = async (
+    userAchievements: any[],
+    userFitnessLevel: string
+  ) => {
+    // Only check once per session
+    if (fitnessLevelAchievementCheckedRef.current) {
+      return;
+    }
+    fitnessLevelAchievementCheckedRef.current = true;
+
+    if (!user || !userFitnessLevel) {
+      return;
+    }
+
+    // Map fitness level to achievement name (capitalized)
+    const levelAchievementName = userFitnessLevel.charAt(0).toUpperCase() + userFitnessLevel.slice(1);
+
+    // Check if user already has this achievement
+    const hasAchievement = userAchievements.some(
+      (ua: any) => ua.achievement?.achievement_name === levelAchievementName
+    );
+
+    if (!hasAchievement) {
+      console.log(`🏆 [DASHBOARD] User missing ${levelAchievementName} achievement, unlocking...`);
+      try {
+        const validLevel = userFitnessLevel as 'beginner' | 'intermediate' | 'advanced';
+        await engagementService.unlockLevelAchievement(user.id, validLevel);
+        console.log(`✅ [DASHBOARD] Successfully unlocked ${levelAchievementName} achievement!`);
+      } catch (error) {
+        console.warn(`⚠️ [DASHBOARD] Could not unlock ${levelAchievementName} achievement:`, error);
+      }
+    } else {
+      console.log(`✅ [DASHBOARD] User already has ${levelAchievementName} achievement`);
+    }
+  };
+
   const loadDashboardData = async () => {
     if (!user) {
       console.warn('📊 [DASHBOARD] No user found, skipping data load');
@@ -330,9 +373,11 @@ export default function HomeScreen() {
       setAchievements(achievementsResponse || []);
       setEngagementStats(engagementResponse);
 
-      // Set fitness level from assessment data (more accurate than user profile)
+      // Determine fitness level from assessment data (more accurate than user profile)
       // Look for initial_onboarding assessment which contains fitness_level
       // (weekly assessments don't have fitness_level)
+      let determinedFitnessLevel = user.fitnessLevel || 'beginner';
+
       if (fitnessAssessment && fitnessAssessment.length > 0) {
         // Find the initial_onboarding assessment (has fitness_level)
         const onboardingAssessment = fitnessAssessment.find(
@@ -340,27 +385,28 @@ export default function HomeScreen() {
         );
 
         if (onboardingAssessment) {
-          const assessmentFitnessLevel = onboardingAssessment.assessment_data.fitness_level;
-          setFitnessLevel(assessmentFitnessLevel || 'beginner');
-          console.log('💪 [DASHBOARD] Using fitness level from initial_onboarding assessment:', assessmentFitnessLevel);
+          determinedFitnessLevel = onboardingAssessment.assessment_data.fitness_level || 'beginner';
+          console.log('💪 [DASHBOARD] Using fitness level from initial_onboarding assessment:', determinedFitnessLevel);
         } else {
           // Fallback: check any assessment with fitness_level
           const anyWithFitnessLevel = fitnessAssessment.find(
             (a: any) => a.assessment_data?.fitness_level
           );
           if (anyWithFitnessLevel) {
-            setFitnessLevel(anyWithFitnessLevel.assessment_data.fitness_level);
-            console.log('💪 [DASHBOARD] Using fitness level from assessment:', anyWithFitnessLevel.assessment_data.fitness_level);
+            determinedFitnessLevel = anyWithFitnessLevel.assessment_data.fitness_level;
+            console.log('💪 [DASHBOARD] Using fitness level from assessment:', determinedFitnessLevel);
           } else {
-            setFitnessLevel(user.fitnessLevel || 'beginner');
             console.log('💪 [DASHBOARD] No assessment with fitness_level, using user profile:', user.fitnessLevel);
           }
         }
       } else {
-        // Fallback to user profile fitness level
-        setFitnessLevel(user.fitnessLevel || 'beginner');
         console.log('💪 [DASHBOARD] Using fitness level from user profile:', user.fitnessLevel);
       }
+
+      setFitnessLevel(determinedFitnessLevel);
+
+      // Check and unlock fitness level achievement if missing (for existing users)
+      checkAndUnlockFitnessLevelAchievement(achievementsResponse || [], determinedFitnessLevel);
 
       // If still no recommendations, log warning but don't block UI
       if (!recommendations || recommendations.length === 0) {
