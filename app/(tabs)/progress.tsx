@@ -30,6 +30,13 @@ const MILESTONE_ICONS = {
   dedicated: require('../../assets/images/achievements/dedicated.png'),
 };
 
+// Fitness level icons
+const FITNESS_LEVEL_ICONS = {
+  beginner: require('../../assets/images/achievements/beginner.png'),
+  intermediate: require('../../assets/images/achievements/intermediate.png'),
+  advanced: require('../../assets/images/achievements/advanced.png'),
+};
+
 const { width } = Dimensions.get('window');
 
 export default function ProgressScreen() {
@@ -92,6 +99,7 @@ export default function ProgressScreen() {
       case 'beginner':
         return {
           icon: 'flag-outline' as const,
+          image: FITNESS_LEVEL_ICONS.beginner,
           color: COLORS.SUCCESS[500],
           gradient: [COLORS.SUCCESS[400], COLORS.SUCCESS[600]] as const,
           title: 'Beginner',
@@ -100,6 +108,7 @@ export default function ProgressScreen() {
       case 'intermediate':
         return {
           icon: 'flash' as const,
+          image: FITNESS_LEVEL_ICONS.intermediate,
           color: COLORS.PRIMARY[500],
           gradient: [COLORS.PRIMARY[400], COLORS.PRIMARY[600]] as const,
           title: 'Intermediate',
@@ -108,6 +117,7 @@ export default function ProgressScreen() {
       case 'advanced':
         return {
           icon: 'trophy' as const,
+          image: FITNESS_LEVEL_ICONS.advanced,
           color: COLORS.WARNING[500],
           gradient: [COLORS.WARNING[400], COLORS.WARNING[600]] as const,
           title: 'Advanced',
@@ -116,6 +126,7 @@ export default function ProgressScreen() {
       default:
         return {
           icon: 'fitness' as const,
+          image: FITNESS_LEVEL_ICONS.beginner,
           color: COLORS.SECONDARY[500],
           gradient: [COLORS.SECONDARY[400], COLORS.SECONDARY[600]] as const,
           title: 'Unknown',
@@ -137,7 +148,7 @@ export default function ProgressScreen() {
               <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
             </View>
             <View style={[styles.levelBadge, { backgroundColor: levelInfo.color + '20' }]}>
-              <Ionicons name={levelInfo.icon} size={28} color={levelInfo.color} />
+              <Image source={levelInfo.image} style={styles.levelBadgeImage} />
             </View>
           </View>
         </View>
@@ -159,7 +170,7 @@ export default function ProgressScreen() {
             <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
           </View>
           <View style={[styles.levelBadge, { backgroundColor: levelInfo.color + '20' }]}>
-            <Ionicons name={levelInfo.icon} size={28} color={levelInfo.color} />
+            <Image source={levelInfo.image} style={styles.levelBadgeImage} />
           </View>
         </View>
       </View>
@@ -176,7 +187,7 @@ export default function ProgressScreen() {
         <LinearGradient colors={levelInfo.gradient} style={styles.levelCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <View style={styles.levelCardContent}>
             <View style={styles.levelCardIconContainer}>
-              <Ionicons name={levelInfo.icon} size={40} color="white" />
+              <Image source={levelInfo.image} style={styles.levelCardImage} />
             </View>
             <View style={styles.levelCardText}>
               <Text style={styles.levelCardTitle}>{levelInfo.title} Level</Text>
@@ -376,6 +387,12 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  levelBadgeImage: {
+    width: 48,
+    height: 48,
+    resizeMode: 'contain',
   },
   scrollView: {
     flex: 1,
@@ -406,6 +423,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    overflow: 'hidden',
+  },
+  levelCardImage: {
+    width: 56,
+    height: 56,
+    resizeMode: 'contain',
   },
   levelCardText: {
     flex: 1,

@@ -10,6 +10,7 @@ import { PageIndicator } from '../../components/ui/PageIndicator';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { authService } from '../../services/microservices/authService';
+import { engagementService } from '../../services/microservices/engagementService';
 import { useAuth } from '../../contexts/AuthContext';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 
@@ -111,7 +112,14 @@ export default function CompleteScreen() {
       // 4. Refresh user data first to get updated onboarding_completed status
       await refreshUser();
 
-      // 5. Initialize ML profile (non-blocking - errors are logged but don't fail onboarding)
+      // 5. Unlock fitness level achievement (beginner/intermediate/advanced)
+      const fitnessLevel = onboardingData.assessment.currentFitnessLevel as 'beginner' | 'intermediate' | 'advanced';
+      console.log('🏆 Unlocking fitness level achievement:', fitnessLevel);
+      engagementService.unlockLevelAchievement(user?.id || 0, fitnessLevel).catch((err) => {
+        console.warn('⚠️ Could not unlock fitness level achievement (non-critical):', err);
+      });
+
+      // 6. Initialize ML profile (non-blocking - errors are logged but don't fail onboarding)
       console.log('🤖 Initializing ML profile...');
       authService.initializeMLProfile().catch((mlError) => {
         console.warn('⚠️ ML profile initialization failed (non-critical):', mlError);
