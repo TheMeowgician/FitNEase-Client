@@ -279,12 +279,12 @@ export default function HomeScreen() {
 
     if (!hasAchievement) {
       console.log(`🏆 [DASHBOARD] User missing ${levelAchievementName} achievement, unlocking...`);
-      try {
-        const validLevel = userFitnessLevel as 'beginner' | 'intermediate' | 'advanced';
-        await engagementService.unlockLevelAchievement(user.id, validLevel);
+      const validLevel = userFitnessLevel as 'beginner' | 'intermediate' | 'advanced';
+      const result = await engagementService.unlockLevelAchievement(user.id, validLevel);
+      if (result) {
         console.log(`✅ [DASHBOARD] Successfully unlocked ${levelAchievementName} achievement!`);
-      } catch (error) {
-        console.warn(`⚠️ [DASHBOARD] Could not unlock ${levelAchievementName} achievement:`, error);
+      } else {
+        console.warn(`⚠️ [DASHBOARD] Could not unlock ${levelAchievementName} achievement`);
       }
     } else {
       console.log(`✅ [DASHBOARD] User already has ${levelAchievementName} achievement`);
