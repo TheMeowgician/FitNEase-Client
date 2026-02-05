@@ -312,9 +312,6 @@ export default function WorkoutsScreen() {
               >
                 {/* Card Header */}
                 <View style={styles.workoutCardHeader}>
-                  <View style={styles.workoutIconContainer}>
-                    <Ionicons name="flash" size={32} color={COLORS.NEUTRAL.WHITE} />
-                  </View>
                   <View style={styles.workoutCardTitleContainer}>
                     <Text style={styles.workoutCardTitle}>Tabata Workout</Text>
                     <Text style={styles.workoutCardSubtitle}>
@@ -494,15 +491,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
-  },
-  workoutIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: COLORS.SUCCESS[500],
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
   },
   workoutCardTitleContainer: {
     flex: 1,

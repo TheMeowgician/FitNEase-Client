@@ -11,6 +11,7 @@ import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { WeekCalendarStrip } from '../../components/calendar/WeekCalendarStrip';
 import ProgressionCard from '../../components/ProgressionCard';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
+import AchievementUnlockModal, { UnlockedAchievement } from '../../components/achievements/AchievementUnlockModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { useMLService } from '../../hooks/api/useMLService';
@@ -112,6 +113,10 @@ export default function HomeScreen() {
     this_week_assessment: { id: number; submitted_at: string; score: number } | null;
   }>({ completed_this_week: false, this_week_assessment: null }); // Track weekly assessment status
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
+
+  // Achievement detail modal state
+  const [showAchievementModal, setShowAchievementModal] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState<UnlockedAchievement | null>(null);
 
   // Week calendar state
   const [currentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -835,11 +840,8 @@ export default function HomeScreen() {
                 onPress={handleViewWorkoutSet}
                 activeOpacity={0.9}
               >
-                {/* Card Header - Consistent with Workouts page */}
+                {/* Card Header */}
                 <View style={styles.workoutCardHeader}>
-                  <View style={styles.workoutIconContainer}>
-                    <Ionicons name="flash" size={32} color={COLORS.NEUTRAL.WHITE} />
-                  </View>
                   <View style={styles.workoutCardTitleContainer}>
                     <Text style={styles.workoutCardTitle}>Tabata Workout</Text>
                     <Text style={styles.workoutCardSubtitle}>
@@ -869,12 +871,10 @@ export default function HomeScreen() {
                 <View style={styles.exercisePreview}>
                   {(() => {
                     const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
-                    const previewCount = Math.min(3, exerciseCount); // Show max 3 in preview
-                    const remaining = exerciseCount - previewCount;
 
                     return (
                       <>
-                        {recommendations?.slice(0, previewCount).map((ex, idx) => (
+                        {recommendations?.slice(0, 4).map((ex, idx) => (
                           <View key={ex.exercise_id || idx} style={styles.exercisePreviewItem}>
                             <View style={styles.exercisePreviewNumber}>
                               <Text style={styles.exercisePreviewNumberText}>{idx + 1}</Text>
@@ -884,17 +884,10 @@ export default function HomeScreen() {
                             </Text>
                           </View>
                         ))}
-                        {remaining > 0 && (
-                          <View style={styles.moreExercisesRow}>
-                            <View style={styles.moreExercisesDots}>
-                              <View style={styles.dot} />
-                              <View style={styles.dot} />
-                              <View style={styles.dot} />
-                            </View>
-                            <Text style={styles.moreExercisesText}>
-                              +{remaining} more exercise{remaining > 1 ? 's' : ''}
-                            </Text>
-                          </View>
+                        {exerciseCount > 4 && (
+                          <Text style={styles.moreExercisesText}>
+                            +{exerciseCount - 4} more
+                          </Text>
                         )}
                       </>
                     );
@@ -961,7 +954,25 @@ export default function HomeScreen() {
                 const achievementName = userAchievement.achievement?.achievement_name || 'Achievement';
                 const achievementIcon = getAchievementIcon(achievementName);
                 return (
-                  <View key={index} style={styles.achievementCard}>
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.achievementCard}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      // Convert to UnlockedAchievement format for modal
+                      const achievementData: UnlockedAchievement = {
+                        achievement_id: userAchievement.achievement?.achievement_id || index,
+                        achievement_name: achievementName,
+                        description: userAchievement.achievement?.description || 'You earned this achievement!',
+                        badge_icon: userAchievement.achievement?.badge_icon || 'trophy',
+                        badge_color: userAchievement.achievement?.badge_color || COLORS.PRIMARY[600],
+                        rarity_level: userAchievement.achievement?.rarity_level || 'common',
+                        points_value: userAchievement.points_earned || 0,
+                      };
+                      setSelectedAchievement(achievementData);
+                      setShowAchievementModal(true);
+                    }}
+                  >
                     <View style={[styles.achievementBadge, { backgroundColor: achievementIcon ? 'transparent' : (userAchievement.achievement?.badge_color || COLORS.PRIMARY[600]) }]}>
                       {achievementIcon ? (
                         <Image source={achievementIcon} style={styles.achievementIconImage} />
@@ -979,7 +990,7 @@ export default function HomeScreen() {
                     <Text style={styles.achievementPoints}>
                       {userAchievement.points_earned || 0} pts
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -1074,6 +1085,16 @@ export default function HomeScreen() {
         onClose={() => setShowWorkoutSetModal(false)}
         workoutSet={currentWorkoutSet}
         onStartWorkout={handleStartWorkout}
+      />
+
+      {/* Achievement Detail Modal */}
+      <AchievementUnlockModal
+        visible={showAchievementModal}
+        achievements={selectedAchievement ? [selectedAchievement] : []}
+        onClose={() => {
+          setShowAchievementModal(false);
+          setSelectedAchievement(null);
+        }}
       />
     </SafeAreaView>
   );
@@ -1463,15 +1484,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  workoutIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: COLORS.SUCCESS[500],
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
   workoutCardTitleContainer: {
     flex: 1,
   },
@@ -1518,28 +1530,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.NEUTRAL[700],
   },
-  moreExercisesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 12,
-    paddingBottom: 4,
-    gap: 10,
-  },
-  moreExercisesDots: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.PRIMARY[300],
-  },
   moreExercisesText: {
     fontSize: 13,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
+    textAlign: 'center',
+    paddingTop: 8,
   },
   // Stats Row - Consistent with Workouts page
   statsRow: {
@@ -1558,7 +1554,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 12,
     gap: 8,
   },
   startWorkoutButtonText: {
