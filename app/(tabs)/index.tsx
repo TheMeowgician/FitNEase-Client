@@ -895,22 +895,22 @@ export default function HomeScreen() {
                 </View>
 
                 {/* Stats Row - Consistent with Workouts page */}
-                <View style={styles.statsRow}>
-                  <View style={styles.statItem}>
+                <View style={styles.workoutStatsRow}>
+                  <View style={styles.workoutStatItem}>
                     <Ionicons name="time-outline" size={18} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.statValue}>{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min</Text>
+                    <Text style={styles.workoutStatValue}>{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min</Text>
                   </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
+                  <View style={styles.workoutStatDivider} />
+                  <View style={styles.workoutStatItem}>
                     <Ionicons name="flame-outline" size={18} color={COLORS.WARNING[500]} />
-                    <Text style={styles.statValue}>
+                    <Text style={styles.workoutStatValue}>
                       ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0)} cal
                     </Text>
                   </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
+                  <View style={styles.workoutStatDivider} />
+                  <View style={styles.workoutStatItem}>
                     <Ionicons name="fitness-outline" size={18} color={COLORS.SUCCESS[500]} />
-                    <Text style={styles.statValue}>{fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6} sets</Text>
+                    <Text style={styles.workoutStatValue}>{fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6} sets</Text>
                   </View>
                 </View>
 
@@ -1537,7 +1537,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingTop: 8,
   },
-  // Stats Row - Consistent with Workouts page
+  // Stats Row - for weekly progress section
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1546,6 +1546,31 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.NEUTRAL[100],
     marginBottom: 16,
+  },
+  // Workout Card Stats - Consistent with Workouts page (inline row style)
+  workoutStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.NEUTRAL[100],
+    marginBottom: 16,
+  },
+  workoutStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  workoutStatValue: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL[700],
+  },
+  workoutStatDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: COLORS.NEUTRAL[200],
   },
   // Start Button - Consistent with Workouts page
   startWorkoutButton: {
