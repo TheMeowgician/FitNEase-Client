@@ -437,7 +437,31 @@ export default function WeeklyPlanScreen() {
             ) : selectedDayData.isToday ? (
               <TouchableOpacity
                 style={styles.startButton}
-                onPress={() => router.push('/workout')}
+                onPress={() => {
+                  if (!user || !selectedDayData.workouts.length) return;
+
+                  const totalCalories = selectedDayData.workouts.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 0), 0);
+                  const totalDuration = Math.round(selectedDayData.workouts.reduce((sum, ex) => sum + (ex.default_duration_seconds || 0), 0) / 60);
+
+                  const session = {
+                    session_id: `weekly_${user.id}_${Date.now()}`,
+                    session_name: `${fullDayNames[selectedDayData.dayName]} Workout`,
+                    difficulty_level: user.fitnessLevel || 'beginner',
+                    total_exercises: selectedDayData.workouts.length,
+                    total_duration_minutes: totalDuration || 32,
+                    estimated_calories: totalCalories || 300,
+                    exercises: selectedDayData.workouts,
+                    created_at: new Date().toISOString(),
+                  };
+
+                  router.push({
+                    pathname: '/workout/session',
+                    params: {
+                      sessionData: JSON.stringify(session),
+                      type: 'tabata'
+                    }
+                  });
+                }}
                 activeOpacity={0.8}
               >
                 <LinearGradient
