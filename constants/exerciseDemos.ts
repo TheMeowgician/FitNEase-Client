@@ -193,30 +193,22 @@ const keywordDemoMap: Array<{ keywords: string[]; demo: ImageSourcePropType }> =
   { keywords: ['jumping jack', 'star jump'], demo: require('../assets/images/exercise-demos/jumping_jacks.gif') },
   { keywords: ['high knee', 'high-knee'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
   { keywords: ['march', 'marching'], demo: require('../assets/images/exercise-demos/marching_in_place_fast.gif') },
+  { keywords: ['sprint', 'run in place', 'running in place'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
+  { keywords: ['skater hop', 'skater jump', 'skater'], demo: require('../assets/images/exercise-demos/jumping_jacks.gif') },
+  { keywords: ['jump rope', 'skipping rope', 'double under'], demo: require('../assets/images/exercise-demos/jumping_jacks.gif') },
+  { keywords: ['skip', 'skipping'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
 
   // Lower body
   { keywords: ['calf raise', 'calf raises', 'heel raise'], demo: require('../assets/images/exercise-demos/calf_raises.gif') },
-  { keywords: ['step-up', 'step up', 'box step'], demo: require('../assets/images/exercise-demos/step_ups_low.gif') },
+  { keywords: ['box jump', 'box step'], demo: require('../assets/images/exercise-demos/step_ups_low.gif') },
+  { keywords: ['step-up', 'step up'], demo: require('../assets/images/exercise-demos/step_ups_low.gif') },
+  { keywords: ['wall sit', 'wall squat'], demo: require('../assets/images/exercise-demos/squat_hold.gif') },
+  { keywords: ['thruster'], demo: require('../assets/images/exercise-demos/squats.gif') },
 
   // Upper body
   { keywords: ['tricep dip', 'triceps dip', 'dip', 'bench dip'], demo: require('../assets/images/exercise-demos/tricep_dips_floor.gif') },
-  { keywords: ['arm raise', 'arm circle', 'lateral raise'], demo: require('../assets/images/exercise-demos/arm_raises.gif') },
-
-  // Pull exercises (use related demos)
-  { keywords: ['pull-up', 'pull up', 'pullup', 'chin-up', 'chin up', 'chinup'], demo: require('../assets/images/exercise-demos/plank.gif') },
-  { keywords: ['row', 'rowing'], demo: require('../assets/images/exercise-demos/plank.gif') },
-
-  // Additional common exercises
-  { keywords: ['jack knife', 'jackknife', 'pike'], demo: require('../assets/images/exercise-demos/modified_crunches.gif') },
-  { keywords: ['superman', 'super man', 'back extension'], demo: require('../assets/images/exercise-demos/bird_dog.gif') },
-  { keywords: ['donkey kick', 'kickback'], demo: require('../assets/images/exercise-demos/glutes_bridge.gif') },
-  { keywords: ['fire hydrant'], demo: require('../assets/images/exercise-demos/glutes_bridge.gif') },
-  { keywords: ['wall sit', 'wall squat'], demo: require('../assets/images/exercise-demos/squat_hold.gif') },
-  { keywords: ['jump', 'jumping', 'hop', 'bound'], demo: require('../assets/images/exercise-demos/jumping_jacks.gif') },
-  { keywords: ['run', 'running', 'jog', 'sprint'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
-  { keywords: ['skip', 'skipping'], demo: require('../assets/images/exercise-demos/high_knees_running.gif') },
-  { keywords: ['box', 'bench'], demo: require('../assets/images/exercise-demos/step_ups_low.gif') },
-  { keywords: ['isometric', 'hold', 'static'], demo: require('../assets/images/exercise-demos/plank.gif') },
+  { keywords: ['arm raise', 'arm circle', 'lateral raise', 'shoulder press'], demo: require('../assets/images/exercise-demos/arm_raises.gif') },
+  { keywords: ['renegade row', 'renegade'], demo: require('../assets/images/exercise-demos/plank.gif') },
 ];
 
 /**
@@ -306,9 +298,13 @@ export const getExerciseDemo = (
   // STEP 4: Category fallback (use muscle group)
   if (targetMuscleGroup) {
     const normalizedCategory = targetMuscleGroup.toLowerCase().trim();
-    if (categoryFallbackMap[normalizedCategory]) {
-      console.log('🎬 [DEMO] Category fallback:', { exercise: normalizedName, category: normalizedCategory });
-      return categoryFallbackMap[normalizedCategory];
+    // Handle compound muscle groups (e.g., "core,upper_body")
+    const groups = normalizedCategory.split(',').map(g => g.trim());
+    for (const group of groups) {
+      if (categoryFallbackMap[group]) {
+        console.log('🎬 [DEMO] Category fallback:', { exercise: normalizedName, category: group });
+        return categoryFallbackMap[group];
+      }
     }
   }
 
