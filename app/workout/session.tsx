@@ -83,8 +83,16 @@ export default function WorkoutSessionScreen() {
   const currentPhaseRef = useRef<SessionPhase>('prepare'); // Track current phase for solo workouts
   const lastServerTickRef = useRef<number>(Date.now()); // Track last server tick time
   const lastServerTimeRef = useRef<number>(0); // Track last server time_remaining value
-  const serverTickTimeoutRef = useRef<NodeJS.Timeout | number | null>(null); // Debounce server ticks
-  const lastDisplayedTimeRef = useRef<number>(-1); // Track last displayed time to avoid redundant updates
+  // Server state refs for group workouts - interval timer is the SINGLE writer to React state
+  // This eliminates the dual-writer conflict that caused timer blinking
+  const serverStateRef = useRef({
+    phase: 'prepare' as SessionPhase,
+    exercise: 0,
+    set: 0,
+    round: 0,
+    status: 'ready' as SessionStatus,
+    calories: 0,
+  });
   const wasAutoFinished = useRef<boolean>(false); // Track if AUTO FINISH button was used
   const lastCountdownBeepRef = useRef<number>(-1); // Track last countdown beep to avoid duplicates
   const halfwayPlayedRef = useRef<boolean>(false); // Track if halfway sound played this phase
@@ -349,63 +357,22 @@ export default function WorkoutSessionScreen() {
       onEvent: (eventName, data) => {
         console.log('📨 Session event received:', eventName, data);
 
-        // SERVER SYNC: Server sends ticks for synchronization
-        // For GROUP workouts: Server is SINGLE SOURCE OF TRUTH (no local timer)
-        // For SOLO workouts: Local timer with server correction (if implemented)
+        // SERVER SYNC: Server ticks update REFS ONLY
+        // The interval timer is the SINGLE writer to React state (eliminates blinking)
         if (eventName === 'SessionTick') {
-          // DEBOUNCE: When multiple ticks arrive in a burst, only process the LATEST one
-          // Clear any pending tick updates
-          if (serverTickTimeoutRef.current) {
-            clearTimeout(serverTickTimeoutRef.current);
-          }
+          // Update time refs for smooth interpolation
+          lastServerTickRef.current = Date.now();
+          lastServerTimeRef.current = data.time_remaining;
 
-          // Schedule tick processing after a small delay (50ms)
-          // If another tick arrives within 50ms, this will be cancelled and the new one processed instead
-          serverTickTimeoutRef.current = setTimeout(() => {
-            setSessionState(prev => {
-              // CRITICAL: Ignore SessionTick when paused or completed
-              // Pause/Resume events control the exact sync time
-              // Completed status prevents stale ticks from restarting countdown
-              if (prev.status === 'paused' || prev.status === 'completed') {
-                console.log('⏸️ [TICK IGNORED] Ignoring SessionTick - workout not running', {
-                  status: prev.status,
-                  serverTime: data.time_remaining
-                });
-                return prev;
-              }
-
-              const serverTime = data.time_remaining;
-
-              // ALWAYS use server time for group workouts - this is the ONLY source of truth
-              // No drift tolerance, no prediction, perfect sync across all devices
-              console.log('🔄 [SERVER TICK] Using server time as single source of truth', {
-                serverTime,
-                phase: data.phase
-              });
-
-              // Record server tick time for smooth interpolation
-              lastServerTickRef.current = Date.now();
-              lastServerTimeRef.current = serverTime;
-              lastDisplayedTimeRef.current = serverTime; // Reset displayed time
-
-              // Calculate calories client-side for accuracy (server may send 0)
-              // Don't overwrite with server value if it's less than current
-              const serverCalories = data.calories_burned || 0;
-              const clientCalories = prev.caloriesBurned;
-              const caloriesBurned = serverCalories > 0 ? serverCalories : clientCalories;
-
-              return {
-                ...prev,
-                timeRemaining: serverTime,
-                phase: data.phase,
-                currentExercise: data.current_exercise,
-                currentSet: data.current_set,
-                currentRound: data.current_round,
-                caloriesBurned: caloriesBurned,
-                status: data.status,
-              };
-            });
-          }, 50); // 50ms debounce window
+          // Update server state refs (interval reads these to sync React state)
+          serverStateRef.current = {
+            phase: data.phase,
+            exercise: data.current_exercise,
+            set: data.current_set,
+            round: data.current_round,
+            status: data.status,
+            calories: data.calories_burned || 0,
+          };
 
           return; // Don't process other events
         }
@@ -667,39 +634,81 @@ export default function WorkoutSessionScreen() {
     // Initialize current phase ref for solo workouts
     currentPhaseRef.current = sessionState.phase;
 
-    // SMOOTH TIMER WITH SERVER SYNC FOR GROUP WORKOUTS
-    // CLIENT-ONLY TIMER FOR SOLO WORKOUTS
+    // For group workouts, initialize server refs from current state
+    // so interpolation works correctly before the first server tick arrives
+    if (type === 'group_tabata') {
+      lastServerTimeRef.current = sessionState.timeRemaining;
+      lastServerTickRef.current = Date.now();
+      serverStateRef.current = {
+        phase: sessionState.phase,
+        exercise: sessionState.currentExercise,
+        set: sessionState.currentSet,
+        round: sessionState.currentRound,
+        status: sessionState.status,
+        calories: sessionState.caloriesBurned,
+      };
+    }
+
+    // SINGLE-WRITER TIMER: Only this interval writes to React state
+    // For GROUP workouts: reads from server refs, interpolates smoothly
+    // For SOLO workouts: client-authoritative countdown
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
       setSessionState(prev => {
         let newTimeRemaining: number;
+        // Track the active phase for sound logic (group reads from server refs)
+        let activePhase: SessionPhase = prev.phase;
 
         if (type === 'group_tabata') {
-          // GROUP WORKOUTS: Interpolate between server ticks for smooth display
-          // Server is STILL the single source of truth - we just display smoothly
+          // GROUP WORKOUTS: Smooth interpolation from server refs
+          // This interval is the ONLY writer to React state - no blinking
           const elapsedMs = now - lastServerTickRef.current;
           const elapsedSeconds = Math.floor(elapsedMs / 1000);
           newTimeRemaining = Math.max(0, lastServerTimeRef.current - elapsedSeconds);
 
-          // OPTIMIZATION: Only update state if the displayed second has actually changed
-          // This prevents redundant re-renders and ensures smooth countdown
-          if (newTimeRemaining === lastDisplayedTimeRef.current) {
-            return prev; // No change, don't update state
+          // Read latest server state from refs
+          const srv = serverStateRef.current;
+          activePhase = srv.phase;
+
+          // Only update React state if something actually changed
+          const timeChanged = newTimeRemaining !== prev.timeRemaining;
+          const phaseChanged = srv.phase !== prev.phase;
+          const exerciseChanged = srv.exercise !== prev.currentExercise;
+          const setChanged = srv.set !== prev.currentSet;
+          const roundChanged = srv.round !== prev.currentRound;
+          const statusChanged = srv.status !== prev.status;
+
+          if (!timeChanged && !phaseChanged && !exerciseChanged && !setChanged && !roundChanged && !statusChanged) {
+            return prev; // Nothing changed, skip re-render
           }
 
-          // Log when we actually update the display
-          console.log('⏱️ [INTERPOLATION UPDATE]', {
-            from: lastDisplayedTimeRef.current,
-            to: newTimeRemaining,
-            elapsedMs,
-            serverTime: lastServerTimeRef.current
-          });
+          // Play phase transition sounds when server changes phase
+          if (phaseChanged) {
+            if (srv.phase === 'work' && (prev.phase === 'rest' || prev.phase === 'prepare')) playSound('start');
+            else if (srv.phase === 'work' && prev.phase === 'roundRest') playSound('next');
+            else if (srv.phase === 'rest') playSound('rest');
+            else if (srv.phase === 'roundRest') playSound('round');
+            else if (srv.phase === 'complete') playSound('complete');
+            halfwayPlayedRef.current = false;
+            lastCountdownBeepRef.current = -1;
+          }
 
-          lastDisplayedTimeRef.current = newTimeRemaining;
+          // Calculate calories
+          const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+          const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+          const caloriesPerSecond = totalCalories / totalMinutes / 60;
 
-          // Don't handle phase transitions locally - server controls everything
-          // Just display the interpolated time
+          return {
+            ...prev,
+            timeRemaining: newTimeRemaining,
+            phase: srv.phase,
+            currentExercise: srv.exercise,
+            currentSet: srv.set,
+            currentRound: srv.round,
+            status: srv.status,
+            caloriesBurned: srv.calories > 0 ? srv.calories : prev.caloriesBurned + (timeChanged ? caloriesPerSecond : 0),
+          };
         } else {
           // SOLO WORKOUTS: Client is authoritative, use phase timer
 
@@ -742,8 +751,9 @@ export default function WorkoutSessionScreen() {
           }
         }
 
+        // SOLO WORKOUT SOUNDS (group sounds handled above with phase transitions)
         // Play halfway sound at 10 seconds during work phase (20 sec work / 2 = 10)
-        if (prev.phase === 'work' && Math.ceil(newTimeRemaining) === 10 && !halfwayPlayedRef.current) {
+        if (activePhase === 'work' && Math.ceil(newTimeRemaining) === 10 && !halfwayPlayedRef.current) {
           halfwayPlayedRef.current = true;
           playSound('halfway');
         }
@@ -754,7 +764,7 @@ export default function WorkoutSessionScreen() {
         }
 
         // Play countdown sounds at 3, 2, 1 during work and prepare phases
-        if ((prev.phase === 'work' || prev.phase === 'prepare') && newTimeRemaining <= 3 && newTimeRemaining > 0) {
+        if ((activePhase === 'work' || activePhase === 'prepare') && newTimeRemaining <= 3 && newTimeRemaining > 0) {
           const countdownSecond = Math.ceil(newTimeRemaining);
           if (countdownSecond !== lastCountdownBeepRef.current && countdownSecond > 0) {
             lastCountdownBeepRef.current = countdownSecond;
@@ -769,7 +779,7 @@ export default function WorkoutSessionScreen() {
           lastCountdownBeepRef.current = -1;
         }
 
-        // Calculate calories burned per second
+        // Calculate calories burned per second (solo workouts)
         const totalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
         const totalMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
         const caloriesPerSecond = totalCalories / totalMinutes / 60;
