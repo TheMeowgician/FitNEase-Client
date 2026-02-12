@@ -128,6 +128,7 @@ export class APIClient {
           '/api/auth/register',
           '/api/auth/refresh',
           '/api/auth/verify-email',
+          '/api/auth/verify-code',
           '/api/auth/forgot-password',
           '/api/auth/reset-password',
           '/api/auth/resend-verification'
