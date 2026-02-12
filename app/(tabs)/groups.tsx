@@ -199,6 +199,30 @@ export default function GroupsScreen() {
     }
   };
 
+  const handleCancelJoinRequest = (group: Group) => {
+    alert.confirm(
+      'Cancel Request',
+      `Cancel your request to join "${group.name}"?`,
+      async () => {
+        try {
+          await socialService.cancelJoinRequest(group.id);
+          // Remove from pending set so button reverts to "Request to Join"
+          setPendingRequestGroupIds(prev => {
+            const next = new Set(prev);
+            next.delete(group.id);
+            return next;
+          });
+          alert.success('Cancelled', 'Your join request has been cancelled.');
+        } catch (error: any) {
+          alert.error('Error', error.message || 'Failed to cancel join request.');
+        }
+      },
+      undefined,
+      'Cancel Request',
+      'Keep Request'
+    );
+  };
+
   const handleViewGroup = (group: Group) => {
     router.push(`/groups/${group.id}`);
   };
@@ -369,10 +393,14 @@ export default function GroupsScreen() {
                       </View>
                     )}
                     {pendingRequestGroupIds.has(group.id) ? (
-                      <View style={styles.pendingBadge}>
-                        <Ionicons name="time-outline" size={14} color={COLORS.WARNING[700]} />
-                        <Text style={styles.pendingBadgeText}>Request Pending</Text>
-                      </View>
+                      <TouchableOpacity
+                        style={styles.pendingBadge}
+                        onPress={() => handleCancelJoinRequest(group)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="close-circle" size={14} color={COLORS.WARNING[700]} />
+                        <Text style={styles.pendingBadgeText}>Cancel Request</Text>
+                      </TouchableOpacity>
                     ) : (
                       <TouchableOpacity
                         style={styles.joinButton}
