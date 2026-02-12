@@ -325,7 +325,7 @@ export default function GroupDetailsScreen() {
 
     setIsUpdating(true);
     try {
-      await socialService.updateGroup(group.id, { name: editNameValue.trim() });
+      await socialService.updateGroup(group.id, { group_name: editNameValue.trim() });
       alert.success('Success', 'Group name updated successfully');
       setShowEditNameModal(false);
       loadGroupDetails(); // Refresh group data
@@ -369,7 +369,7 @@ export default function GroupDetailsScreen() {
       async () => {
         setIsUpdating(true);
         try {
-          await socialService.updateGroup(group.id, { type: newType });
+          await socialService.updateGroup(group.id, { is_private: newType === 'private' });
           alert.success('Success', `Group is now ${newType}`);
           setShowSettingsModal(false);
           loadGroupDetails(); // Refresh group data

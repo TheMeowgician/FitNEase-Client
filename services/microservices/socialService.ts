@@ -277,15 +277,12 @@ export interface CreateGroupRequest {
 }
 
 export interface UpdateGroupRequest {
-  name?: string;
+  group_name?: string;
   description?: string;
-  type?: 'public' | 'private' | 'invite-only';
-  category?: string;
-  maxMembers?: number;
-  tags?: string[];
-  rules?: string[];
-  location?: any;
-  schedule?: any;
+  is_private?: boolean;
+  max_members?: number;
+  group_image?: string;
+  [key: string]: any;
 }
 
 export interface JoinGroupRequest {
