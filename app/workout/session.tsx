@@ -601,26 +601,25 @@ export default function WorkoutSessionScreen() {
   };
 
   const handleBackPress = () => {
+    // For group workouts, non-initiators can leave at any time (running or paused)
+    if (type === 'group_tabata' && !isInitiator && (sessionState.status === 'running' || sessionState.status === 'paused')) {
+      const completedCount = sessionState.currentExercise;
+      const message = completedCount > 0
+        ? `You've completed ${completedCount} exercise${completedCount > 1 ? 's' : ''}. Would you like to save your progress and rate the completed exercises?`
+        : 'Are you sure you want to leave this workout? You will exit the session.';
+
+      alert.confirm(
+        'Leave Workout',
+        message,
+        completedCount > 0 ? exitAndRate : exitSession,
+        undefined,
+        completedCount > 0 ? 'Save & Rate' : 'Leave',
+        'Cancel'
+      );
+      return true;
+    }
+
     if (sessionState.status === 'running') {
-      // For group workouts, only initiator can pause - skip pause for non-initiators
-      if (type === 'group_tabata' && !isInitiator) {
-        // Non-initiator trying to exit - show confirm dialog without pausing
-        const completedCount = sessionState.currentExercise;
-        const message = completedCount > 0
-          ? `You've completed ${completedCount} exercise${completedCount > 1 ? 's' : ''}. Would you like to save your progress and rate the completed exercises?`
-          : 'Are you sure you want to leave this workout? You will exit the session.';
-
-        alert.confirm(
-          'Leave Workout',
-          message,
-          completedCount > 0 ? exitAndRate : exitSession,
-          undefined,
-          completedCount > 0 ? 'Save & Rate' : 'Leave',
-          'Cancel'
-        );
-        return true;
-      }
-
       // Solo workout or group initiator - pause then show exit dialog
       pauseSession();
 

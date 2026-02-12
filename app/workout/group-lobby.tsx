@@ -1111,15 +1111,23 @@ export default function GroupLobbyScreen() {
 
     const newStatus = isReady ? 'waiting' : 'ready';
 
+    // Optimistic update - update UI immediately
+    setIsReady(!isReady);
+    updateMemberStatus(parseInt(currentUser.id), newStatus);
+
     try {
       const response = await socialService.updateLobbyStatusV2(sessionId, newStatus);
 
-      if (response.status === 'success') {
-        setIsReady(!isReady);
-        updateMemberStatus(parseInt(currentUser.id), newStatus);
+      if (response.status !== 'success') {
+        // Revert on failure
+        setIsReady(isReady);
+        updateMemberStatus(parseInt(currentUser.id), isReady ? 'ready' : 'waiting');
       }
     } catch (error) {
       console.error('❌ Error updating status:', error);
+      // Revert on error
+      setIsReady(isReady);
+      updateMemberStatus(parseInt(currentUser.id), isReady ? 'ready' : 'waiting');
       alert.error('Error', 'Failed to update status. Please try again.');
     }
   };
