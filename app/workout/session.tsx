@@ -38,6 +38,7 @@ import { useProgressStore } from '../../stores/progressStore';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 import AgoraVideoCall from '../../components/video/AgoraVideoCall';
 import ExerciseDemoModal from '../../components/workout/ExerciseDemoModal';
+import MemberLeftToast from '../../components/workout/MemberLeftToast';
 import { hasExerciseDemo } from '../../constants/exerciseDemos';
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
@@ -118,6 +119,9 @@ export default function WorkoutSessionScreen() {
   } | null>(null);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const [isVideoFullScreen, setIsVideoFullScreen] = useState(false);
+
+  // Member left toast state
+  const [memberLeftName, setMemberLeftName] = useState<string | null>(null);
 
   // Draggable video position
   const pan = useRef(new Animated.ValueXY({ x: Dimensions.get('window').width - 170, y: Dimensions.get('window').height - 320 })).current;
@@ -480,17 +484,21 @@ export default function WorkoutSessionScreen() {
               `The workout has been stopped by ${data.stopped_by_name}.`
             );
           }, 500);
-        } else if (eventName === 'MemberLeftSession') {
-          console.log(`👋 Member left session: ${data.member_name}`);
-          // Show toast notification that member left
-          alert.info(
-            'Member Left',
-            `${data.member_name} has left the workout session.`
-          );
         } else if (eventName === 'WorkoutCompleted') {
           console.log(`✅ Workout finished by ${data.initiatorName}`);
           // Set status to completed - user must click COMPLETE button to save and exit
           setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+        }
+      },
+    });
+
+    // Subscribe to lobby channel for member left events
+    // MemberLeft broadcasts on lobby.{sessionId}, not session.{sessionId}
+    reverbService.subscribeToPrivateChannel(`lobby.${sessionId}`, {
+      onEvent: (eventName, data) => {
+        if (eventName === 'MemberLeft') {
+          console.log(`👋 Member left workout: ${data.user_name}`);
+          setMemberLeftName(data.user_name);
         }
       },
     });
@@ -1940,6 +1948,13 @@ export default function WorkoutSessionScreen() {
           </Animated.View>
         )
       )}
+
+      {/* Member Left Toast */}
+      <MemberLeftToast
+        memberName={memberLeftName || ''}
+        visible={!!memberLeftName}
+        onDismiss={() => setMemberLeftName(null)}
+      />
     </SafeAreaView>
   );
 }
