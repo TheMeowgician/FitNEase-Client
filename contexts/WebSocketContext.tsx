@@ -50,10 +50,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   // Access invitation store actions (user invitations now handled by NotificationContext)
   const { hydrateFromStorage, fetchPendingInvitations, cleanupExpiredInvitations } = useInvitationStore();
 
-  // Hydrate invitations from AsyncStorage on mount
+  // Hydrate invitations from AsyncStorage only when authenticated
   useEffect(() => {
-    hydrateFromStorage();
-  }, []);
+    if (isAuthenticated && user) {
+      hydrateFromStorage();
+    }
+  }, [isAuthenticated, user?.id]);
 
   // Listen for connection state changes
   useEffect(() => {
@@ -123,6 +125,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       } else {
         console.log('🔌 WebSocketContext: User not authenticated, unsubscribing from group channels');
         unsubscribeFromGroupChannels();
+        // Clear any pending invitation state on logout
+        setPendingInvitation(null);
       }
     };
 
@@ -346,7 +350,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
       {/* Legacy: Group Workout Invitation Modal (for backward compatibility with old group channel invitations) */}
       <GroupWorkoutInvitationModal
-        visible={shouldShowModal}
+        visible={shouldShowModal && isAuthenticated}
         invitationData={invitationData}
         onAccept={acceptInvitation}
         onDecline={declineInvitation}
@@ -355,7 +359,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
       {/* Professional: Invitation Queue Modal (new persistent user-channel based system) */}
       {/* Shows invitations one at a time from the queue, persists across app restarts */}
-      {!isInSessionOrLobby && <InvitationQueueModal />}
+      {isAuthenticated && !isInSessionOrLobby && <InvitationQueueModal />}
     </WebSocketContext.Provider>
   );
 };

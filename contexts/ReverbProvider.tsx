@@ -59,10 +59,12 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
   // Connect to Reverb and fetch user's groups when user logs in
   useEffect(() => {
     if (!user) {
-      // User logged out - disconnect
+      // User logged out - disconnect and clear all invitation state
       reverbService.disconnect();
       setIsConnected(false);
       setUserGroups([]);
+      setInvitationData(null);
+      setShowInvitationModal(false);
       return;
     }
 
@@ -278,7 +280,7 @@ export function ReverbProvider({ children }: { children: React.ReactNode }) {
     <ReverbContext.Provider value={{ isConnected, onlineUsers, refreshGroupSubscriptions }}>
       {children}
       <GroupWorkoutInvitationModal
-        visible={showInvitationModal}
+        visible={showInvitationModal && !!user}
         invitationData={invitationData}
         onAccept={handleAcceptInvitation}
         onDecline={handleDeclineInvitation}

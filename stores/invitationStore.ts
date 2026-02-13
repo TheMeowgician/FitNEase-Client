@@ -242,20 +242,16 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
       }
     } catch (error: any) {
       const errorMessage = error.message || 'Failed to decline invitation';
-
-      // CRITICAL: If invitation is no longer valid, treat as success and remove it
-      // This prevents error loops from stale invitations
-      if (errorMessage.includes('no longer valid') || errorMessage.includes('not found')) {
-        console.log('🧹 [INVITATION STORE] Invitation no longer valid, removing silently', { invitationId });
-        get().removeInvitation(invitationId);
-        setTimeout(() => get().showNextInvitation(), 100);
-        set({ isLoading: false });
-        return { success: true }; // Treat as success - already handled on backend
-      }
-
       console.error('❌ [INVITATION STORE] Decline invitation failed', error);
-      set({ isLoading: false, error: errorMessage });
-      return { success: false, error: errorMessage };
+
+      // ALWAYS remove the invitation locally on decline failure
+      // The server will auto-expire it anyway, and leaving it stuck causes
+      // persistent modal issues (especially on slow/no internet)
+      console.log('🧹 [INVITATION STORE] Removing invitation locally despite API failure', { invitationId });
+      get().removeInvitation(invitationId);
+      setTimeout(() => get().showNextInvitation(), 100);
+      set({ isLoading: false });
+      return { success: true }; // Treat as success locally - server will handle expiry
     }
   },
 

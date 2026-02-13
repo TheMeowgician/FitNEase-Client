@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService, User as AuthUser, LoginRequest, RegisterRequest } from '../services/microservices/authService';
 import { workoutNotificationScheduler, NotificationSettings } from '../services/workoutNotificationScheduler';
+import { useInvitationStore } from '../stores/invitationStore';
 
 const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
 
@@ -172,13 +173,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async (): Promise<void> => {
     try {
       console.log('🔓 AuthContext: Starting logout process...');
+
+      // Clear invitation store BEFORE setting user to null
+      // This prevents stale invitations from persisting across sessions
+      useInvitationStore.getState().clearAllInvitations();
+      console.log('🔓 AuthContext: Invitation store cleared');
+
       await authService.logout();
       console.log('🔓 AuthContext: Server logout completed, clearing user state');
       setUser(null);
       console.log('🔓 AuthContext: User state cleared, navigation should trigger');
     } catch (error) {
       console.error('Logout failed:', error);
-      // Clear user state even if logout request fails
+      // Clear invitation store and user state even if logout request fails
+      useInvitationStore.getState().clearAllInvitations();
       console.log('🔓 AuthContext: Clearing user state despite logout error');
       setUser(null);
     }
