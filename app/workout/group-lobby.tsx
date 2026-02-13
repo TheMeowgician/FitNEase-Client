@@ -150,6 +150,7 @@ export default function GroupLobbyScreen() {
   const isCleaningUpRef = useRef(false);
   const isLobbyDeletedRef = useRef(false); // Track if LobbyDeleted event was received (blocks further actions)
   const isMinimizedRef = useRef(false); // Track if user minimized (to explore app while staying in lobby)
+  const isWorkoutStartedRef = useRef(false); // Track if WorkoutStarted fired (don't leave lobby on unmount)
   const isMountedRef = useRef(true); // Track if component is still mounted
   const sessionIdRef = useRef<string | null>(null); // Track sessionId for cleanup
   const channelRef = useRef<any>(null);
@@ -266,6 +267,21 @@ export default function GroupLobbyScreen() {
             console.log('📦 [UNMOUNT] Unsubscribed from presence channel only');
           }
           // Reset refs for next time
+          hasJoinedRef.current = false;
+          hasInitializedRef.current = false;
+          return; // DON'T call cleanup() or leave API
+        }
+
+        // If workout started, DON'T leave the lobby or kill the subscription
+        // Users are transitioning to session screen, not leaving
+        // Keeps private-lobby channel alive for session.tsx member left toast
+        if (isWorkoutStartedRef.current) {
+          console.log('🏋️ [UNMOUNT] Workout started, skipping leave API and keeping lobby channel alive');
+          // Only unsubscribe from presence channel (no longer viewing lobby screen)
+          if (presenceChannelRef.current) {
+            reverbService.unsubscribe(`presence-lobby.${currentSessionId}`);
+            presenceChannelRef.current = null;
+          }
           hasJoinedRef.current = false;
           hasInitializedRef.current = false;
           return; // DON'T call cleanup() or leave API
@@ -765,6 +781,10 @@ export default function GroupLobbyScreen() {
           return;
         }
         console.log('🏋️ Workout started!', data);
+
+        // Mark that workout started - prevents unmount cleanup from calling leaveLobbyV2
+        // and broadcasting false member.left events during lobby-to-session transition
+        isWorkoutStartedRef.current = true;
 
         // IMPORTANT: Access lobby store directly to get the LATEST state
         // Don't use currentLobby from closure as it may be stale

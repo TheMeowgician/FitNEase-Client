@@ -475,7 +475,7 @@ export default function WorkoutSessionScreen() {
     // MemberLeft broadcasts on lobby.{sessionId}, not session.{sessionId}
     reverbService.subscribeToPrivateChannel(`lobby.${sessionId}`, {
       onEvent: (eventName, data) => {
-        if (eventName === 'member.left') {
+        if (eventName === 'member.left' && data.user_id !== user?.id) {
           console.log(`👋 Member left workout: ${data.user_name}`);
           setMemberLeftName(data.user_name);
         }
@@ -501,6 +501,12 @@ export default function WorkoutSessionScreen() {
   };
 
   const handleBackPress = () => {
+    // If video is in fullscreen, minimize it instead of leaving the workout
+    if (isVideoFullScreen) {
+      setIsVideoFullScreen(false);
+      return true;
+    }
+
     // For group workouts, non-initiators can leave at any time (running or paused)
     if (type === 'group_tabata' && !isInitiator && (sessionState.status === 'running' || sessionState.status === 'paused')) {
       const completedCount = sessionState.currentExercise;

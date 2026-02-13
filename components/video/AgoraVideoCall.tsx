@@ -127,13 +127,18 @@ export default function AgoraVideoCall({
       }
       setIsJoined(false);
       setRemoteUids([]);
-
-      // Notify backend
-      await agoraService.revokeToken(sessionId, userId);
-
-      onLeave?.();
     } catch (error) {
       console.error('❌ Failed to leave channel:', error);
+    }
+
+    // Always notify parent regardless of cleanup errors
+    onLeave?.();
+
+    // Revoke token in background (non-blocking)
+    try {
+      await agoraService.revokeToken(sessionId, userId);
+    } catch (error) {
+      console.error('❌ Failed to revoke token:', error);
     }
   };
 
