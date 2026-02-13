@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Platform, PermissionsAndroid } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   createAgoraRtcEngine,
@@ -46,16 +46,43 @@ export default function AgoraVideoCall({
     };
   }, []);
 
+  const getPermissions = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        ]);
+        const cameraGranted = granted['android.permission.CAMERA'] === PermissionsAndroid.RESULTS.GRANTED;
+        const audioGranted = granted['android.permission.RECORD_AUDIO'] === PermissionsAndroid.RESULTS.GRANTED;
+        console.log('📹 Permissions:', { cameraGranted, audioGranted });
+        return cameraGranted && audioGranted;
+      } catch (err) {
+        console.error('❌ Permission request error:', err);
+        return false;
+      }
+    }
+    return true; // iOS permissions handled via Info.plist
+  };
+
   const setupVideoSDKEngine = async () => {
     try {
+      // Request camera and microphone permissions (required on Android)
+      const hasPermissions = await getPermissions();
+      if (!hasPermissions) {
+        console.error('❌ Camera/microphone permissions denied');
+        return;
+      }
+
       // Create RTC engine
       const engine = createAgoraRtcEngine();
       engine.initialize({ appId });
 
       agoraEngineRef.current = engine;
 
-      // Enable video
+      // Enable video and start local camera preview
       engine.enableVideo();
+      engine.startPreview();
 
       // Register event handlers
       engine.registerEventHandler({
@@ -92,6 +119,7 @@ export default function AgoraVideoCall({
   const leaveChannel = async () => {
     try {
       if (agoraEngineRef.current) {
+        agoraEngineRef.current.stopPreview();
         agoraEngineRef.current.leaveChannel();
         agoraEngineRef.current.release();
         console.log('📹 Left channel');
@@ -212,16 +240,6 @@ export default function AgoraVideoCall({
   // Full mode - original layout
   return (
     <View style={styles.container}>
-      {/* Minimize button - top-right (only if onMinimize provided) */}
-      {onMinimize && (
-        <TouchableOpacity
-          style={styles.minimizeButton}
-          onPress={onMinimize}
-        >
-          <Ionicons name="contract" size={20} color="#fff" />
-        </TouchableOpacity>
-      )}
-
       {/* Local video (yourself) */}
       <View style={styles.localVideoContainer}>
         {isJoined && !isVideoOff ? (
@@ -236,6 +254,16 @@ export default function AgoraVideoCall({
           </View>
         )}
       </View>
+
+      {/* Minimize button - top-left, rendered AFTER local video so it's on top on Android */}
+      {onMinimize && (
+        <TouchableOpacity
+          style={styles.minimizeButton}
+          onPress={onMinimize}
+        >
+          <Ionicons name="contract" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
 
       {/* Remote videos (other participants) */}
       <View style={styles.remoteVideosContainer}>
@@ -475,7 +503,7 @@ const styles = StyleSheet.create({
   minimizeButton: {
     position: 'absolute',
     top: 20,
-    right: 20,
+    left: 20,
     width: 40,
     height: 40,
     borderRadius: 20,

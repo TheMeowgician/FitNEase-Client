@@ -126,8 +126,11 @@ export default function WorkoutSessionScreen() {
   // PanResponder for draggable video
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !isVideoFullScreen, // Only allow drag in compact mode
-      onMoveShouldSetPanResponder: () => !isVideoFullScreen,
+      onStartShouldSetPanResponder: () => false, // Let children handle taps (buttons)
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        // Only claim gesture when actually dragging (> 5px movement)
+        return Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5;
+      },
       onPanResponderGrant: () => {
         isDragging.current = true;
         pan.setOffset({
