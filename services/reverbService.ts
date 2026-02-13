@@ -551,13 +551,13 @@ class ReverbService {
           case 'LobbyStateChanged':
             callbacks.onLobbyStateChanged?.(data);
             break;
-          case 'MemberJoined':
+          case 'member.joined':
             callbacks.onMemberJoined?.(data);
             break;
-          case 'MemberLeft':
+          case 'member.left':
             callbacks.onMemberLeft?.(data);
             break;
-          case 'MemberStatusUpdated':
+          case 'member.status.updated':
             callbacks.onMemberStatusUpdated?.(data);
             break;
           case 'LobbyMessageSent':

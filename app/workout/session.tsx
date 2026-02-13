@@ -6,12 +6,10 @@ import {
   TouchableOpacity,
   BackHandler,
   StatusBar,
-  Vibration,
   AppState,
   AppStateStatus,
   ScrollView,
   ActivityIndicator,
-  Modal,
   PanResponder,
   Animated,
   Dimensions,
@@ -19,7 +17,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '../../contexts/AuthContext';
@@ -77,7 +74,6 @@ export default function WorkoutSessionScreen() {
   });
 
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | number | null>(null);
   const phaseStartTimeRef = useRef<number>(Date.now());
   const phaseDurationRef = useRef<number>(10); // Default 10 seconds
@@ -247,7 +243,6 @@ export default function WorkoutSessionScreen() {
 
   useEffect(() => {
     loadWorkout();
-    setupAudio();
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
@@ -259,10 +254,6 @@ export default function WorkoutSessionScreen() {
       // Clear timer
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
-      }
-
-      if (sound) {
-        sound.unloadAsync();
       }
 
       // Unsubscribe from session channel
@@ -339,18 +330,6 @@ export default function WorkoutSessionScreen() {
     } catch (error) {
       console.error('Error loading workout:', error);
       alert.error('Error', 'Failed to load workout', () => router.back());
-    }
-  };
-
-  const setupAudio = async () => {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-      });
-    } catch (error) {
-      console.log('Audio setup error:', error);
     }
   };
 
@@ -496,7 +475,7 @@ export default function WorkoutSessionScreen() {
     // MemberLeft broadcasts on lobby.{sessionId}, not session.{sessionId}
     reverbService.subscribeToPrivateChannel(`lobby.${sessionId}`, {
       onEvent: (eventName, data) => {
-        if (eventName === 'MemberLeft') {
+        if (eventName === 'member.left') {
           console.log(`👋 Member left workout: ${data.user_name}`);
           setMemberLeftName(data.user_name);
         }
@@ -510,65 +489,8 @@ export default function WorkoutSessionScreen() {
    * @param type - Type of sound alert to play
    */
   const playSound = async (type: 'start' | 'rest' | 'complete' | 'next' | 'round' | 'countdown' | 'countdown_go' | 'halfway') => {
-    try {
-      // Load appropriate sound file based on type
-      let soundFile;
-      switch (type) {
-        case 'start':
-          soundFile = require('../../assets/sounds/start.mp3');
-          break;
-        case 'rest':
-          soundFile = require('../../assets/sounds/rest.mp3');
-          break;
-        case 'complete':
-          soundFile = require('../../assets/sounds/complete.mp3');
-          break;
-        case 'next':
-          soundFile = require('../../assets/sounds/next.mp3');
-          break;
-        case 'round':
-          soundFile = require('../../assets/sounds/round.mp3');
-          break;
-        case 'countdown':
-          soundFile = require('../../assets/sounds/countdown.mp3');
-          break;
-        case 'countdown_go':
-          soundFile = require('../../assets/sounds/countdown_go.mp3');
-          break;
-        case 'halfway':
-          soundFile = require('../../assets/sounds/halfway.mp3');
-          break;
-        default:
-          soundFile = require('../../assets/sounds/start.mp3');
-      }
-
-      const { sound: newSound } = await Audio.Sound.createAsync(soundFile);
-
-      // Set volume (future: get from settings)
-      await newSound.setVolumeAsync(1.0);
-
-      setSound(newSound);
-      await newSound.playAsync();
-
-      console.log(`🔊 [SOUND] Played ${type} alert`);
-    } catch (error) {
-      console.log(`❌ [SOUND] Error playing ${type} sound:`, error);
-
-      // Fallback to vibration with different patterns for each type
-      const vibrationPatterns: Record<string, number | number[]> = {
-        start: [0, 100],                    // Single short beep
-        rest: [0, 200],                     // Single medium beep
-        complete: [0, 500, 200, 500],       // Double long beeps
-        next: [0, 100, 100, 100],           // Two quick beeps
-        round: [0, 300, 100, 300],          // Two medium beeps
-        countdown: [0, 50],                 // Very short beep
-        countdown_go: [0, 150],             // Short beep
-        halfway: [0, 100, 50, 100],         // Two quick beeps
-      };
-
-      Vibration.vibrate(vibrationPatterns[type] || 200);
-      console.log(`📳 [VIBRATION] Fallback vibration for ${type}`);
-    }
+    // Sound effects disabled for now
+    return;
   };
 
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -1899,54 +1821,31 @@ export default function WorkoutSessionScreen() {
         onClose={() => setShowDemoModal(false)}
       />
 
-      {/* Floating Video Call - Render once with dynamic wrapper */}
+      {/* Floating Video Call - Single Animated.View to prevent unmount on mode switch */}
       {showVideoCall && agoraCredentials && (
-        isVideoFullScreen ? (
-          // Full-screen modal wrapper
-          <Modal
-            visible={true}
-            transparent={false}
-            animationType="fade"
-            onRequestClose={handleMinimizeVideo}
-          >
-            <View style={{ flex: 1 }}>
-              <AgoraVideoCall
-                key="agora-video-stable"
-                sessionId={tabataSession?.session_id || ''}
-                userId={agoraCredentials.uid}
-                channelName={agoraCredentials.channelName}
-                token={agoraCredentials.token}
-                appId={agoraCredentials.appId}
-                onLeave={handleLeaveVideoCall}
-                onMinimize={handleMinimizeVideo}
-                compact={false}
-              />
-            </View>
-          </Modal>
-        ) : (
-          // PiP floating window
-          <Animated.View
-            style={[
-              styles.floatingVideoContainer,
-              {
-                transform: [{ translateX: pan.x }, { translateY: pan.y }],
-              },
-            ]}
-            {...panResponder.panHandlers}
-          >
-            <AgoraVideoCall
-              key="agora-video-stable"
-              sessionId={tabataSession?.session_id || ''}
-              userId={agoraCredentials.uid}
-              channelName={agoraCredentials.channelName}
-              token={agoraCredentials.token}
-              appId={agoraCredentials.appId}
-              onLeave={handleLeaveVideoCall}
-              onExpand={handleExpandVideo}
-              compact={true}
-            />
-          </Animated.View>
-        )
+        <Animated.View
+          style={
+            isVideoFullScreen
+              ? styles.fullScreenVideoContainer
+              : [
+                  styles.floatingVideoContainer,
+                  { transform: [{ translateX: pan.x }, { translateY: pan.y }] },
+                ]
+          }
+          {...(isVideoFullScreen ? {} : panResponder.panHandlers)}
+        >
+          <AgoraVideoCall
+            sessionId={tabataSession?.session_id || ''}
+            userId={agoraCredentials.uid}
+            channelName={agoraCredentials.channelName}
+            token={agoraCredentials.token}
+            appId={agoraCredentials.appId}
+            onLeave={handleLeaveVideoCall}
+            onMinimize={isVideoFullScreen ? handleMinimizeVideo : undefined}
+            onExpand={!isVideoFullScreen ? handleExpandVideo : undefined}
+            compact={!isVideoFullScreen}
+          />
+        </Animated.View>
       )}
 
       {/* Member Left Toast */}
@@ -2416,5 +2315,14 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     zIndex: 1000,
+  },
+  fullScreenVideoContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    backgroundColor: '#000',
   },
 });

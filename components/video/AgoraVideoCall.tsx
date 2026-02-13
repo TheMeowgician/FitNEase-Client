@@ -122,6 +122,7 @@ export default function AgoraVideoCall({
         agoraEngineRef.current.stopPreview();
         agoraEngineRef.current.leaveChannel();
         agoraEngineRef.current.release();
+        agoraEngineRef.current = null; // Prevent double cleanup
         console.log('📹 Left channel');
       }
       setIsJoined(false);
