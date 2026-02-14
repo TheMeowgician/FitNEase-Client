@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { engagementService, Achievement, UserAchievement } from '../../services/
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { getAchievementIcon } from '../../constants/achievementIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -225,6 +227,7 @@ export default function UserProfileScreen() {
       title: ach.achievement_name,
       earned: unlockedIds.has(ach.achievement_id),
       color: colorMap[ach.rarity_level] || '#6B7280',
+      customImage: getAchievementIcon(ach.achievement_name),
     }));
   };
 
@@ -372,20 +375,28 @@ export default function UserProfileScreen() {
                 <View style={styles.achievementPreviewRow}>
                   {quickAchievements.map((achievement, index) => (
                     <View key={index} style={styles.achievementPreviewItem}>
-                      <View
-                        style={[
-                          styles.achievementPreviewIcon,
-                          achievement.earned
-                            ? { backgroundColor: achievement.color }
-                            : styles.achievementPreviewIconLocked,
-                        ]}
-                      >
-                        {achievement.earned ? (
-                          <Ionicons name={achievement.icon as any} size={20} color="white" />
-                        ) : (
-                          <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
-                        )}
-                      </View>
+                      {achievement.earned && achievement.customImage ? (
+                        <Image
+                          source={achievement.customImage}
+                          style={styles.achievementPreviewImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.achievementPreviewIcon,
+                            achievement.earned
+                              ? { backgroundColor: achievement.color }
+                              : styles.achievementPreviewIconLocked,
+                          ]}
+                        >
+                          {achievement.earned ? (
+                            <Ionicons name={achievement.icon as any} size={20} color="white" />
+                          ) : (
+                            <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
+                          )}
+                        </View>
+                      )}
                       <Text
                         style={[
                           styles.achievementPreviewLabel,
@@ -703,6 +714,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 6,
+  },
+  achievementPreviewImage: {
+    width: 48,
+    height: 48,
     marginBottom: 6,
   },
   achievementPreviewIconLocked: {

@@ -21,9 +21,10 @@ interface Exercise {
   exercise_name: string;
   difficulty_level: number;
   target_muscle_group: string;
-  default_duration_seconds: number;
-  estimated_calories_burned: number;
+  default_duration_seconds?: number;
+  estimated_calories_burned?: number;
   equipment_needed?: string;
+  exercise_category?: string;
 }
 
 interface WorkoutSet {
@@ -238,9 +239,6 @@ export const WorkoutSetModal: React.FC<WorkoutSetModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <View style={[styles.tabataIcon, { backgroundColor: COLORS.PRIMARY[600] + '15' }]}>
-                <Ionicons name="flash" size={24} color={COLORS.PRIMARY[600]} />
-              </View>
               <View>
                 <Text style={styles.headerTitle}>Tabata Workout Set</Text>
                 <Text style={styles.headerSubtitle}>{workoutSet.exercises.length} exercises • {workoutSet.total_duration} min</Text>
