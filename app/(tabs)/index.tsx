@@ -780,8 +780,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Weekly Check-In Card - Only show if user has completed at least 1 workout */}
-        {(recentWorkouts.length > 0 || (weeklyStats?.this_week_sessions ?? 0) > 0) && (
+        {/* Weekly Check-In Card - Only show after user's first week (account age >= 7 days) and has done at least 1 workout */}
+        {(recentWorkouts.length > 0 || (weeklyStats?.this_week_sessions ?? 0) > 0) &&
+         user?.createdAt && (Date.now() - new Date(user.createdAt).getTime() >= 7 * 24 * 60 * 60 * 1000) && (
           weeklyAssessmentStatus.completed_this_week ? (
             // Completed state - show success message
             <View style={styles.weeklyCheckInCardCompleted}>
