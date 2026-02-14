@@ -23,6 +23,38 @@ export interface Exercise {
   updated_at: string; // Changed to snake_case
 }
 
+// Lean interface for exercise library list (only fields displayed in cards)
+export interface ExerciseListItem {
+  exercise_id: number;
+  exercise_name: string;
+  difficulty_level: number;
+  target_muscle_group: string;
+  default_duration_seconds: number;
+  calories_burned_per_minute: number;
+  equipment_needed: string | null;
+  exercise_category: string;
+}
+
+export interface ExerciseLibraryResponse {
+  data: ExerciseListItem[];
+  pagination: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+  stats: {
+    total: number;
+    beginner: number;
+    intermediate: number;
+    advanced: number;
+    upper_body: number;
+    lower_body: number;
+    core: number;
+    full_body: number;
+  };
+}
+
 export interface Workout {
   workout_id: number; // Changed from string id to number workout_id
   workout_name: string; // Changed from name to workout_name
@@ -158,6 +190,46 @@ export class ContentService {
     } catch (error) {
       console.warn('Content service unavailable - all exercises feature disabled:', error);
       return [];
+    }
+  }
+
+  public async getExerciseLibrary(params?: {
+    page?: number;
+    per_page?: number;
+    search?: string;
+    difficulty?: string;
+    muscle_group?: string;
+  }): Promise<ExerciseLibraryResponse> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page) queryParams.append('page', String(params.page));
+      if (params?.per_page) queryParams.append('per_page', String(params.per_page));
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.difficulty) queryParams.append('difficulty', params.difficulty);
+      if (params?.muscle_group) queryParams.append('muscle_group', params.muscle_group);
+
+      const queryString = queryParams.toString();
+      const url = `/api/content/exercise-library${queryString ? `?${queryString}` : ''}`;
+
+      const response = await apiClient.get<{
+        success: boolean;
+        data: ExerciseListItem[];
+        pagination: ExerciseLibraryResponse['pagination'];
+        stats: ExerciseLibraryResponse['stats'];
+      }>(this.serviceName, url);
+
+      return {
+        data: response.data.data,
+        pagination: response.data.pagination,
+        stats: response.data.stats,
+      };
+    } catch (error) {
+      console.warn('Content service unavailable - exercise library:', error);
+      return {
+        data: [],
+        pagination: { current_page: 1, last_page: 1, per_page: 30, total: 0 },
+        stats: { total: 0, beginner: 0, intermediate: 0, advanced: 0, upper_body: 0, lower_body: 0, core: 0, full_body: 0 },
+      };
     }
   }
 
