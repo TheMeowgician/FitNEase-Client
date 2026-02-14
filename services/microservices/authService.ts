@@ -91,7 +91,8 @@ export interface ForgotPasswordRequest {
 }
 
 export interface ResetPasswordRequest {
-  token: string;
+  email: string;
+  code: string;
   newPassword: string;
 }
 
@@ -329,7 +330,7 @@ export class AuthService {
 
   public async forgotPassword(request: ForgotPasswordRequest): Promise<{ message: string }> {
     try {
-      const response = await apiClient.post<{ message: string }>('auth', '/auth/forgot-password', request);
+      const response = await apiClient.post<{ message: string }>('auth', '/api/auth/forgot-password', request);
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Failed to send password reset email');
@@ -338,7 +339,11 @@ export class AuthService {
 
   public async resetPassword(request: ResetPasswordRequest): Promise<{ message: string }> {
     try {
-      const response = await apiClient.post<{ message: string }>('auth', '/auth/reset-password', request);
+      const response = await apiClient.post<{ message: string }>('auth', '/api/auth/reset-password', {
+        email: request.email,
+        code: request.code,
+        new_password: request.newPassword,
+      });
       return response.data;
     } catch (error) {
       throw new Error((error as any).message || 'Password reset failed');
