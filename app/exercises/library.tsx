@@ -162,17 +162,6 @@ export default function ExerciseLibraryScreen() {
     }
   };
 
-  const getMuscleGroupIcon = (muscleGroup: string): keyof typeof Ionicons.glyphMap => {
-    if (!muscleGroup) return 'barbell';
-    const lowerGroup = muscleGroup.toLowerCase();
-    if (lowerGroup.includes('chest') || lowerGroup.includes('upper_body')) return 'body';
-    if (lowerGroup.includes('leg') || lowerGroup.includes('lower_body')) return 'walk';
-    if (lowerGroup.includes('core') || lowerGroup.includes('abs')) return 'fitness';
-    if (lowerGroup.includes('back')) return 'body';
-    if (lowerGroup.includes('shoulder')) return 'body';
-    return 'barbell';
-  };
-
   const muscleGroups = [
     { label: 'All', value: null },
     { label: 'Upper Body', value: 'upper_body' },
@@ -228,20 +217,8 @@ export default function ExerciseLibraryScreen() {
 
     return (
       <View style={styles.exerciseCard}>
-        {/* Exercise Icon & Name */}
+        {/* Exercise Name & Demo */}
         <View style={styles.exerciseHeader}>
-          <View
-            style={[
-              styles.exerciseIcon,
-              { backgroundColor: getDifficultyColor(exercise.difficulty_level) + '15' },
-            ]}
-          >
-            <Ionicons
-              name={getMuscleGroupIcon(exercise.target_muscle_group)}
-              size={24}
-              color={getDifficultyColor(exercise.difficulty_level)}
-            />
-          </View>
           <View style={styles.exerciseInfo}>
             <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
             <Text style={styles.exerciseCategory}>
@@ -260,48 +237,16 @@ export default function ExerciseLibraryScreen() {
           )}
         </View>
 
-        {/* Exercise Stats */}
-        <View style={styles.exerciseStats}>
-          <View style={styles.statBadge}>
-            <Ionicons
-              name="speedometer"
-              size={14}
-              color={getDifficultyColor(exercise.difficulty_level)}
-            />
-            <Text
-              style={[
-                styles.statText,
-                { color: getDifficultyColor(exercise.difficulty_level) },
-              ]}
-            >
-              {getDifficultyLabel(exercise.difficulty_level)}
-            </Text>
-          </View>
-          <View style={styles.statBadge}>
-            <Ionicons name="time-outline" size={14} color={COLORS.SECONDARY[600]} />
-            <Text style={styles.statText}>
-              {exercise.default_duration_seconds
-                ? `${Math.round(exercise.default_duration_seconds / 60)} min`
-                : 'N/A'}
-            </Text>
-          </View>
-          <View style={styles.statBadge}>
-            <Ionicons name="flame-outline" size={14} color={COLORS.WARNING[500]} />
-            <Text style={styles.statText}>
-              {exercise.calories_burned_per_minute && exercise.default_duration_seconds
-                ? `${Math.round(exercise.calories_burned_per_minute * (exercise.default_duration_seconds / 60))} cal`
-                : 'N/A'}
-            </Text>
-          </View>
+        {/* Exercise Details Row */}
+        <View style={styles.detailsRow}>
+          <Text style={[styles.detailText, { color: getDifficultyColor(exercise.difficulty_level) }]}>
+            {getDifficultyLabel(exercise.difficulty_level)}
+          </Text>
+          <View style={styles.detailDivider} />
+          <Text style={styles.detailText}>
+            {formatMuscleGroup(exercise.target_muscle_group)}
+          </Text>
         </View>
-
-        {/* Equipment */}
-        {exercise.equipment_needed && exercise.equipment_needed !== 'none' && (
-          <View style={styles.equipmentBadge}>
-            <Ionicons name="construct-outline" size={12} color={COLORS.SECONDARY[600]} />
-            <Text style={styles.equipmentText}>{exercise.equipment_needed}</Text>
-          </View>
-        )}
       </View>
     );
   };
@@ -638,14 +583,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  exerciseIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
   exerciseInfo: {
     flex: 1,
   },
@@ -660,20 +597,22 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
   },
-  exerciseStats: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
-  statBadge: {
+  detailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    paddingTop: 8,
   },
-  statText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.SEMIBOLD,
+  detailText: {
+    fontSize: 11,
+    fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
+    flex: 1,
+    textAlign: 'center',
+  },
+  detailDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: COLORS.SECONDARY[300],
   },
   demoButton: {
     flexDirection: 'row',
@@ -690,17 +629,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[500],
-  },
-  equipmentBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  equipmentText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
   },
   footerLoader: {
     flexDirection: 'row',
