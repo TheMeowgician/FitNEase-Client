@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,23 +15,54 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { workoutNotificationScheduler, NotificationSettings } from '../../services/workoutNotificationScheduler';
-import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { COLORS, FONTS } from '../../constants/colors';
 
 const { width } = Dimensions.get('window');
 const STORAGE_KEY = '@notification_settings';
 
-const MORNING_TIMES = [
-  { label: '6:00', period: 'AM', value: '06:00', icon: 'sunny-outline' },
-  { label: '7:00', period: 'AM', value: '07:00', icon: 'sunny-outline' },
-  { label: '8:00', period: 'AM', value: '08:00', icon: 'sunny' },
-  { label: '9:00', period: 'AM', value: '09:00', icon: 'sunny' },
-  { label: '10:00', period: 'AM', value: '10:00', icon: 'sunny' },
-];
+type Period = 'morning' | 'afternoon' | 'evening';
 
+const TIME_OPTIONS: Record<Period, { label: string; value: string }[]> = {
+  morning: [
+    { label: '5:00 AM', value: '05:00' },
+    { label: '6:00 AM', value: '06:00' },
+    { label: '7:00 AM', value: '07:00' },
+    { label: '8:00 AM', value: '08:00' },
+    { label: '9:00 AM', value: '09:00' },
+    { label: '10:00 AM', value: '10:00' },
+    { label: '11:00 AM', value: '11:00' },
+  ],
+  afternoon: [
+    { label: '12:00 PM', value: '12:00' },
+    { label: '1:00 PM', value: '13:00' },
+    { label: '2:00 PM', value: '14:00' },
+    { label: '3:00 PM', value: '15:00' },
+    { label: '4:00 PM', value: '16:00' },
+    { label: '5:00 PM', value: '17:00' },
+  ],
+  evening: [
+    { label: '6:00 PM', value: '18:00' },
+    { label: '7:00 PM', value: '19:00' },
+    { label: '8:00 PM', value: '20:00' },
+    { label: '9:00 PM', value: '21:00' },
+  ],
+};
+
+const PERIOD_META: Record<Period, { label: string; icon: string; color: string; bgColor: string }> = {
+  morning: { label: 'Morning', icon: 'sunny', color: '#F59E0B', bgColor: '#FEF3C7' },
+  afternoon: { label: 'Afternoon', icon: 'partly-sunny', color: '#F97316', bgColor: '#FFF7ED' },
+  evening: { label: 'Evening', icon: 'moon', color: '#8B5CF6', bgColor: '#F3E8FF' },
+};
+
+function getPeriodForTime(value: string): Period {
+  const hour = parseInt(value.split(':')[0], 10);
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
 
 export default function NotificationSettingsScreen() {
   const { user } = useAuth();
@@ -40,7 +71,8 @@ export default function NotificationSettingsScreen() {
   const [isEnabled, setIsEnabled] = useState(true);
   const [morningTime, setMorningTime] = useState('08:00');
   const [hasPermission, setHasPermission] = useState(false);
-  const [scaleAnim] = useState(new Animated.Value(1));
+  const [activePeriod, setActivePeriod] = useState<Period>('morning');
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     loadSettings();
@@ -54,6 +86,7 @@ export default function NotificationSettingsScreen() {
         const settings: NotificationSettings = JSON.parse(stored);
         setIsEnabled(settings.enabled);
         setMorningTime(settings.morningReminderTime);
+        setActivePeriod(getPeriodForTime(settings.morningReminderTime));
       }
     } catch (error) {
       console.error('Error loading notification settings:', error);
@@ -74,11 +107,15 @@ export default function NotificationSettingsScreen() {
     }
   };
 
-  const handleTimeSelect = (value: string) => {
+  const handlePeriodChange = (period: Period) => {
     Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
+    setActivePeriod(period);
+  };
+
+  const handleTimeSelect = (value: string) => {
     setMorningTime(value);
   };
 
@@ -130,6 +167,8 @@ export default function NotificationSettingsScreen() {
     const hour12 = hour % 12 || 12;
     return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
   };
+
+  const currentPeriodMeta = PERIOD_META[activePeriod];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -219,72 +258,94 @@ export default function NotificationSettingsScreen() {
           <>
             {/* Time Picker Section */}
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconBadge, { backgroundColor: '#FEF3C7' }]}>
-                  <Ionicons name="time" size={20} color="#F59E0B" />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Reminder Time</Text>
-                  <Text style={styles.cardSubtitle}>When should we remind you?</Text>
+              <View style={styles.timePickerHeader}>
+                <Text style={styles.timePickerTitle}>Reminder Time</Text>
+                <View style={styles.selectedTimeBadge}>
+                  <Ionicons name="time-outline" size={14} color={COLORS.PRIMARY[600]} />
+                  <Text style={styles.selectedTimeText}>{formatTime(morningTime)}</Text>
                 </View>
               </View>
 
-              <View style={styles.timeGrid}>
-                {MORNING_TIMES.map((time) => {
-                  const isSelected = morningTime === time.value;
+              {/* Period Tabs */}
+              <View style={styles.periodTabs}>
+                {(Object.keys(PERIOD_META) as Period[]).map((period) => {
+                  const meta = PERIOD_META[period];
+                  const isActive = activePeriod === period;
                   return (
                     <TouchableOpacity
-                      key={time.value}
-                      onPress={() => handleTimeSelect(time.value)}
+                      key={period}
+                      onPress={() => handlePeriodChange(period)}
                       activeOpacity={0.7}
+                      style={[
+                        styles.periodTab,
+                        isActive && { backgroundColor: meta.bgColor, borderColor: meta.color },
+                      ]}
                     >
-                      <Animated.View
-                        style={[
-                          styles.timeCard,
-                          isSelected && styles.timeCardSelected,
-                          isSelected && { transform: [{ scale: scaleAnim }] },
-                        ]}
-                      >
-                        <Ionicons
-                          name={time.icon as any}
-                          size={18}
-                          color={isSelected ? COLORS.PRIMARY[500] : COLORS.SECONDARY[300]}
-                          style={styles.timeIcon}
-                        />
-                        <Text style={[styles.timeLabel, isSelected && styles.timeLabelSelected]}>
-                          {time.label}
-                        </Text>
-                        <Text style={[styles.timePeriod, isSelected && styles.timePeriodSelected]}>
-                          {time.period}
-                        </Text>
-                        {isSelected && (
-                          <View style={styles.selectedCheck}>
-                            <Ionicons name="checkmark" size={12} color={COLORS.NEUTRAL.WHITE} />
-                          </View>
-                        )}
-                      </Animated.View>
+                      <Ionicons
+                        name={meta.icon as any}
+                        size={16}
+                        color={isActive ? meta.color : COLORS.SECONDARY[400]}
+                      />
+                      <Text style={[
+                        styles.periodTabLabel,
+                        isActive && { color: meta.color, fontFamily: FONTS.SEMIBOLD },
+                      ]}>
+                        {meta.label}
+                      </Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              {/* Time Chips */}
+              <Animated.View style={[styles.timeChipsContainer, { opacity: fadeAnim }]}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.timeChipsScroll}
+                >
+                  {TIME_OPTIONS[activePeriod].map((time) => {
+                    const isSelected = morningTime === time.value;
+                    return (
+                      <TouchableOpacity
+                        key={time.value}
+                        onPress={() => handleTimeSelect(time.value)}
+                        activeOpacity={0.7}
+                      >
+                        {isSelected ? (
+                          <LinearGradient
+                            colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.timeChipSelected}
+                          >
+                            <Text style={styles.timeChipTextSelected}>{time.label}</Text>
+                          </LinearGradient>
+                        ) : (
+                          <View style={styles.timeChip}>
+                            <Text style={styles.timeChipText}>{time.label}</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </Animated.View>
             </View>
 
             {/* Preview Card */}
             <View style={styles.previewCard}>
               <View style={styles.previewHeader}>
-                <Ionicons name="phone-portrait-outline" size={18} color={COLORS.PRIMARY[600]} />
+                <Ionicons name="phone-portrait-outline" size={16} color={COLORS.SECONDARY[500]} />
                 <Text style={styles.previewTitle}>Notification Preview</Text>
               </View>
               <View style={styles.notificationPreview}>
-                <View style={styles.notificationIcon}>
-                  <Ionicons name="fitness" size={16} color={COLORS.NEUTRAL.WHITE} />
-                </View>
                 <View style={styles.notificationContent}>
                   <View style={styles.notificationHeader}>
                     <Text style={styles.notificationApp}>FitNEase</Text>
                     <Text style={styles.notificationTime}>{formatTime(morningTime)}</Text>
                   </View>
-                  <Text style={styles.notificationTitle}>Workout Day!</Text>
+                  <Text style={styles.notificationTitleText}>Workout Day!</Text>
                   <Text style={styles.notificationBody}>
                     Time to crush your Tabata workout today.
                   </Text>
@@ -493,86 +554,102 @@ const styles = StyleSheet.create({
   switch: {
     transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }],
   },
-  cardHeader: {
+
+  // Redesigned Time Picker
+  timePickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    marginBottom: 18,
   },
-  cardHeaderText: {
-    marginLeft: 14,
-    flex: 1,
-  },
-  cardTitle: {
+  timePickerTitle: {
     fontSize: 16,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
-  cardSubtitle: {
-    fontSize: 13,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
-    marginTop: 2,
-  },
-  timeGrid: {
+  selectedTimeBadge: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: 'space-between',
-  },
-  timeCard: {
-    width: (width - 72) / 3,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: COLORS.NEUTRAL[50],
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    position: 'relative',
-  },
-  timeCardSelected: {
     backgroundColor: COLORS.PRIMARY[50],
-    borderColor: COLORS.PRIMARY[500],
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 5,
   },
-  timeIcon: {
-    marginBottom: 6,
-  },
-  timeLabel: {
-    fontSize: 18,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[700],
-  },
-  timeLabelSelected: {
+  selectedTimeText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
   },
-  timePeriod: {
-    fontSize: 11,
-    fontFamily: FONTS.MEDIUM,
-    color: COLORS.SECONDARY[400],
-    marginTop: 2,
+
+  // Period Tabs
+  periodTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 18,
   },
-  timePeriodSelected: {
-    color: COLORS.PRIMARY[500],
-  },
-  selectedCheck: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.PRIMARY[500],
-    justifyContent: 'center',
+  periodTab: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: COLORS.NEUTRAL[50],
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    gap: 6,
   },
+  periodTabLabel: {
+    fontSize: 13,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[500],
+  },
+
+  // Time Chips
+  timeChipsContainer: {
+    marginHorizontal: -20,
+  },
+  timeChipsScroll: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  timeChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: COLORS.NEUTRAL[50],
+    borderWidth: 1.5,
+    borderColor: COLORS.NEUTRAL[200],
+  },
+  timeChipSelected: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  timeChipText: {
+    fontSize: 14,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[700],
+  },
+  timeChipTextSelected: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+
+  // Preview Card
   previewCard: {
-    backgroundColor: COLORS.PRIMARY[50],
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 20,
     padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.PRIMARY[100],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   previewHeader: {
     flexDirection: 'row',
@@ -582,19 +659,16 @@ const styles = StyleSheet.create({
   },
   previewTitle: {
     fontSize: 13,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[700],
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[500],
   },
   notificationPreview: {
     flexDirection: 'row',
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+    backgroundColor: COLORS.NEUTRAL[50],
     borderRadius: 14,
     padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.NEUTRAL[100],
   },
   notificationIcon: {
     width: 36,
@@ -624,7 +698,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[400],
   },
-  notificationTitle: {
+  notificationTitleText: {
     fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
