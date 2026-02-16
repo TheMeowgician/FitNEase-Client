@@ -505,13 +505,14 @@ export default function WorkoutSessionScreen() {
     // MemberLeft broadcasts on lobby.{sessionId}, not session.{sessionId}
     reverbService.subscribeToPrivateChannel(`lobby.${sessionId}`, {
       onEvent: (eventName, data) => {
-        if (eventName === 'member.left' && data.user_id !== user?.id) {
+        if (eventName === 'member.left' && Number(data.user_id) !== Number(user?.id)) {
           console.log(`👋 Member left workout: ${data.user_name}`);
+          const leftMemberId = Number(data.user_id);
           // Track intentional leave so presence member_removed doesn't show duplicate toast
-          recentlyLeftMembersRef.current.add(data.user_id);
+          recentlyLeftMembersRef.current.add(leftMemberId);
           // Also cache the name from the backend event (always has the correct username)
           if (data.user_name) {
-            memberNamesRef.current.set(data.user_id, data.user_name);
+            memberNamesRef.current.set(leftMemberId, data.user_name);
           }
           setMemberLeftName(data.user_name);
         }
@@ -529,14 +530,39 @@ export default function WorkoutSessionScreen() {
     // Without a grace period, these transitions would trigger false disconnect/reconnect toasts.
     presenceGraceUntilRef.current = Date.now() + 8000; // 8s grace for everyone to settle
 
-    // Cache member names NOW from the Zustand store while it still has data.
-    // Later, clearLobbyAndStorage() may clear the store, making live lookups return null.
-    const storeSnapshot = useLobbyStore.getState();
-    if (storeSnapshot.currentLobby?.members) {
-      for (const m of storeSnapshot.currentLobby.members) {
-        memberNamesRef.current.set(m.user_id, m.user_name);
+    // Helper: cache a member name with Number() key to avoid string/number mismatch in Map
+    const cacheMemberName = (id: any, name: string) => {
+      const numId = Number(id);
+      if (numId && name) {
+        memberNamesRef.current.set(numId, name);
       }
-      console.log(`📋 [SESSION] Cached ${memberNamesRef.current.size} member names for presence tracking`);
+    };
+
+    // Cache member names NOW from the Zustand store while it still has data.
+    // Use Number() on user_id to ensure consistent Map key types (backend may send string or number).
+    const storeSnapshot = useLobbyStore.getState();
+    if (storeSnapshot.currentLobby?.members?.length) {
+      for (const m of storeSnapshot.currentLobby.members) {
+        cacheMemberName(m.user_id, m.user_name);
+      }
+      console.log(`📋 [SESSION] Cached ${memberNamesRef.current.size} member names from Zustand store`);
+    }
+
+    // Fallback: if Zustand store had no members (cleared during transition), fetch from backend.
+    // This runs async during the 8s grace period, so names will be ready before real events arrive.
+    if (memberNamesRef.current.size === 0) {
+      console.log('⚠️ [SESSION] Zustand store had no members, fetching from backend...');
+      socialService.getLobbyStateV2(sessionId).then(response => {
+        const members = response?.data?.lobby_state?.members;
+        if (members?.length) {
+          for (const m of members) {
+            cacheMemberName(m.user_id, m.user_name);
+          }
+          console.log(`📋 [SESSION] Cached ${memberNamesRef.current.size} member names from backend API`);
+        }
+      }).catch(err => {
+        console.warn('⚠️ [SESSION] Failed to fetch member names from backend:', err?.message);
+      });
     }
 
     reverbService.subscribeToPresence(`lobby.${sessionId}`, {
@@ -544,8 +570,8 @@ export default function WorkoutSessionScreen() {
         // Ignore presence events during grace period (lobby → session transition)
         if (Date.now() < presenceGraceUntilRef.current) return;
 
-        const memberId = parseInt(member?.id || member?.user_id || '0');
-        if (!memberId || memberId === parseInt(user?.id || '0')) return;
+        const memberId = Number(member?.id || member?.user_id || 0);
+        if (!memberId || memberId === Number(user?.id || 0)) return;
 
         // Skip if this member intentionally left (already handled by member.left toast)
         if (recentlyLeftMembersRef.current.has(memberId)) {
@@ -554,12 +580,12 @@ export default function WorkoutSessionScreen() {
           return;
         }
 
-        // Resolve member name: cached ref → Pusher auth info → Zustand store → fallback
+        // Resolve member name: cached ref → Pusher auth info → live Zustand store → fallback
         const memberName =
           memberNamesRef.current.get(memberId) ||
           member?.info?.name ||
           member?.info?.user_name ||
-          useLobbyStore.getState().currentLobby?.members?.find((m: any) => m.user_id === memberId)?.user_name ||
+          useLobbyStore.getState().currentLobby?.members?.find((m: any) => Number(m.user_id) === memberId)?.user_name ||
           'A member';
 
         // Track as disconnected so we can show "reconnected" if they come back
@@ -572,8 +598,8 @@ export default function WorkoutSessionScreen() {
         // Ignore presence events during grace period (lobby → session transition)
         if (Date.now() < presenceGraceUntilRef.current) return;
 
-        const memberId = parseInt(member?.id || member?.user_id || '0');
-        if (!memberId || memberId === parseInt(user?.id || '0')) return;
+        const memberId = Number(member?.id || member?.user_id || 0);
+        if (!memberId || memberId === Number(user?.id || 0)) return;
 
         // Only show "reconnected" toast if this member was previously disconnected
         const previousName = disconnectedMembersRef.current.get(memberId);
