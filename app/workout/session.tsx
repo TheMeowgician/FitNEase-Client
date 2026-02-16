@@ -126,6 +126,7 @@ export default function WorkoutSessionScreen() {
   const [memberReconnectedName, setMemberReconnectedName] = useState<string | null>(null);
   const recentlyLeftMembersRef = useRef<Set<number>>(new Set());
   const disconnectedMembersRef = useRef<Map<number, string>>(new Map()); // userId → userName
+  const memberNamesRef = useRef<Map<number, string>>(new Map()); // Cached userId → userName at subscription time
   const presenceGraceUntilRef = useRef<number>(0); // Ignore presence events until this timestamp
 
   // Draggable video position
@@ -508,6 +509,10 @@ export default function WorkoutSessionScreen() {
           console.log(`👋 Member left workout: ${data.user_name}`);
           // Track intentional leave so presence member_removed doesn't show duplicate toast
           recentlyLeftMembersRef.current.add(data.user_id);
+          // Also cache the name from the backend event (always has the correct username)
+          if (data.user_name) {
+            memberNamesRef.current.set(data.user_id, data.user_name);
+          }
           setMemberLeftName(data.user_name);
         }
       },
@@ -524,6 +529,16 @@ export default function WorkoutSessionScreen() {
     // Without a grace period, these transitions would trigger false disconnect/reconnect toasts.
     presenceGraceUntilRef.current = Date.now() + 8000; // 8s grace for everyone to settle
 
+    // Cache member names NOW from the Zustand store while it still has data.
+    // Later, clearLobbyAndStorage() may clear the store, making live lookups return null.
+    const storeSnapshot = useLobbyStore.getState();
+    if (storeSnapshot.currentLobby?.members) {
+      for (const m of storeSnapshot.currentLobby.members) {
+        memberNamesRef.current.set(m.user_id, m.user_name);
+      }
+      console.log(`📋 [SESSION] Cached ${memberNamesRef.current.size} member names for presence tracking`);
+    }
+
     reverbService.subscribeToPresence(`lobby.${sessionId}`, {
       onLeaving: (member: any) => {
         // Ignore presence events during grace period (lobby → session transition)
@@ -539,10 +554,13 @@ export default function WorkoutSessionScreen() {
           return;
         }
 
-        // Look up member name from lobby store
-        const store = useLobbyStore.getState();
-        const memberInfo = store.currentLobby?.members?.find((m) => m.user_id === memberId);
-        const memberName = memberInfo?.user_name || 'A member';
+        // Resolve member name: cached ref → Pusher auth info → Zustand store → fallback
+        const memberName =
+          memberNamesRef.current.get(memberId) ||
+          member?.info?.name ||
+          member?.info?.user_name ||
+          useLobbyStore.getState().currentLobby?.members?.find((m: any) => m.user_id === memberId)?.user_name ||
+          'A member';
 
         // Track as disconnected so we can show "reconnected" if they come back
         disconnectedMembersRef.current.set(memberId, memberName);
