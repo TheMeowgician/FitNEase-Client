@@ -36,6 +36,8 @@ import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 import AgoraVideoCall from '../../components/video/AgoraVideoCall';
 import ExerciseDemoModal from '../../components/workout/ExerciseDemoModal';
 import MemberLeftToast from '../../components/workout/MemberLeftToast';
+import MemberDisconnectedToast from '../../components/workout/MemberDisconnectedToast';
+import MemberReconnectedToast from '../../components/workout/MemberReconnectedToast';
 import { hasExerciseDemo } from '../../constants/exerciseDemos';
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
@@ -116,8 +118,12 @@ export default function WorkoutSessionScreen() {
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const [isVideoFullScreen, setIsVideoFullScreen] = useState(false);
 
-  // Member left toast state
+  // Member left / disconnected / reconnected toast state
   const [memberLeftName, setMemberLeftName] = useState<string | null>(null);
+  const [memberDisconnectedName, setMemberDisconnectedName] = useState<string | null>(null);
+  const [memberReconnectedName, setMemberReconnectedName] = useState<string | null>(null);
+  const recentlyLeftMembersRef = useRef<Set<number>>(new Set());
+  const disconnectedMembersRef = useRef<Map<number, string>>(new Map()); // userId → userName
 
   // Draggable video position
   const pan = useRef(new Animated.ValueXY({ x: Dimensions.get('window').width - 170, y: Dimensions.get('window').height - 320 })).current;
@@ -256,9 +262,10 @@ export default function WorkoutSessionScreen() {
         clearInterval(intervalRef.current);
       }
 
-      // Unsubscribe from session channel
+      // Unsubscribe from session and presence channels
       if (type === 'group_tabata' && tabataSession) {
         reverbService.unsubscribe(`private-session.${tabataSession.session_id}`);
+        reverbService.unsubscribe(`presence-lobby.${tabataSession.session_id}`);
       }
     };
   }, []);
@@ -496,7 +503,50 @@ export default function WorkoutSessionScreen() {
       onEvent: (eventName, data) => {
         if (eventName === 'member.left' && data.user_id !== user?.id) {
           console.log(`👋 Member left workout: ${data.user_name}`);
+          // Track intentional leave so presence member_removed doesn't show duplicate toast
+          recentlyLeftMembersRef.current.add(data.user_id);
           setMemberLeftName(data.user_name);
+        }
+      },
+    });
+
+    // Subscribe to presence channel for disconnect/reconnect detection
+    // When a member's WebSocket connection drops (app crash, network loss),
+    // Pusher fires member_removed automatically — no API call needed.
+    // When they reconnect, Pusher fires member_added.
+    reverbService.subscribeToPresence(`lobby.${sessionId}`, {
+      onLeaving: (member: any) => {
+        const memberId = parseInt(member?.id || member?.user_id || '0');
+        if (!memberId || memberId === parseInt(user?.id || '0')) return;
+
+        // Skip if this member intentionally left (already handled by member.left toast)
+        if (recentlyLeftMembersRef.current.has(memberId)) {
+          console.log(`ℹ️ [SESSION] Member ${memberId} left intentionally, skipping disconnect toast`);
+          recentlyLeftMembersRef.current.delete(memberId);
+          return;
+        }
+
+        // Look up member name from lobby store
+        const store = useLobbyStore.getState();
+        const memberInfo = store.currentLobby?.members?.find((m) => m.user_id === memberId);
+        const memberName = memberInfo?.user_name || 'A member';
+
+        // Track as disconnected so we can show "reconnected" if they come back
+        disconnectedMembersRef.current.set(memberId, memberName);
+
+        console.log(`📡 [SESSION] Member disconnected: ${memberName} (${memberId})`);
+        setMemberDisconnectedName(memberName);
+      },
+      onJoining: (member: any) => {
+        const memberId = parseInt(member?.id || member?.user_id || '0');
+        if (!memberId || memberId === parseInt(user?.id || '0')) return;
+
+        // Only show "reconnected" toast if this member was previously disconnected
+        const previousName = disconnectedMembersRef.current.get(memberId);
+        if (previousName) {
+          disconnectedMembersRef.current.delete(memberId);
+          console.log(`📡 [SESSION] Member reconnected: ${previousName} (${memberId})`);
+          setMemberReconnectedName(previousName);
         }
       },
     });
@@ -855,6 +905,10 @@ export default function WorkoutSessionScreen() {
       // Unsubscribe from lobby channel (uses private- prefix)
       reverbService.unsubscribe(`private-lobby.${sessionId}`);
       console.log('✅ [CLEANUP] Unsubscribed from lobby channel');
+
+      // Unsubscribe from presence channel (disconnect detection)
+      reverbService.unsubscribe(`presence-lobby.${sessionId}`);
+      console.log('✅ [CLEANUP] Unsubscribed from presence channel');
 
       // Clear lobby from global store
       const store = useLobbyStore.getState();
@@ -1889,6 +1943,20 @@ export default function WorkoutSessionScreen() {
         memberName={memberLeftName || ''}
         visible={!!memberLeftName}
         onDismiss={() => setMemberLeftName(null)}
+      />
+
+      {/* Member Disconnected Toast */}
+      <MemberDisconnectedToast
+        memberName={memberDisconnectedName || ''}
+        visible={!!memberDisconnectedName}
+        onDismiss={() => setMemberDisconnectedName(null)}
+      />
+
+      {/* Member Reconnected Toast */}
+      <MemberReconnectedToast
+        memberName={memberReconnectedName || ''}
+        visible={!!memberReconnectedName}
+        onDismiss={() => setMemberReconnectedName(null)}
       />
     </SafeAreaView>
   );
