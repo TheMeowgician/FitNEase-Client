@@ -98,19 +98,10 @@ export function GlobalLobbyIndicator() {
     console.log('🔄 [INDICATOR] Attempting to rejoin workout session...');
 
     try {
-      // Re-register member on backend (in case they were marked as left)
-      try {
-        await socialService.joinLobbyV2(activeSessionData.sessionId);
-        console.log('✅ [INDICATOR] Re-joined lobby on backend');
-      } catch (joinError: any) {
-        // User might still be active in the lobby, which is fine
-        const errorMessage = joinError?.message || '';
-        if (errorMessage.includes('already in') || errorMessage.includes('already a member')) {
-          console.log('ℹ️ [INDICATOR] User still active in lobby - continuing reconnect');
-        } else {
-          console.warn('⚠️ [INDICATOR] Join error (continuing anyway):', errorMessage);
-        }
-      }
+      // No need to call joinLobbyV2 — the user is still a member (closing the app
+      // doesn't trigger a leave). The lobby status is 'in_progress' which rejects
+      // new joins anyway. We just navigate to the session screen and the WebSocket
+      // subscription handles the rest.
 
       // Navigate to session screen with stored params
       router.replace({
