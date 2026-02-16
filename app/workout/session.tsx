@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { useReverb } from '../../contexts/ReverbProvider';
+import { useLobby } from '../../contexts/LobbyContext';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { socialService } from '../../services/microservices/socialService';
@@ -59,6 +60,7 @@ export default function WorkoutSessionScreen() {
   const alert = useAlert();
   const { refreshGroupSubscriptions } = useReverb();
   const { refreshAfterWorkout } = useProgressStore();
+  const { clearActiveLobbyLocal, clearActiveSession } = useLobby();
   const params = useLocalSearchParams();
   const { workoutId, type, sessionData, initiatorId, groupId } = params;
 
@@ -924,10 +926,17 @@ export default function WorkoutSessionScreen() {
       reverbService.unsubscribe(`presence-lobby.${sessionId}`);
       console.log('✅ [CLEANUP] Unsubscribed from presence channel');
 
-      // Clear lobby from global store
+      // Clear lobby from global store (Zustand)
       const store = useLobbyStore.getState();
       store.clearLobby();
       console.log('✅ [CLEANUP] Lobby cleared from global store');
+
+      // Clear LobbyContext in-memory state (activeLobby → null)
+      // CRITICAL: Without this, GlobalLobbyIndicator stays visible because
+      // isInLobby (from LobbyContext) remains true even after Zustand/AsyncStorage are cleared
+      await clearActiveLobbyLocal();
+      clearActiveSession();
+      console.log('✅ [CLEANUP] LobbyContext state cleared');
     } catch (error) {
       console.error('❌ [CLEANUP] Failed to clear lobby/storage:', error);
     }
