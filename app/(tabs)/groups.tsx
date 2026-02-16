@@ -331,12 +331,6 @@ export default function GroupsScreen() {
                       />
                       <Text style={styles.groupTagText}>{group.type}</Text>
                     </View>
-                    {group.category && (
-                      <View style={styles.groupTag}>
-                        <Ionicons name="fitness" size={14} color={COLORS.SECONDARY[600]} />
-                        <Text style={styles.groupTagText}>{group.category}</Text>
-                      </View>
-                    )}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -386,12 +380,6 @@ export default function GroupsScreen() {
                       <Ionicons name="globe" size={14} color={COLORS.PRIMARY[600]} />
                       <Text style={styles.groupTagText}>{group.type}</Text>
                     </View>
-                    {group.category && (
-                      <View style={styles.groupTag}>
-                        <Ionicons name="fitness" size={14} color={COLORS.SECONDARY[600]} />
-                        <Text style={styles.groupTagText}>{group.category}</Text>
-                      </View>
-                    )}
                     {pendingRequestGroupIds.has(group.id) ? (
                       <TouchableOpacity
                         style={styles.pendingBadge}

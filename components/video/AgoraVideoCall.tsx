@@ -517,6 +517,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
+    elevation: 100,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },

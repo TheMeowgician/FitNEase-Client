@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -180,13 +180,13 @@ export default function ProgressUpdateModal({
           <View style={styles.workoutSummary}>
             <View style={styles.summaryItem}>
               <Ionicons name="time" size={24} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.summaryValue}>{workoutData.duration} min</Text>
+              <Text style={styles.summaryValue}>{Math.round(workoutData.duration)} min</Text>
               <Text style={styles.summaryLabel}>Duration</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Ionicons name="flame" size={24} color={COLORS.ERROR[500]} />
-              <Text style={styles.summaryValue}>{workoutData.calories}</Text>
+              <Text style={styles.summaryValue}>{Math.round(workoutData.calories)}</Text>
               <Text style={styles.summaryLabel}>Calories</Text>
             </View>
           </View>
@@ -251,31 +251,11 @@ export default function ProgressUpdateModal({
           </View>
 
           {/* Progress to Next Level */}
-          <View style={styles.progressSection}>
-            <View style={styles.progressHeader}>
-              <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.progressTitle}>Progress to {afterStats.nextLevel}</Text>
-            </View>
-            <View style={styles.progressBarContainer}>
-              <Animated.View
-                style={[
-                  styles.progressBarFill,
-                  {
-                    width: scoreProgressAnim.interpolate({
-                      inputRange: [0, 100],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-            </View>
-            <Animated.Text style={styles.progressPercentage}>
-              {scoreProgressAnim.interpolate({
-                inputRange: [0, 100],
-                outputRange: ['0%', '100%'],
-              })}
-            </Animated.Text>
-          </View>
+          <ProgressToNextLevel
+            nextLevel={afterStats.nextLevel}
+            scoreProgressAnim={scoreProgressAnim}
+            beforeProgress={beforeStats.scoreProgress}
+          />
 
           {/* Close Button */}
           <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
@@ -299,7 +279,15 @@ interface StatRowProps {
 
 function StatRow({ icon, label, beforeValue, afterValue, animatedValue, color }: StatRowProps) {
   const hasIncrease = afterValue > beforeValue;
-  const increase = afterValue - beforeValue;
+  const increase = Math.round(afterValue - beforeValue);
+  const [displayValue, setDisplayValue] = useState(Math.round(beforeValue));
+
+  useEffect(() => {
+    const listenerId = animatedValue.addListener(({ value }) => {
+      setDisplayValue(Math.round(value));
+    });
+    return () => animatedValue.removeListener(listenerId);
+  }, [animatedValue]);
 
   return (
     <View style={styles.statRow}>
@@ -310,12 +298,7 @@ function StatRow({ icon, label, beforeValue, afterValue, animatedValue, color }:
         <Text style={styles.statLabel}>{label}</Text>
       </View>
       <View style={styles.statRight}>
-        <Animated.Text style={styles.statValue}>
-          {animatedValue.interpolate({
-            inputRange: [0, 1000000],
-            outputRange: ['0', '1000000'],
-          })}
-        </Animated.Text>
+        <Text style={styles.statValue}>{displayValue}</Text>
         {hasIncrease && (
           <View style={styles.increaseContainer}>
             <Ionicons name="arrow-up" size={14} color={COLORS.SUCCESS[600]} />
@@ -323,6 +306,40 @@ function StatRow({ icon, label, beforeValue, afterValue, animatedValue, color }:
           </View>
         )}
       </View>
+    </View>
+  );
+}
+
+function ProgressToNextLevel({ nextLevel, scoreProgressAnim, beforeProgress }: { nextLevel: string; scoreProgressAnim: Animated.Value; beforeProgress: number }) {
+  const [displayPercent, setDisplayPercent] = useState(Math.round(beforeProgress));
+
+  useEffect(() => {
+    const listenerId = scoreProgressAnim.addListener(({ value }) => {
+      setDisplayPercent(Math.round(value));
+    });
+    return () => scoreProgressAnim.removeListener(listenerId);
+  }, [scoreProgressAnim]);
+
+  return (
+    <View style={styles.progressSection}>
+      <View style={styles.progressHeader}>
+        <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[600]} />
+        <Text style={styles.progressTitle}>Progress to {nextLevel}</Text>
+      </View>
+      <View style={styles.progressBarContainer}>
+        <Animated.View
+          style={[
+            styles.progressBarFill,
+            {
+              width: scoreProgressAnim.interpolate({
+                inputRange: [0, 100],
+                outputRange: ['0%', '100%'],
+              }),
+            },
+          ]}
+        />
+      </View>
+      <Text style={styles.progressPercentage}>{displayPercent}%</Text>
     </View>
   );
 }

@@ -1826,7 +1826,7 @@ export default function WorkoutSessionScreen() {
               <View style={styles.exerciseMeta}>
                 <Ionicons name="body" size={14} color="rgba(255, 255, 255, 0.9)" />
                 <Text style={styles.exerciseMetaText}>
-                  {(getCurrentExercise() as any)?.target_muscle_group || 'Full Body'}
+                  {((getCurrentExercise() as any)?.target_muscle_group || 'Full Body').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                 </Text>
               </View>
             </View>

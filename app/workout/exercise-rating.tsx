@@ -307,7 +307,7 @@ export default function ExerciseRatingScreen() {
             <View style={styles.muscleBadge}>
               <Ionicons name="body" size={14} color={COLORS.PRIMARY[600]} />
               <Text style={styles.muscleBadgeText}>
-                {currentExercise.target_muscle_group}
+                {currentExercise.target_muscle_group.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
               </Text>
             </View>
           )}

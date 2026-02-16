@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
+import AchievementUnlockModal, { UnlockedAchievement } from '../../components/achievements/AchievementUnlockModal';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { getAchievementIcon } from '../../constants/achievementIcons';
@@ -61,6 +62,8 @@ export default function AchievementsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
+  const [showAchievementModal, setShowAchievementModal] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState<UnlockedAchievement | null>(null);
 
   useEffect(() => {
     loadAchievements();
@@ -240,12 +243,25 @@ export default function AchievementsScreen() {
               const rarityConfig = getRarityConfig(achievement.rarity_level);
 
               return (
-                <View
+                <TouchableOpacity
                   key={achievement.achievement_id}
+                  activeOpacity={0.7}
                   style={[
                     styles.achievementCard,
                     !achievement.isUnlocked && styles.achievementCardLocked,
                   ]}
+                  onPress={() => {
+                    setSelectedAchievement({
+                      achievement_id: achievement.achievement_id,
+                      achievement_name: achievement.achievement_name,
+                      description: achievement.description,
+                      badge_icon: achievement.badge_icon,
+                      badge_color: achievement.badge_color,
+                      rarity_level: achievement.rarity_level as any,
+                      points_value: achievement.points_value,
+                    });
+                    setShowAchievementModal(true);
+                  }}
                 >
                   {/* Rarity Badge */}
                   <View style={[styles.rarityBadge, { backgroundColor: rarityConfig.bgColor }]}>
@@ -313,7 +329,7 @@ export default function AchievementsScreen() {
                       <Ionicons name="checkmark-circle" size={20} color={COLORS.SUCCESS[500]} />
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -333,6 +349,16 @@ export default function AchievementsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Achievement Detail Modal */}
+      <AchievementUnlockModal
+        visible={showAchievementModal}
+        achievements={selectedAchievement ? [selectedAchievement] : []}
+        onClose={() => {
+          setShowAchievementModal(false);
+          setSelectedAchievement(null);
+        }}
+      />
     </SafeAreaView>
   );
 }

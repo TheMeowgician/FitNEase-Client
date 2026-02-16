@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressionCard from '../../components/ProgressionCard';
+import AchievementUnlockModal, { UnlockedAchievement } from '../../components/achievements/AchievementUnlockModal';
 import { progressionService } from '../../services/microservices/progressionService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
@@ -53,6 +55,8 @@ export default function ProgressScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [engagementStreak, setEngagementStreak] = useState(0);
+  const [showAchievementModal, setShowAchievementModal] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState<UnlockedAchievement | null>(null);
 
   useEffect(() => {
     loadProgressData();
@@ -269,7 +273,22 @@ export default function ProgressScreen() {
 
           <View style={styles.milestonesContainer}>
             {/* First Workout */}
-            <View style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 1 && styles.milestoneCardCompleted]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 1 && styles.milestoneCardCompleted]}
+              onPress={() => {
+                setSelectedAchievement({
+                  achievement_id: 1,
+                  achievement_name: 'First Workout',
+                  description: 'Complete your very first workout session. Every journey begins with a single step!',
+                  badge_icon: 'fitness',
+                  badge_color: COLORS.PRIMARY[600],
+                  rarity_level: 'common',
+                  points_value: 50,
+                });
+                setShowAchievementModal(true);
+              }}
+            >
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
@@ -283,10 +302,25 @@ export default function ProgressScreen() {
                 </View>
               </View>
               {(overallStats?.totalWorkouts || 0) >= 1 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </View>
+            </TouchableOpacity>
 
             {/* 10 Workouts */}
-            <View style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 10 && styles.milestoneCardCompleted]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 10 && styles.milestoneCardCompleted]}
+              onPress={() => {
+                setSelectedAchievement({
+                  achievement_id: 2,
+                  achievement_name: 'Getting Started',
+                  description: 'Complete 10 workout sessions. You\'re building a solid foundation!',
+                  badge_icon: 'rocket',
+                  badge_color: COLORS.WARNING[600],
+                  rarity_level: 'rare',
+                  points_value: 100,
+                });
+                setShowAchievementModal(true);
+              }}
+            >
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
@@ -300,10 +334,25 @@ export default function ProgressScreen() {
                 </View>
               </View>
               {(overallStats?.totalWorkouts || 0) >= 10 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </View>
+            </TouchableOpacity>
 
             {/* 7 Day Streak */}
-            <View style={[styles.milestoneCard, engagementStreak >= 7 && styles.milestoneCardCompleted]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={[styles.milestoneCard, engagementStreak >= 7 && styles.milestoneCardCompleted]}
+              onPress={() => {
+                setSelectedAchievement({
+                  achievement_id: 3,
+                  achievement_name: 'On Fire',
+                  description: 'Maintain a 7-day workout streak. Consistency is the key to progress!',
+                  badge_icon: 'flame',
+                  badge_color: COLORS.ERROR[500],
+                  rarity_level: 'epic',
+                  points_value: 200,
+                });
+                setShowAchievementModal(true);
+              }}
+            >
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
@@ -317,10 +366,25 @@ export default function ProgressScreen() {
                 </View>
               </View>
               {engagementStreak >= 7 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </View>
+            </TouchableOpacity>
 
             {/* 28 Active Days */}
-            <View style={[styles.milestoneCard, (overallStats?.activeDays || 0) >= 28 && styles.milestoneCardCompleted]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={[styles.milestoneCard, (overallStats?.activeDays || 0) >= 28 && styles.milestoneCardCompleted]}
+              onPress={() => {
+                setSelectedAchievement({
+                  achievement_id: 4,
+                  achievement_name: 'Dedicated',
+                  description: 'Stay active for 28 days. You\'re proving your dedication to fitness!',
+                  badge_icon: 'medal',
+                  badge_color: COLORS.SUCCESS[600],
+                  rarity_level: 'legendary',
+                  points_value: 500,
+                });
+                setShowAchievementModal(true);
+              }}
+            >
               <View style={styles.milestoneLeft}>
                 <View style={[
                   styles.milestoneIconContainer,
@@ -334,7 +398,7 @@ export default function ProgressScreen() {
                 </View>
               </View>
               {(overallStats?.activeDays || 0) >= 28 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -349,6 +413,16 @@ export default function ProgressScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Achievement Detail Modal */}
+      <AchievementUnlockModal
+        visible={showAchievementModal}
+        achievements={selectedAchievement ? [selectedAchievement] : []}
+        onClose={() => {
+          setShowAchievementModal(false);
+          setSelectedAchievement(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
