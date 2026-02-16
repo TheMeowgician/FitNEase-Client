@@ -739,6 +739,21 @@ export default function WorkoutSessionScreen() {
           const srv = serverStateRef.current;
           activePhase = srv.phase;
 
+          // Detect stale server: no ticks for 5+ seconds while timer at 0
+          // This handles the case where host clicks "Finish for All" but
+          // WorkoutCompleted event doesn't reach non-host clients
+          const timeSinceLastTick = now - lastServerTickRef.current;
+          if (newTimeRemaining === 0 && timeSinceLastTick > 5000 && prev.status === 'running') {
+            console.log('🔄 [SESSION] Server stopped ticking with time at 0 - auto-completing workout');
+            playSound('complete');
+            return {
+              ...prev,
+              timeRemaining: 0,
+              phase: 'complete',
+              status: 'completed',
+            };
+          }
+
           // Only update React state if something actually changed
           const timeChanged = newTimeRemaining !== prev.timeRemaining;
           const phaseChanged = srv.phase !== prev.phase;

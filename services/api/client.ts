@@ -437,7 +437,7 @@ export class APIClient {
       const isSwapEndpoint = config.url?.includes('/exercises/swap');
 
       // For non-critical services (ML, tracking, engagement, planning), log as warning instead of error
-      const isNonCriticalService = service === 'ml' || service === 'tracking' || service === 'engagement' || service === 'planning';
+      const isNonCriticalService = service === 'ml' || service === 'tracking' || service === 'engagement' || service === 'planning' || service === 'communications';
 
       if (isLogoutError) {
         // Logout errors are expected when session is already expired
@@ -466,9 +466,9 @@ export class APIClient {
           url: config.url
         });
         throw error;
-      } else if (isNonCriticalService && isServiceUnavailable) {
-        // Only log brief warning for expected non-critical service failures
-        console.warn(`⚠️ Non-critical service ${service} unavailable (expected):`, {
+      } else if (isNonCriticalService) {
+        // Non-critical services: brief warning only (callers handle failures gracefully)
+        console.warn(`⚠️ Non-critical service ${service} error (non-blocking):`, {
           message: errorMessage,
           url: config.url
         });
