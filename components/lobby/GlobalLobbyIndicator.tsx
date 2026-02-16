@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,54 @@ export function GlobalLobbyIndicator() {
   const [isRejoining, setIsRejoining] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const isCleaningUpRef = useRef(false);
+  const hasAutoNavigatedRef = useRef<string | null>(null);
+
+  // Background workout start detection
+  // When user minimizes lobby and host starts workout, the Zustand store updates
+  // to 'in_progress' via WebSocket. This effect detects that and auto-navigates.
+  useEffect(() => {
+    if (!currentLobby || !activeLobby || !isInLobby) return;
+
+    const isOnSession = pathname?.includes('/workout/session');
+    const isOnLobby = pathname?.includes('/workout/group-lobby');
+    const sessionId = currentLobby.session_id;
+
+    if (
+      currentLobby.status === 'in_progress' &&
+      !isOnSession &&
+      !isOnLobby &&
+      hasAutoNavigatedRef.current !== sessionId &&
+      currentLobby.workout_data?.exercises?.length > 0
+    ) {
+      console.log('🚨 [INDICATOR] Background workout start detected! Auto-navigating to session...');
+      hasAutoNavigatedRef.current = sessionId;
+
+      // Build session data from Zustand store
+      const tabataSession = {
+        session_id: sessionId,
+        session_name: `Group Workout - ${currentLobby.group_id}`,
+        difficulty_level: 'intermediate',
+        total_exercises: currentLobby.workout_data.exercises.length,
+        total_duration_minutes: currentLobby.workout_data.exercises.length * 4,
+        estimated_calories: currentLobby.workout_data.exercises.reduce(
+          (sum: number, ex: any) => sum + (ex.estimated_calories_burned || 0), 0
+        ),
+        exercises: currentLobby.workout_data.exercises,
+        created_at: new Date().toISOString(),
+      };
+
+      router.replace({
+        pathname: '/workout/session',
+        params: {
+          sessionData: JSON.stringify(tabataSession),
+          type: 'group_tabata',
+          isGroup: 'true',
+          initiatorId: currentLobby.initiator_id.toString(),
+          groupId: currentLobby.group_id.toString(),
+        },
+      });
+    }
+  }, [currentLobby?.status, currentLobby?.session_id, pathname, isInLobby]);
 
   // Don't show indicator if not in lobby or already on lobby screen
   const isOnLobbyScreen = pathname?.includes('/workout/group-lobby');

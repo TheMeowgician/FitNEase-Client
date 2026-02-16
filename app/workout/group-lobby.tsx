@@ -712,17 +712,19 @@ export default function GroupLobbyScreen() {
       console.log('🔌 Calling subscribeToLobby...');
       channelRef.current = reverbService.subscribeToLobby(sessionId, {
       onLobbyStateChanged: (data: any) => {
-        // CRITICAL: Guard against updates during cleanup to prevent stale state
-        if (isCleaningUpRef.current || !isMountedRef.current) {
-          console.log('⚠️ [REAL-TIME] Ignoring LobbyStateChanged during cleanup');
-          return;
-        }
-        console.log('📊 [REAL-TIME] Lobby state changed:', data);
-        // CRITICAL: This is the single source of truth for lobby state
-        // Backend broadcasts this event for ALL changes (join, leave, status, kick, transfer, etc.)
+        // ALWAYS update Zustand store even when unmounted (global state, safe to call)
+        // This ensures the global listener in _layout.tsx can detect workout starts
+        // when the user has minimized the lobby screen
         if (data?.lobby_state) {
           setLobbyState(data.lobby_state);
         }
+
+        // Guard React state/UI updates during cleanup
+        if (isCleaningUpRef.current || !isMountedRef.current) {
+          console.log('📊 [REAL-TIME] Lobby state updated in store (component unmounted)');
+          return;
+        }
+        console.log('📊 [REAL-TIME] Lobby state changed:', data);
       },
       // NOTE: Individual events like MemberJoined, MemberLeft, MemberStatusUpdated are kept
       // for system chat messages only. State updates come from LobbyStateChanged above.
