@@ -777,9 +777,17 @@ export default function GroupLobbyScreen() {
         }
       },
       onWorkoutStarted: (data: any) => {
-        // Guard against updates during cleanup
+        // ALWAYS update Zustand store status to 'in_progress' (even when unmounted)
+        // This allows GlobalLobbyIndicator to detect workout start when user minimized lobby
+        const currentStoreState = useLobbyStore.getState().currentLobby;
+        if (currentStoreState && currentStoreState.status !== 'in_progress') {
+          setLobbyState({ ...currentStoreState, status: 'in_progress' });
+          console.log('📊 [REAL-TIME] Updated Zustand store status to in_progress');
+        }
+
+        // Guard against React state/UI updates during cleanup
         if (isCleaningUpRef.current || !isMountedRef.current) {
-          console.log('⚠️ [REAL-TIME] Ignoring WorkoutStarted during cleanup');
+          console.log('🏋️ [REAL-TIME] WorkoutStarted received while unmounted - Zustand updated, GlobalLobbyIndicator will handle navigation');
           return;
         }
         console.log('🏋️ Workout started!', data);
