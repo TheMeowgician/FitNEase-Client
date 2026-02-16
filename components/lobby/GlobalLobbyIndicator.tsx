@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
@@ -27,9 +26,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  * - Quick navigation back to lobby
  * - Real-time status updates via Zustand store
  * - Robust cleanup on leave
+ * - Session reconnect: shows "Rejoin Workout" when a workout is in progress
  */
 export function GlobalLobbyIndicator() {
-  const { activeLobby, isInLobby, clearActiveLobbyLocal } = useLobby();
+  const { activeLobby, isInLobby, clearActiveLobbyLocal, activeSessionData, clearActiveSession } = useLobby();
   const currentLobby = useLobbyStore(selectCurrentLobby);
   const lobbyMembers = useLobbyStore(selectLobbyMembers);
   const allMembersReady = useLobbyStore(selectAreAllMembersReady);
@@ -40,6 +40,7 @@ export function GlobalLobbyIndicator() {
   const alert = useAlert();
 
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isRejoining, setIsRejoining] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const isCleaningUpRef = useRef(false);
 
@@ -61,32 +62,93 @@ export function GlobalLobbyIndicator() {
     return null;
   }
 
+  // Determine if we're in reconnect mode (workout in progress)
+  const isSessionReconnect = !!activeSessionData;
+
   // Get member info from Zustand store (real-time) or fallback
   const memberCount = currentLobby?.members?.length || lobbyMembers.length || 1;
   const readyCount = currentLobby?.members?.filter((m: any) => m.status === 'ready').length ||
                      lobbyMembers.filter((m: any) => m.status === 'ready').length || 0;
 
   const handlePress = () => {
-    if (isLeaving) return;
+    if (isLeaving || isRejoining) return;
 
-    router.push({
-      pathname: '/workout/group-lobby',
-      params: {
-        sessionId: activeLobby.sessionId,
-        groupId: activeLobby.groupId,
-        workoutData: '',
-        initiatorId: activeLobby.userId.toString(),
-        isCreatingLobby: 'false',
-      },
-    });
+    if (isSessionReconnect) {
+      // Reconnect to active workout session
+      handleRejoinSession();
+    } else {
+      // Navigate to lobby screen
+      router.push({
+        pathname: '/workout/group-lobby',
+        params: {
+          sessionId: activeLobby.sessionId,
+          groupId: activeLobby.groupId,
+          workoutData: '',
+          initiatorId: activeLobby.userId.toString(),
+          isCreatingLobby: 'false',
+        },
+      });
+    }
+  };
+
+  const handleRejoinSession = async () => {
+    if (!activeSessionData || isRejoining) return;
+
+    setIsRejoining(true);
+    console.log('🔄 [INDICATOR] Attempting to rejoin workout session...');
+
+    try {
+      // Re-register member on backend (in case they were marked as left)
+      try {
+        await socialService.joinLobbyV2(activeSessionData.sessionId);
+        console.log('✅ [INDICATOR] Re-joined lobby on backend');
+      } catch (joinError: any) {
+        // User might still be active in the lobby, which is fine
+        const errorMessage = joinError?.message || '';
+        if (errorMessage.includes('already in') || errorMessage.includes('already a member')) {
+          console.log('ℹ️ [INDICATOR] User still active in lobby - continuing reconnect');
+        } else {
+          console.warn('⚠️ [INDICATOR] Join error (continuing anyway):', errorMessage);
+        }
+      }
+
+      // Navigate to session screen with stored params
+      router.replace({
+        pathname: '/workout/session',
+        params: {
+          sessionData: activeSessionData.sessionData,
+          type: 'group_tabata',
+          isGroup: 'true',
+          initiatorId: activeSessionData.initiatorId,
+          groupId: activeSessionData.groupId,
+        },
+      });
+
+      // Clear active session data (session screen will re-save it)
+      clearActiveSession();
+
+      console.log('✅ [INDICATOR] Navigated to workout session for reconnect');
+    } catch (error) {
+      console.error('❌ [INDICATOR] Failed to rejoin session:', error);
+      alert.error('Reconnect Failed', 'Could not rejoin the workout session. The session may have ended.');
+      // Clear stale session data
+      clearActiveSession();
+    } finally {
+      setIsRejoining(false);
+    }
   };
 
   const handleLeave = () => {
     if (isLeaving) return;
 
+    const title = isSessionReconnect ? 'Leave Workout' : 'Leave Lobby';
+    const message = isSessionReconnect
+      ? 'Are you sure you want to leave the active workout?'
+      : 'Are you sure you want to leave the lobby?';
+
     alert.confirm(
-      'Leave Lobby',
-      'Are you sure you want to leave the lobby?',
+      title,
+      message,
       async () => {
         await performLeave();
       },
@@ -131,6 +193,8 @@ export function GlobalLobbyIndicator() {
       reverbService.unsubscribe(`private-lobby.${activeLobby.sessionId}`);
       reverbService.unsubscribe(`presence-lobby.${activeLobby.sessionId}`);
       reverbService.unsubscribe(`presence-group.${activeLobby.groupId}`);
+      // Also unsubscribe from session channel in case of reconnect scenario
+      reverbService.unsubscribe(`private-session.${activeLobby.sessionId}`);
       console.log('✅ [INDICATOR] Unsubscribed from channels');
     } catch (error) {
       console.error('❌ [INDICATOR] Error unsubscribing:', error);
@@ -157,6 +221,12 @@ export function GlobalLobbyIndicator() {
       console.error('❌ [INDICATOR] Error clearing LobbyContext:', error);
     }
 
+    // Step 6: Clear active session data if present
+    if (activeSessionData) {
+      clearActiveSession();
+      console.log('✅ [INDICATOR] Active session data cleared');
+    }
+
     console.log('✅ [INDICATOR] Leave complete');
     setIsLeaving(false);
     isCleaningUpRef.current = false;
@@ -166,49 +236,70 @@ export function GlobalLobbyIndicator() {
     setIsExpanded(!isExpanded);
   };
 
+  // Determine styling based on mode
+  const containerStyle = isSessionReconnect
+    ? [styles.container, styles.containerReconnect, { bottom: insets.bottom + 80 }]
+    : [styles.container, { bottom: insets.bottom + 80 }];
+
+  const iconContainerStyle = isSessionReconnect
+    ? [styles.iconContainer, styles.iconContainerReconnect]
+    : styles.iconContainer;
+
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          bottom: insets.bottom + 80, // Position above tab bar
-        }
-      ]}
-    >
+    <View style={containerStyle}>
       {/* Main Indicator */}
       <TouchableOpacity
         style={styles.mainContent}
         onPress={handlePress}
         onLongPress={toggleExpand}
         activeOpacity={0.9}
-        disabled={isLeaving}
+        disabled={isLeaving || isRejoining}
       >
         <View style={styles.content}>
-          {/* Icon with status indicator */}
-          <View style={styles.iconContainer}>
-            <Ionicons name="people" size={22} color={COLORS.NEUTRAL.WHITE} />
-            <View style={[
-              styles.statusDot,
-              allMembersReady && memberCount >= 2 ? styles.statusDotReady : styles.statusDotWaiting
-            ]} />
+          {/* Icon */}
+          <View style={iconContainerStyle}>
+            {isSessionReconnect ? (
+              <Ionicons name="fitness" size={22} color={COLORS.NEUTRAL.WHITE} />
+            ) : (
+              <>
+                <Ionicons name="people" size={22} color={COLORS.NEUTRAL.WHITE} />
+                <View style={[
+                  styles.statusDot,
+                  allMembersReady && memberCount >= 2 ? styles.statusDotReady : styles.statusDotWaiting
+                ]} />
+              </>
+            )}
           </View>
 
           {/* Info */}
           <View style={styles.textContainer}>
-            <Text style={styles.title} numberOfLines={1}>
-              {activeLobby.groupName}
-            </Text>
-            <Text style={styles.subtitle}>
-              {memberCount} {memberCount === 1 ? 'member' : 'members'} • {readyCount} ready
-            </Text>
+            {isSessionReconnect ? (
+              <>
+                <Text style={styles.title} numberOfLines={1}>
+                  Workout In Progress
+                </Text>
+                <Text style={styles.subtitle}>
+                  Tap to rejoin {activeLobby.groupName}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.title} numberOfLines={1}>
+                  {activeLobby.groupName}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {memberCount} {memberCount === 1 ? 'member' : 'members'} • {readyCount} ready
+                </Text>
+              </>
+            )}
           </View>
 
-          {/* Arrow or Loading */}
-          {isLeaving ? (
+          {/* Action Button */}
+          {isLeaving || isRejoining ? (
             <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
           ) : (
             <TouchableOpacity
-              style={styles.leaveButton}
+              style={isSessionReconnect ? styles.dismissButton : styles.leaveButton}
               onPress={handleLeave}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -218,8 +309,8 @@ export function GlobalLobbyIndicator() {
         </View>
       </TouchableOpacity>
 
-      {/* Expanded View with Member Details */}
-      {isExpanded && !isLeaving && (
+      {/* Expanded View with Member Details (only for lobby mode, not reconnect) */}
+      {isExpanded && !isLeaving && !isSessionReconnect && (
         <View style={styles.expandedSection}>
           <View style={styles.expandedDivider} />
 
@@ -277,6 +368,9 @@ const styles = StyleSheet.create({
     elevation: 8,
     overflow: 'hidden',
   },
+  containerReconnect: {
+    backgroundColor: COLORS.WARNING[600],
+  },
   mainContent: {
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -294,6 +388,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+  },
+  iconContainerReconnect: {
+    backgroundColor: COLORS.WARNING[700],
   },
   statusDot: {
     position: 'absolute',
@@ -326,6 +423,14 @@ const styles = StyleSheet.create({
     color: COLORS.SUCCESS[100],
   },
   leaveButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissButton: {
     width: 32,
     height: 32,
     borderRadius: 16,

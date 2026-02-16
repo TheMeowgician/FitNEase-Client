@@ -12,6 +12,13 @@ interface LobbySession {
   expiresAt: number;
 }
 
+interface ActiveSessionData {
+  sessionData: string;
+  initiatorId: string;
+  groupId: string;
+  sessionId: string;
+}
+
 interface LobbyContextType {
   activeLobby: LobbySession | null;
   setActiveLobby: (lobby: LobbySession | null) => void;
@@ -21,6 +28,8 @@ interface LobbyContextType {
   saveLobbySession: (sessionId: string, groupId: string, groupName: string) => Promise<void>;
   checkForActiveLobby: () => Promise<void>;
   isInLobby: boolean;
+  activeSessionData: ActiveSessionData | null;
+  clearActiveSession: () => void;
   autoCleanupOnReload: boolean;
   setAutoCleanupOnReload: (value: boolean) => void;
 }
@@ -30,7 +39,12 @@ const LobbyContext = createContext<LobbyContextType | undefined>(undefined);
 export function LobbyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [activeLobby, setActiveLobby] = useState<LobbySession | null>(null);
+  const [activeSessionData, setActiveSessionData] = useState<ActiveSessionData | null>(null);
   const [autoCleanupOnReload, setAutoCleanupOnReload] = useState(false); // Default to false - only enable for development hot-reload scenarios
+
+  const clearActiveSession = () => {
+    setActiveSessionData(null);
+  };
 
   // Check for active lobby on mount
   useEffect(() => {
@@ -340,17 +354,62 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
         const response = await socialService.getLobbyStateV2(lobbySession.sessionId);
 
         if (response.status === 'success' && response.data) {
-          console.log('✅ [LOBBY CONTEXT] Lobby still active on server');
+          const lobbyState = response.data.lobby_state;
+          console.log('✅ [LOBBY CONTEXT] Lobby still active on server, status:', lobbyState?.status);
           setActiveLobby(lobbySession);
+
+          // Check if a workout session is in progress (user may need to reconnect)
+          if (lobbyState?.status === 'in_progress') {
+            console.log('🔄 [LOBBY CONTEXT] Workout is in progress! Checking for reconnect data...');
+
+            // First try: check AsyncStorage for saved session data (most reliable)
+            const activeSessionKey = `activeSession_user_${user.id}`;
+            const storedSession = await AsyncStorage.getItem(activeSessionKey);
+
+            if (storedSession) {
+              const sessionInfo = JSON.parse(storedSession);
+              console.log('✅ [LOBBY CONTEXT] Found stored session data for reconnect:', {
+                sessionId: sessionInfo.sessionId,
+                groupId: sessionInfo.groupId,
+              });
+              setActiveSessionData({
+                sessionData: sessionInfo.sessionData,
+                initiatorId: sessionInfo.initiatorId,
+                groupId: sessionInfo.groupId,
+                sessionId: sessionInfo.sessionId,
+              });
+            } else if (lobbyState.workout_data) {
+              // Fallback: reconstruct session data from backend lobby state
+              console.log('🔄 [LOBBY CONTEXT] No stored session, reconstructing from backend workout_data');
+              setActiveSessionData({
+                sessionData: JSON.stringify(lobbyState.workout_data),
+                initiatorId: String(lobbyState.initiator_id),
+                groupId: String(lobbyState.group_id),
+                sessionId: lobbyState.session_id,
+              });
+            } else {
+              console.log('⚠️ [LOBBY CONTEXT] Workout in progress but no session data available');
+            }
+          } else {
+            // Lobby is waiting/not in progress — clear any stale session data
+            setActiveSessionData(null);
+            const activeSessionKey = `activeSession_user_${user.id}`;
+            await AsyncStorage.removeItem(activeSessionKey);
+          }
         } else {
           console.log('⚠️ [LOBBY CONTEXT] Lobby not found on server, clearing...');
           await AsyncStorage.removeItem(lobbyKey);
           setActiveLobby(null);
+          setActiveSessionData(null);
+          // Also clear stale active session data
+          const activeSessionKey = `activeSession_user_${user.id}`;
+          await AsyncStorage.removeItem(activeSessionKey);
         }
       } catch (error) {
         console.error('❌ [LOBBY CONTEXT] Failed to validate lobby, clearing...', error);
         await AsyncStorage.removeItem(lobbyKey);
         setActiveLobby(null);
+        setActiveSessionData(null);
       }
     } catch (error) {
       console.error('❌ [LOBBY CONTEXT] Error checking for active lobby:', error);
@@ -369,6 +428,8 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
         saveLobbySession,
         checkForActiveLobby,
         isInLobby: !!activeLobby,
+        activeSessionData,
+        clearActiveSession,
         autoCleanupOnReload,
         setAutoCleanupOnReload,
       }}

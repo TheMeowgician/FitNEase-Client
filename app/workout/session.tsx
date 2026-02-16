@@ -308,6 +308,25 @@ export default function WorkoutSessionScreen() {
           totalTime: session.total_duration_minutes * 60, // Convert minutes to seconds
         }));
         console.log(`✅ Loaded Tabata session with ${session.exercises.length} exercises`);
+
+        // Persist active session to AsyncStorage for reconnect support
+        if (type === 'group_tabata' && user) {
+          try {
+            const activeSessionKey = `activeSession_user_${user.id}`;
+            await AsyncStorage.setItem(activeSessionKey, JSON.stringify({
+              sessionId: session.session_id,
+              groupId: groupId,
+              sessionData: sessionData as string,
+              initiatorId: initiatorId as string,
+              type: type,
+              startedAt: Date.now(),
+            }));
+            console.log('💾 [SESSION] Saved active session to AsyncStorage for reconnect');
+          } catch (storageError) {
+            console.error('⚠️ [SESSION] Failed to save active session:', storageError);
+          }
+        }
+
         return;
       }
 
@@ -820,9 +839,14 @@ export default function WorkoutSessionScreen() {
     });
 
     try {
-      // Clear AsyncStorage
+      // Clear lobby AsyncStorage
       await AsyncStorage.removeItem(storageKey);
-      console.log('✅ [CLEANUP] AsyncStorage cleared');
+      console.log('✅ [CLEANUP] Lobby AsyncStorage cleared');
+
+      // Clear active session AsyncStorage (reconnect data)
+      const activeSessionKey = `activeSession_user_${user.id}`;
+      await AsyncStorage.removeItem(activeSessionKey);
+      console.log('✅ [CLEANUP] Active session AsyncStorage cleared');
 
       // Unsubscribe from session channel (prevent receiving pause/resume/stop events after leaving)
       reverbService.unsubscribe(`private-session.${sessionId}`);
@@ -1317,6 +1341,9 @@ export default function WorkoutSessionScreen() {
 
       console.log('📝 [COMPLETE] Exercises to rate:', exercisesToRate.length);
 
+      // Clear lobby state and storage (prevents floating lobby indicator after session ends)
+      await clearLobbyAndStorage();
+
       // Navigate to exercise rating screen with all necessary data
       router.push({
         pathname: '/workout/exercise-rating',
@@ -1342,6 +1369,9 @@ export default function WorkoutSessionScreen() {
 
       // On error, still try to navigate back
       alert.error('Error', 'Failed to save workout. Please try again.');
+
+      // Clear lobby state on error too (prevents floating lobby indicator)
+      await clearLobbyAndStorage();
 
       // Refresh subscriptions and navigate
       try {
