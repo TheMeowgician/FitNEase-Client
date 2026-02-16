@@ -124,6 +124,7 @@ export default function WorkoutSessionScreen() {
   const [memberReconnectedName, setMemberReconnectedName] = useState<string | null>(null);
   const recentlyLeftMembersRef = useRef<Set<number>>(new Set());
   const disconnectedMembersRef = useRef<Map<number, string>>(new Map()); // userId → userName
+  const presenceGraceUntilRef = useRef<number>(0); // Ignore presence events until this timestamp
 
   // Draggable video position
   const pan = useRef(new Animated.ValueXY({ x: Dimensions.get('window').width - 170, y: Dimensions.get('window').height - 320 })).current;
@@ -514,8 +515,18 @@ export default function WorkoutSessionScreen() {
     // When a member's WebSocket connection drops (app crash, network loss),
     // Pusher fires member_removed automatically — no API call needed.
     // When they reconnect, Pusher fires member_added.
+    //
+    // GRACE PERIOD: When the workout starts, all members transition from group-lobby
+    // to session screen. During this transition each member briefly leaves and rejoins
+    // the presence channel (group-lobby unmounts → unsubscribe, session mounts → subscribe).
+    // Without a grace period, these transitions would trigger false disconnect/reconnect toasts.
+    presenceGraceUntilRef.current = Date.now() + 8000; // 8s grace for everyone to settle
+
     reverbService.subscribeToPresence(`lobby.${sessionId}`, {
       onLeaving: (member: any) => {
+        // Ignore presence events during grace period (lobby → session transition)
+        if (Date.now() < presenceGraceUntilRef.current) return;
+
         const memberId = parseInt(member?.id || member?.user_id || '0');
         if (!memberId || memberId === parseInt(user?.id || '0')) return;
 
@@ -538,6 +549,9 @@ export default function WorkoutSessionScreen() {
         setMemberDisconnectedName(memberName);
       },
       onJoining: (member: any) => {
+        // Ignore presence events during grace period (lobby → session transition)
+        if (Date.now() < presenceGraceUntilRef.current) return;
+
         const memberId = parseInt(member?.id || member?.user_id || '0');
         if (!memberId || memberId === parseInt(user?.id || '0')) return;
 
