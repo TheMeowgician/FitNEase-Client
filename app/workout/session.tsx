@@ -13,6 +13,9 @@ import {
   PanResponder,
   Animated,
   Dimensions,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +43,11 @@ import MemberLeftToast from '../../components/workout/MemberLeftToast';
 import MemberDisconnectedToast from '../../components/workout/MemberDisconnectedToast';
 import MemberReconnectedToast from '../../components/workout/MemberReconnectedToast';
 import { hasExerciseDemo } from '../../constants/exerciseDemos';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
 type SessionStatus = 'ready' | 'running' | 'paused' | 'completed';
@@ -308,6 +316,18 @@ export default function WorkoutSessionScreen() {
     };
   }, [sessionState.status]);
 
+  // Smooth layout animation when transitioning to completed state
+  // This prevents the visual "blink" when buttons and UI elements swap out
+  const prevStatusRef = useRef<SessionStatus>(sessionState.status);
+  useEffect(() => {
+    if (prevStatusRef.current !== 'completed' && sessionState.status === 'completed') {
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(300, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
+      );
+    }
+    prevStatusRef.current = sessionState.status;
+  }, [sessionState.status]);
+
   const loadWorkout = async () => {
     try {
       // Check if we have a generated Tabata session (new format)
@@ -495,8 +515,8 @@ export default function WorkoutSessionScreen() {
           }, 500);
         } else if (eventName === 'WorkoutCompleted') {
           console.log(`✅ Workout finished by ${data.initiatorName}`);
-          // Set status to completed - user must click COMPLETE button to save and exit
-          setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+          // Set status to completed with smooth transition
+          transitionToCompleted();
         }
       },
     });
@@ -1629,6 +1649,11 @@ export default function WorkoutSessionScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Smooth transition to completed state — animates layout changes (buttons swapping, etc.)
+  const transitionToCompleted = () => {
+    setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
+  };
+
   const getPhaseColor = () => {
     switch (sessionState.phase) {
       case 'prepare': return '#3B82F6';
@@ -1940,23 +1965,20 @@ export default function WorkoutSessionScreen() {
                 // Mark that auto finish was used (for saving full stats later)
                 wasAutoFinished.current = true;
 
+                // Set status to completed IMMEDIATELY (optimistic) so UI transitions instantly
+                // Don't wait for the HTTP round-trip — that only affects other members via WebSocket
+                transitionToCompleted();
+
                 if (type === 'group_tabata' && tabataSession) {
-                  // For group workouts, broadcast finish to all members
+                  // Broadcast finish to all members in background
                   try {
                     console.log('🏁 [AUTO FINISH] Broadcasting finish to all members');
-                    console.log('🏁 [AUTO FINISH] Session ID:', tabataSession.session_id);
                     await socialService.finishWorkout(tabataSession.session_id);
                     console.log('✅ [AUTO FINISH] Finish broadcasted successfully');
-
-                    // Set status to completed - user must click COMPLETE button to see progress update
-                    setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
                   } catch (error) {
                     console.error('❌ [AUTO FINISH] Failed to broadcast finish:', error);
-                    alert.error('Error', 'Failed to finish workout for all members');
+                    alert.error('Error', 'Failed to notify other members. Your workout is still complete.');
                   }
-                } else {
-                  // Solo workout - set status to completed, user must click COMPLETE
-                  setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
                 }
               }}
             >
