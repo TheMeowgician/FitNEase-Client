@@ -23,6 +23,7 @@ export interface LobbyState {
   session_id: string;
   group_id: number;
   initiator_id: number;
+  customizer_id?: number | null; // User who controls exercise swaps (separate from initiator)
   status: 'waiting' | 'starting' | 'in_progress' | 'completed';
   workout_data: any;
   members: LobbyMember[];

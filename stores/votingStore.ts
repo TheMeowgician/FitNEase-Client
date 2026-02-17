@@ -42,6 +42,7 @@ export interface VotingState {
   result: 'pending' | 'accept_recommended' | 'customize' | null;
   reason: 'all_voted' | 'majority' | 'timeout' | null;
   finalExercises: VotingExercise[];
+  customizerId: number | null; // User who controls exercise swaps after customize vote
 }
 
 interface VotingStore extends VotingState {
@@ -66,6 +67,7 @@ interface VotingStore extends VotingState {
     acceptCount: number;
     customizeCount: number;
     finalExercises: VotingExercise[];
+    customizerId?: number | null;
   }) => void;
   clearVoting: () => void;
 
@@ -91,6 +93,7 @@ const INITIAL_STATE: VotingState = {
   result: null,
   reason: null,
   finalExercises: [],
+  customizerId: null,
 };
 
 export const useVotingStore = create<VotingStore>((set, get) => ({
@@ -237,6 +240,7 @@ export const useVotingStore = create<VotingStore>((set, get) => ({
         reason: data.reason,
         memberVotes: updatedVotes,
         finalExercises: data.finalExercises,
+        customizerId: data.customizerId ?? null,
       };
     });
   },

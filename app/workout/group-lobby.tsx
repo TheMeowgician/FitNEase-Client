@@ -146,6 +146,17 @@ export default function GroupLobbyScreen() {
     m => m.user_role === 'mentor' || m.fitness_level === 'advanced'
   );
 
+  // Determine if current user is the designated customizer (separate from initiator)
+  // customizer_id is set by backend when voting completes with "customize" result
+  // Falls back to initiator for backward compatibility
+  const customizerId = currentLobby?.customizer_id || currentLobby?.workout_data?.customizer_id;
+  const isCustomizer = customizerId
+    ? parseInt(currentUser?.id || '0') === customizerId
+    : isInitiator; // fallback for backward compatibility
+  const customizerName = customizerId
+    ? lobbyMembers.find(m => m.user_id === customizerId)?.user_name || 'Unknown'
+    : null;
+
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
@@ -1020,7 +1031,7 @@ export default function GroupLobbyScreen() {
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('[REAL-TIME] Voting complete:', data);
 
-        // Complete voting in store
+        // Complete voting in store (includes customizer_id from backend)
         completeVoting({
           result: data.result,
           reason: data.reason,
@@ -1028,7 +1039,19 @@ export default function GroupLobbyScreen() {
           acceptCount: data.accept_count,
           customizeCount: data.customize_count,
           finalExercises: data.final_exercises,
+          customizerId: data.customizer_id ?? null,
         });
+
+        // Update lobby state with customizer_id if customize won
+        if (data.result === 'customize' && data.customizer_id) {
+          const latestLobby = useLobbyStore.getState().currentLobby;
+          if (latestLobby) {
+            setLobbyState({
+              ...latestLobby,
+              customizer_id: data.customizer_id,
+            });
+          }
+        }
       },
       // Exercise swap event (during group customization)
       onExerciseSwapped: (data: any) => {
@@ -1680,11 +1703,11 @@ export default function GroupLobbyScreen() {
   };
 
   /**
-   * Open swap modal for an exercise (initiator only)
+   * Open swap modal for an exercise (customizer only)
    */
   const handleOpenSwapModal = (index: number, exercise: any) => {
-    if (!isInitiator) {
-      alert.info('Initiator Only', 'Only the lobby initiator can swap exercises.');
+    if (!isCustomizer) {
+      alert.info('Customizer Only', 'Only the designated customizer can swap exercises.');
       return;
     }
     setSelectedExerciseForSwap({ index, exercise });
@@ -1699,7 +1722,7 @@ export default function GroupLobbyScreen() {
    * We track pending swaps and check WebSocket confirmation before showing errors.
    */
   const handleExerciseSwap = async (newExercise: any) => {
-    if (!isInitiator || !sessionId || !selectedExerciseForSwap || isSwappingExercise) return;
+    if (!isCustomizer || !sessionId || !selectedExerciseForSwap || isSwappingExercise) return;
 
     setIsSwappingExercise(true);
 
@@ -2280,20 +2303,20 @@ export default function GroupLobbyScreen() {
               <View style={styles.customizationHeader}>
                 <Ionicons name="options" size={20} color={COLORS.PRIMARY[600]} />
                 <Text style={styles.customizationTitle}>Customize Workout</Text>
-                {isInitiator && (
+                {isCustomizer && (
                   <View style={styles.initiatorBadge}>
                     <Text style={styles.initiatorBadgeText}>You Control</Text>
                   </View>
                 )}
               </View>
 
-              {isInitiator ? (
+              {isCustomizer ? (
                 <Text style={styles.customizationDescription}>
                   Tap the swap button on any exercise to replace it with an alternative.
                 </Text>
               ) : (
                 <Text style={styles.customizationDescription}>
-                  The initiator is customizing the workout. Changes will appear here in real-time.
+                  {customizerName ? `${customizerName} is customizing` : 'The customizer is customizing'} the workout. Changes will appear here in real-time.
                 </Text>
               )}
 
@@ -2322,8 +2345,8 @@ export default function GroupLobbyScreen() {
                       </View>
                     </View>
 
-                    {/* Swap Button - Only for initiator */}
-                    {isInitiator && (
+                    {/* Swap Button - Only for customizer */}
+                    {isCustomizer && (
                       <TouchableOpacity
                         style={styles.swapButton}
                         onPress={() => handleOpenSwapModal(index, exercise)}
