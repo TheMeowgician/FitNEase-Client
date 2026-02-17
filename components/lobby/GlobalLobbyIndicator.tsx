@@ -44,6 +44,12 @@ export function GlobalLobbyIndicator() {
   const [isExpanded, setIsExpanded] = useState(false);
   const isCleaningUpRef = useRef(false);
   const hasAutoNavigatedRef = useRef<string | null>(null);
+  // Track the previous lobby status to detect real-time transitions.
+  // Auto-navigation should ONLY fire when status TRANSITIONS from a known
+  // non-in_progress state (e.g. 'waiting') to 'in_progress' via WebSocket.
+  // On app reload, the first observed status is already 'in_progress' (restored
+  // from AsyncStorage), so there's no transition and the reconnect banner shows instead.
+  const previousLobbyStatusRef = useRef<string | null>(null);
 
   // Background workout start detection
   // When user minimizes lobby and host starts workout, the Zustand store updates
@@ -51,12 +57,22 @@ export function GlobalLobbyIndicator() {
   useEffect(() => {
     if (!currentLobby || !activeLobby || !isInLobby) return;
 
+    const currentStatus = currentLobby.status;
+    const previousStatus = previousLobbyStatusRef.current;
+    previousLobbyStatusRef.current = currentStatus;
+
+    // Only auto-navigate on a REAL transition to 'in_progress'
+    // (previous must be a known non-in_progress status like 'waiting' or 'starting')
+    // This prevents auto-navigation on app reload where the first observed status
+    // is already 'in_progress' from AsyncStorage restoration
+    const isRealTransition = previousStatus !== null && previousStatus !== 'in_progress' && currentStatus === 'in_progress';
+    if (!isRealTransition) return;
+
     const isOnSession = pathname?.includes('/workout/session');
     const isOnLobby = pathname?.includes('/workout/group-lobby');
     const sessionId = currentLobby.session_id;
 
     if (
-      currentLobby.status === 'in_progress' &&
       !isOnSession &&
       !isOnLobby &&
       hasAutoNavigatedRef.current !== sessionId &&
