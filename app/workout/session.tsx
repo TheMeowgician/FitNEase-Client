@@ -98,7 +98,7 @@ export default function WorkoutSessionScreen() {
   const lastCountdownBeepRef = useRef<number>(-1); // Track last countdown beep to avoid duplicates
   const halfwayPlayedRef = useRef<boolean>(false); // Track if halfway sound played this phase
   const appState = useRef(AppState.currentState);
-  const isInitiator = user?.id.toString() === initiatorId;
+  const [isInitiator, setIsInitiator] = useState(user?.id.toString() === initiatorId);
 
   // Progress modal state
   const [showProgressModal, setShowProgressModal] = useState(false);
@@ -515,6 +515,17 @@ export default function WorkoutSessionScreen() {
             memberNamesRef.current.set(leftMemberId, data.user_name);
           }
           setMemberLeftName(data.user_name);
+        }
+
+        // Handle initiator role transfer during active workout
+        // When the initiator leaves, the backend transfers the role and auto-resumes if paused
+        if (eventName === 'initiator.transferred') {
+          const newInitiatorId = Number(data.new_initiator_id);
+          if (newInitiatorId === Number(user?.id)) {
+            console.log('👑 [SESSION] You are now the workout initiator');
+            setIsInitiator(true);
+            alert.info('You are now the leader', 'You can now control the workout (pause, stop, finish).');
+          }
         }
       },
     });
@@ -952,6 +963,12 @@ export default function WorkoutSessionScreen() {
    * Clear lobby state and AsyncStorage
    */
   const clearLobbyAndStorage = async () => {
+    // CRITICAL: Tear down Agora video call immediately before any async cleanup
+    // This ensures video stops on ALL exit paths (complete, exit, stop, WorkoutStopped)
+    setShowVideoCall(false);
+    setAgoraCredentials(null);
+    setIsVideoFullScreen(false);
+
     if (!tabataSession || !groupId || !user) return;
 
     const sessionId = tabataSession.session_id;
