@@ -352,26 +352,42 @@ export default function GroupLobbyScreen() {
 
     const memberCount = lobbyMembers.length;
 
-    // If we have exercises but less than 2 members, clear them
-    if (hasExercises && memberCount < 2) {
-      console.log('🧹 [LOBBY] Member count dropped below 2, clearing exercises');
-      setExerciseDetails([]);
+    // If member count drops below 2, clear all workout state (exercises, voting, ready check)
+    // This resets the lobby to a clean "waiting" state for when a new member joins
+    if (memberCount < 2) {
+      // Clear voting result (removes "Group accepted the recommended workout!" banner)
+      if (votingResult) {
+        console.log('🧹 [LOBBY] Member count dropped below 2, clearing voting state');
+        clearVoting();
+      }
 
-      // Also clear from lobby state if user is initiator
-      if (isInitiator && currentLobby?.session_id && !isCleaningUpRef.current) {
-        console.log('🧹 [LOBBY] Clearing exercises from backend (initiator)');
-        socialService.updateWorkoutDataV2(currentLobby.session_id, {
-          workout_format: 'tabata',
-          exercises: []
-        }).catch(err => {
-          // Only log error if not cleaning up (expected to fail during cleanup)
-          if (!isCleaningUpRef.current) {
-            console.error('❌ Failed to clear exercises from backend:', err);
-          }
-        });
+      // Clear ready check state so a fresh ready check can be started
+      if (readyCheckResult) {
+        console.log('🧹 [LOBBY] Member count dropped below 2, clearing ready check state');
+        clearReadyCheck();
+        setIsReady(false);
+      }
+
+      // Clear exercises
+      if (hasExercises) {
+        console.log('🧹 [LOBBY] Member count dropped below 2, clearing exercises');
+        setExerciseDetails([]);
+
+        // Also clear from lobby state if user is initiator
+        if (isInitiator && currentLobby?.session_id && !isCleaningUpRef.current) {
+          console.log('🧹 [LOBBY] Clearing exercises from backend (initiator)');
+          socialService.updateWorkoutDataV2(currentLobby.session_id, {
+            workout_format: 'tabata',
+            exercises: []
+          }).catch(err => {
+            if (!isCleaningUpRef.current) {
+              console.error('❌ Failed to clear exercises from backend:', err);
+            }
+          });
+        }
       }
     }
-  }, [lobbyMembers.length, hasExercises, isInitiator, currentLobby?.session_id]);
+  }, [lobbyMembers.length, hasExercises, votingResult, readyCheckResult, isInitiator, currentLobby?.session_id]);
 
   /**
    * Fetch full exercise details when exercises are generated
