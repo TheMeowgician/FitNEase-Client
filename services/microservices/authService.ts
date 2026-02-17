@@ -596,28 +596,21 @@ export class AuthService {
     }
   }
 
-  public async uploadProfilePicture(imageData: string | Blob): Promise<{ profilePictureUrl: string }> {
+  public async uploadProfilePicture(imageUri: string): Promise<{ profilePictureUrl: string }> {
     try {
-      const formData = new FormData();
+      const { mediaService } = await import('./mediaService');
 
-      if (typeof imageData === 'string') {
-        formData.append('profilePicture', imageData);
-      } else {
-        formData.append('profilePicture', imageData, 'profile.jpg');
-      }
+      // Step 1: Upload image file to media service
+      const uploadResponse = await mediaService.uploadProfilePicture(imageUri);
+      const relativeUrl = uploadResponse.data.url;
 
-      const response = await apiClient.post<{ profilePictureUrl: string }>(
-        'auth',
-        '/auth/profile/picture',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      // Step 2: Update auth service with the relative URL
+      const currentUser = await this.getCurrentUser();
+      await apiClient.put('auth', `/api/auth/user-profile/${currentUser.id}`, {
+        profile_picture: relativeUrl,
+      });
 
-      return response.data;
+      return { profilePictureUrl: relativeUrl };
     } catch (error) {
       throw new Error((error as any).message || 'Profile picture upload failed');
     }
@@ -625,8 +618,11 @@ export class AuthService {
 
   public async removeProfilePicture(): Promise<{ message: string }> {
     try {
-      const response = await apiClient.delete<{ message: string }>('auth', '/auth/profile/picture');
-      return response.data;
+      const currentUser = await this.getCurrentUser();
+      await apiClient.put('auth', `/api/auth/user-profile/${currentUser.id}`, {
+        profile_picture: null,
+      });
+      return { message: 'Profile picture removed successfully' };
     } catch (error) {
       throw new Error((error as any).message || 'Profile picture removal failed');
     }

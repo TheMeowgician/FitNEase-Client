@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { DatePicker } from '../../components/ui/DatePicker';
+import { Avatar } from '../../components/ui/Avatar';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
+import { useProfilePicture } from '../../hooks/useProfilePicture';
 import { authService } from '../../services/microservices/authService';
 import { formatDateToISO, parseISODate } from '../../utils/dateUtils';
 import { useSmartBack } from '../../hooks/useSmartBack';
@@ -17,6 +19,7 @@ export default function EditProfileScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
   const alert = useAlert();
+  const { isUploading, showOptions } = useProfilePicture();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -103,11 +106,16 @@ export default function EditProfileScreen() {
 
       <ScrollView style={s.scrollView} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={s.avatarSection}>
-          <View style={s.avatar}>
-            <Ionicons name="person" size={40} color="white" />
-          </View>
-          <TouchableOpacity style={s.changePhotoButton} activeOpacity={0.7}>
-            <Text style={s.changePhotoText}>Change Photo</Text>
+          <TouchableOpacity onPress={() => showOptions(!!user?.profilePicture)} activeOpacity={0.7} disabled={isUploading}>
+            <Avatar profilePicture={user?.profilePicture} size="xl" />
+            {isUploading && (
+              <View style={s.avatarOverlay}>
+                <ActivityIndicator color="white" />
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.changePhotoButton} activeOpacity={0.7} onPress={() => showOptions(!!user?.profilePicture)} disabled={isUploading}>
+            <Text style={s.changePhotoText}>{isUploading ? 'Uploading...' : 'Change Photo'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -198,8 +206,8 @@ const s = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 20 },
   avatarSection: { alignItems: 'center', marginBottom: 32 },
-  avatar: { width: 100, height: 100, backgroundColor: COLORS.PRIMARY[600], borderRadius: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  changePhotoButton: { paddingVertical: 8, paddingHorizontal: 16 },
+  avatarOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 50, alignItems: 'center', justifyContent: 'center' },
+  changePhotoButton: { paddingVertical: 8, paddingHorizontal: 16, marginTop: 16 },
   changePhotoText: { fontSize: 14, fontFamily: FONTS.SEMIBOLD, color: COLORS.PRIMARY[500] },
   formSection: { marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontFamily: FONTS.BOLD, color: COLORS.SECONDARY[900], marginBottom: 20 },

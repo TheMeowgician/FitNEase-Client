@@ -76,6 +76,13 @@
           "color": "#4A90D9",
           "defaultChannel": "default"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow FitNEase to access your photos for your profile picture.",
+          "cameraPermission": "Allow FitNEase to use your camera to take a profile picture."
+        }
       ]
     ],
     "experiments": {

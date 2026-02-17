@@ -17,6 +17,7 @@ import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 import FitnessLevelBadge from '../../components/FitnessLevelBadge';
+import { Avatar } from '../../components/ui/Avatar';
 
 export default function ProfileScreen() {
   const { user, logout, isLoading } = useAuth();
@@ -268,9 +269,7 @@ export default function ProfileScreen() {
           >
             <View style={styles.profileCard}>
               <View style={styles.profileContent}>
-                <View style={styles.avatar}>
-                  <Ionicons name="person" size={28} color="white" />
-                </View>
+                <Avatar profilePicture={user?.profilePicture} size="md" style={{ marginRight: 16 }} />
                 <View style={styles.profileInfo}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <Text style={styles.profileName}>{userDisplay.name}</Text>

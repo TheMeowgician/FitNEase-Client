@@ -26,6 +26,7 @@ import { useMLService } from '../../services/microservices/mlService';
 import { GroupWorkoutModal } from '../../components/groups/GroupWorkoutModal';
 import { JoinRequestsModal } from '../../components/groups/JoinRequestsModal';
 import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
+import { Avatar } from '../../components/ui/Avatar';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import reverbService from '../../services/reverbService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -816,9 +817,7 @@ export default function GroupDetailsScreen() {
                   }}
                 >
                   <View style={styles.memberAvatarContainer}>
-                    <View style={styles.memberAvatar}>
-                      <Ionicons name="person" size={24} color="white" />
-                    </View>
+                    <Avatar profilePicture={member.profilePicture} size="sm" />
                     {isOnline && (
                       <View style={styles.onlineIndicator} />
                     )}
@@ -1241,9 +1240,7 @@ export default function GroupDetailsScreen() {
               {members.filter(m => m.role !== 'owner').map((member) => (
                 <View key={member.id} style={styles.roleMemberItem}>
                   <View style={styles.roleMemberInfo}>
-                    <View style={styles.roleMemberAvatar}>
-                      <Ionicons name="person" size={20} color={COLORS.PRIMARY[600]} />
-                    </View>
+                    <Avatar profilePicture={member.profilePicture} size="xs" backgroundColor={COLORS.PRIMARY[100]} iconColor={COLORS.PRIMARY[600]} />
                     <View style={styles.roleMemberDetails}>
                       <Text style={styles.roleMemberName}>{member.username}</Text>
                       <Text style={styles.roleMemberRole}>
@@ -1292,6 +1289,7 @@ export default function GroupDetailsScreen() {
           groupRole: selectedMember.role,
           joinedAt: selectedMember.joinedAt,
           isOnline: onlineUsers.has(selectedMember.userId),
+          profilePicture: selectedMember.profilePicture,
         } : null}
         context="group"
       />

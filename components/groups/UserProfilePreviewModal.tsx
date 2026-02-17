@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Avatar } from '../ui/Avatar';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -22,6 +23,7 @@ interface UserProfileData {
   joinedAt?: string;
   isOnline?: boolean;
   isReady?: boolean; // For lobby context
+  profilePicture?: string | null;
 }
 
 interface UserProfilePreviewModalProps {
@@ -126,8 +128,8 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
 
           {/* Avatar */}
           <View style={styles.avatarSection}>
-            <View style={styles.avatarLarge}>
-              <Ionicons name="person" size={48} color="#FFFFFF" />
+            <View style={{ position: 'relative' }}>
+              <Avatar profilePicture={user.profilePicture} size="xl" />
               {user.isOnline && <View style={styles.onlineIndicatorLarge} />}
             </View>
           </View>

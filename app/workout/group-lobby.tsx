@@ -27,6 +27,7 @@ import { useReverb } from '../../contexts/ReverbProvider';
 import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
+import { Avatar } from '../../components/ui/Avatar';
 import LobbyChat from '../../components/groups/LobbyChat';
 import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
 import { AnimatedExerciseReveal } from '../../components/lobby/AnimatedExerciseReveal';
@@ -2073,7 +2074,7 @@ export default function GroupLobbyScreen() {
                 >
                   {/* Avatar */}
                   <View style={styles.memberAvatar}>
-                    <Ionicons name="person" size={24} color={COLORS.PRIMARY[600]} />
+                    <Avatar profilePicture={member.profile_picture} size="sm" backgroundColor={COLORS.PRIMARY[100]} iconColor={COLORS.PRIMARY[600]} />
                     {isLobbyInitiator && (
                       <View style={styles.crownBadge}>
                         <Ionicons name="star" size={12} color={COLORS.WARNING[500]} />
@@ -2529,9 +2530,7 @@ export default function GroupLobbyScreen() {
                     >
                       <View style={styles.inviteMemberLeft}>
                         <View style={styles.inviteMemberAvatarContainer}>
-                          <View style={styles.inviteMemberAvatar}>
-                            <Ionicons name="person" size={26} color={COLORS.PRIMARY[600]} />
-                          </View>
+                          <Avatar profilePicture={member.profilePicture} size="sm" backgroundColor={COLORS.PRIMARY[100]} iconColor={COLORS.PRIMARY[600]} />
                           <View
                             style={[
                               styles.inviteOnlineDot,
@@ -2633,7 +2632,7 @@ export default function GroupLobbyScreen() {
                   <View key={member.user_id} style={styles.settingsMemberCard}>
                     <View style={styles.settingsMemberInfo}>
                       <View style={styles.memberAvatar}>
-                        <Ionicons name="person" size={24} color={COLORS.PRIMARY[600]} />
+                        <Avatar profilePicture={member.profile_picture} size="sm" backgroundColor={COLORS.PRIMARY[100]} iconColor={COLORS.PRIMARY[600]} />
                         {isLobbyInitiator && (
                           <View style={styles.crownBadge}>
                             <Ionicons name="star" size={14} color={COLORS.WARNING[500]} />
@@ -2704,6 +2703,7 @@ export default function GroupLobbyScreen() {
           fitnessLevel: selectedLobbyMember.fitness_level,
           isOnline: onlineUsers.has(selectedLobbyMember.user_id.toString()),
           isReady: selectedLobbyMember.status === 'ready',
+          profilePicture: selectedLobbyMember.profile_picture,
         } : null}
         context="lobby"
       />

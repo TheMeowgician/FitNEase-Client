@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { startOfWeek, addDays, format } from 'date-fns';
 
 import { Button } from '../../components/ui/Button';
+import { Avatar } from '../../components/ui/Avatar';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { WeekCalendarStrip } from '../../components/calendar/WeekCalendarStrip';
@@ -678,9 +679,7 @@ export default function HomeScreen() {
         {/* User Profile Section */}
         <View style={styles.profileSection}>
           <View style={styles.profileHeader}>
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={32} color="white" />
-            </View>
+            <Avatar profilePicture={user?.profilePicture} size="lg" style={{ marginRight: 16 }} />
             <View style={styles.profileInfo}>
               <Text style={styles.profileGreeting}>Welcome back,</Text>
               <Text style={styles.profileName}>{userDisplay.name}</Text>

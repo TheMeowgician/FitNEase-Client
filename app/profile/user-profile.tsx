@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
+import { Avatar } from '../../components/ui/Avatar';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 import { useSmartBack } from '../../hooks/useSmartBack';
@@ -257,9 +258,7 @@ export default function UserProfileScreen() {
         {/* Profile Header Section */}
         <View style={styles.profileHeaderSection}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={48} color="white" />
-            </View>
+            <Avatar profilePicture={user?.profilePicture} size="xl" />
             <View style={[styles.levelBadge, { backgroundColor: getFitnessLevelColor() }]}>
               <Ionicons name={getFitnessLevelIcon() as any} size={14} color="white" />
             </View>

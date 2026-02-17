@@ -7,6 +7,7 @@ export interface LobbyMember {
   joined_at: number;
   fitness_level?: 'beginner' | 'intermediate' | 'advanced';
   user_role?: 'mentor' | 'member'; // User's app role (for mentor badge)
+  profile_picture?: string | null;
 }
 
 export interface ChatMessage {
