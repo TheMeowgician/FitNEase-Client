@@ -41,11 +41,18 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
   const scaleValues = useRef<Animated.Value[]>([]);
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
-  // Initialize animated values for each exercise
+  // Initialize animated values for each exercise, or reset when exercises are cleared
   useEffect(() => {
     if (exercises.length > 0) {
       animatedValues.current = exercises.map(() => new Animated.Value(0));
       scaleValues.current = exercises.map(() => new Animated.Value(0.8));
+    } else {
+      // Reset reveal state when exercises are cleared so animation re-triggers
+      // when new exercises arrive (e.g., after member leaves and rejoins)
+      setRevealedCount(0);
+      setIsRevealing(false);
+      animatedValues.current = [];
+      scaleValues.current = [];
     }
   }, [exercises.length]);
 
