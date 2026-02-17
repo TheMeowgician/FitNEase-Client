@@ -28,6 +28,7 @@ import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
 import { Avatar } from '../../components/ui/Avatar';
+import DragList, { DragListRenderItemInfo } from 'react-native-draglist';
 import LobbyChat from '../../components/groups/LobbyChat';
 import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
 import { AnimatedExerciseReveal } from '../../components/lobby/AnimatedExerciseReveal';
@@ -1105,6 +1106,27 @@ export default function GroupLobbyScreen() {
           }
         }
       },
+      // Exercise reorder event (during group customization)
+      onExercisesReordered: (data: any) => {
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        console.log('[REAL-TIME] Exercises reordered:', data);
+
+        if (data.updated_exercises && Array.isArray(data.updated_exercises)) {
+          setExerciseDetails((prev) => {
+            // Map backend exercise data onto full exercise details
+            return data.updated_exercises.map((serverEx: any, idx: number) => {
+              // Find matching full exercise detail from our local state
+              const fullDetail = prev.find((e) => e.exercise_id === serverEx.exercise_id);
+              return fullDetail ? { ...fullDetail, ...serverEx } : serverEx;
+            });
+          });
+
+          // Show feedback to non-customizer users
+          if (currentUser && parseInt(currentUser.id) !== data.reordered_by) {
+            alert.info('Exercises Reordered', `${data.reordered_by_name} reordered the exercises`);
+          }
+        }
+      },
     });
 
       console.log('✅ Subscribed to lobby channel');
@@ -1811,6 +1833,47 @@ export default function GroupLobbyScreen() {
   };
 
   /**
+   * Handle exercise reorder via drag-and-drop
+   * Called when user finishes dragging an exercise to a new position.
+   * Uses optimistic update: reorders locally first, then syncs with backend.
+   */
+  const handleExerciseReorder = async (fromIndex: number, toIndex: number) => {
+    if (!isCustomizer || !sessionId || isSwappingExercise) return;
+
+    // Save previous order for rollback on failure
+    const previousOrder = [...exerciseDetails];
+
+    // Optimistic local reorder
+    const reordered = [...exerciseDetails];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    setExerciseDetails(reordered);
+
+    // Build new_order array: maps new positions to old indices
+    // e.g., if we moved index 2 to index 0 in a 4-item list:
+    // original: [A, B, C, D] (indices 0,1,2,3)
+    // result:   [C, A, B, D] → new_order = [2, 0, 1, 3]
+    const newOrder: number[] = reordered.map((exercise) => {
+      return previousOrder.findIndex((prev) => prev.exercise_id === exercise.exercise_id);
+    });
+
+    try {
+      const response = await socialService.reorderExercises(sessionId, newOrder);
+
+      if (response.status !== 'success') {
+        throw new Error(response.message || 'Failed to reorder exercises');
+      }
+
+      console.log('[CUSTOMIZATION] Exercises reordered successfully');
+    } catch (error) {
+      console.error('[CUSTOMIZATION] Reorder failed, reverting:', error);
+      // Revert to previous order
+      setExerciseDetails(previousOrder);
+      alert.error('Error', 'Failed to reorder exercises. Please try again.');
+    }
+  };
+
+  /**
    * Start workout (initiator only)
    */
   const handleStartWorkout = async () => {
@@ -2328,7 +2391,7 @@ export default function GroupLobbyScreen() {
 
               {isCustomizer ? (
                 <Text style={styles.customizationDescription}>
-                  Tap the swap button on any exercise to replace it with an alternative.
+                  Drag exercises to reorder, or tap Swap to replace with an alternative.
                 </Text>
               ) : (
                 <Text style={styles.customizationDescription}>
@@ -2336,51 +2399,120 @@ export default function GroupLobbyScreen() {
                 </Text>
               )}
 
-              {/* Exercise List with Swap Buttons */}
-              <ScrollView style={styles.customizationExerciseList} showsVerticalScrollIndicator={false}>
-                {exerciseDetails.map((exercise, index) => (
-                  <View key={exercise.exercise_id || index} style={styles.customizationExerciseCard}>
-                    <View style={styles.customizationExerciseInfo}>
-                      <Text style={styles.customizationExerciseIndex}>{index + 1}</Text>
-                      <View style={styles.customizationExerciseDetails}>
-                        <Text style={styles.customizationExerciseName}>{exercise.exercise_name}</Text>
-                        <View style={styles.customizationExerciseTags}>
-                          <View style={styles.customizationTag}>
-                            <Ionicons name="body-outline" size={12} color={COLORS.SECONDARY[600]} />
-                            <Text style={styles.customizationTagText}>
-                              {(exercise.target_muscle_group || 'core').replace(/_/g, ' ')}
-                            </Text>
-                          </View>
-                          {(exercise as any).estimated_calories_burned && (
-                            <View style={styles.customizationTag}>
-                              <Ionicons name="flame-outline" size={12} color="#F59E0B" />
-                              <Text style={styles.customizationTagText}>{(exercise as any).estimated_calories_burned} cal</Text>
+              {/* Exercise List - Draggable for customizer, static for others */}
+              {isCustomizer && exerciseDetails.length > 1 ? (
+                <View style={styles.customizationExerciseList}>
+                  <DragList
+                    data={exerciseDetails}
+                    keyExtractor={(item: Exercise) => String(item.exercise_id)}
+                    onReordered={handleExerciseReorder}
+                    renderItem={(info: DragListRenderItemInfo<Exercise>) => {
+                      const { item, onDragStart, onDragEnd, isActive } = info;
+                      const index = exerciseDetails.findIndex((e) => e.exercise_id === item.exercise_id);
+                      return (
+                        <View
+                          style={[
+                            styles.customizationExerciseCard,
+                            isActive && styles.customizationExerciseCardDragging,
+                          ]}
+                        >
+                          {/* Drag Handle */}
+                          <TouchableOpacity
+                            onPressIn={onDragStart}
+                            onPressOut={onDragEnd}
+                            style={styles.dragHandle}
+                            disabled={isSwappingExercise}
+                          >
+                            <Ionicons name="reorder-three" size={20} color={COLORS.SECONDARY[400]} />
+                          </TouchableOpacity>
+
+                          <View style={styles.customizationExerciseInfo}>
+                            <Text style={styles.customizationExerciseIndex}>{index + 1}</Text>
+                            <View style={styles.customizationExerciseDetails}>
+                              <Text style={styles.customizationExerciseName}>{item.exercise_name}</Text>
+                              <View style={styles.customizationExerciseTags}>
+                                <View style={styles.customizationTag}>
+                                  <Ionicons name="body-outline" size={12} color={COLORS.SECONDARY[600]} />
+                                  <Text style={styles.customizationTagText}>
+                                    {(item.target_muscle_group || 'core').replace(/_/g, ' ')}
+                                  </Text>
+                                </View>
+                                {(item as any).estimated_calories_burned && (
+                                  <View style={styles.customizationTag}>
+                                    <Ionicons name="flame-outline" size={12} color="#F59E0B" />
+                                    <Text style={styles.customizationTagText}>{(item as any).estimated_calories_burned} cal</Text>
+                                  </View>
+                                )}
+                              </View>
                             </View>
-                          )}
+                          </View>
+
+                          {/* Swap Button */}
+                          <TouchableOpacity
+                            style={styles.swapButton}
+                            onPress={() => handleOpenSwapModal(index, item)}
+                            disabled={isSwappingExercise}
+                          >
+                            {isSwappingExercise && selectedExerciseForSwap?.index === index ? (
+                              <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
+                            ) : (
+                              <>
+                                <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
+                                <Text style={styles.swapButtonText}>Swap</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    }}
+                  />
+                </View>
+              ) : (
+                <ScrollView style={styles.customizationExerciseList} showsVerticalScrollIndicator={false}>
+                  {exerciseDetails.map((exercise, index) => (
+                    <View key={exercise.exercise_id || index} style={styles.customizationExerciseCard}>
+                      <View style={styles.customizationExerciseInfo}>
+                        <Text style={styles.customizationExerciseIndex}>{index + 1}</Text>
+                        <View style={styles.customizationExerciseDetails}>
+                          <Text style={styles.customizationExerciseName}>{exercise.exercise_name}</Text>
+                          <View style={styles.customizationExerciseTags}>
+                            <View style={styles.customizationTag}>
+                              <Ionicons name="body-outline" size={12} color={COLORS.SECONDARY[600]} />
+                              <Text style={styles.customizationTagText}>
+                                {(exercise.target_muscle_group || 'core').replace(/_/g, ' ')}
+                              </Text>
+                            </View>
+                            {(exercise as any).estimated_calories_burned && (
+                              <View style={styles.customizationTag}>
+                                <Ionicons name="flame-outline" size={12} color="#F59E0B" />
+                                <Text style={styles.customizationTagText}>{(exercise as any).estimated_calories_burned} cal</Text>
+                              </View>
+                            )}
+                          </View>
                         </View>
                       </View>
-                    </View>
 
-                    {/* Swap Button - Only for customizer */}
-                    {isCustomizer && (
-                      <TouchableOpacity
-                        style={styles.swapButton}
-                        onPress={() => handleOpenSwapModal(index, exercise)}
-                        disabled={isSwappingExercise}
-                      >
-                        {isSwappingExercise && selectedExerciseForSwap?.index === index ? (
-                          <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
-                        ) : (
-                          <>
-                            <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
-                            <Text style={styles.swapButtonText}>Swap</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
+                      {/* Swap Button - Only for customizer with 1 or fewer exercises */}
+                      {isCustomizer && (
+                        <TouchableOpacity
+                          style={styles.swapButton}
+                          onPress={() => handleOpenSwapModal(index, exercise)}
+                          disabled={isSwappingExercise}
+                        >
+                          {isSwappingExercise && selectedExerciseForSwap?.index === index ? (
+                            <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} />
+                          ) : (
+                            <>
+                              <Ionicons name="swap-horizontal" size={16} color={COLORS.PRIMARY[600]} />
+                              <Text style={styles.swapButtonText}>Swap</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
 
               {/* Alternatives Pool Info */}
               {votingAlternatives && votingAlternatives.length > 0 && (
@@ -3774,6 +3906,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: COLORS.SECONDARY[200],
+  },
+  customizationExerciseCardDragging: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderColor: COLORS.PRIMARY[300],
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  dragHandle: {
+    padding: 8,
+    marginRight: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   customizationExerciseInfo: {
     flex: 1,

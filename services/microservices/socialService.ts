@@ -2102,6 +2102,40 @@ export class SocialService {
       throw new Error((error as any).message || 'Failed to swap exercise');
     }
   }
+
+  /**
+   * Reorder exercises in the workout during group customization
+   * Only the designated customizer can reorder exercises.
+   */
+  public async reorderExercises(
+    sessionId: string,
+    newOrder: number[]
+  ): Promise<{
+    status: string;
+    message: string;
+    data?: {
+      updated_exercises: any[];
+    };
+  }> {
+    try {
+      console.log('[SOCIAL V2] Reordering exercises:', {
+        sessionId,
+        newOrder,
+      });
+
+      const response = await apiClient.post(
+        'social',
+        `/api/v2/lobby/${sessionId}/exercises/reorder`,
+        { new_order: newOrder }
+      );
+
+      console.log('[SOCIAL V2] Exercises reordered successfully');
+      return response.data;
+    } catch (error) {
+      console.log('[SOCIAL V2] Reorder HTTP failed (caller will verify via WebSocket)');
+      throw new Error((error as any).message || 'Failed to reorder exercises');
+    }
+  }
 }
 
 export const socialService = new SocialService();
