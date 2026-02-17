@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { socialService } from '../services/microservices/socialService';
 import { useAuth } from './AuthContext';
+import { useLobbyStore } from '../stores/lobbyStore';
 
 interface LobbySession {
   sessionId: string;
@@ -261,14 +262,6 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
       console.log(`   - Local storage cleared: ${allLobbyKeys.length} keys`);
       console.log(`   - In-memory state: CLEARED`);
 
-      // Return success indicator for caller
-      return {
-        success: true,
-        forceLeaveWorked: forceLeaveSuccess,
-        sessionsCleaned: sessionIds.length,
-        storageKeysCleared: allLobbyKeys.length,
-      };
-
     } catch (error) {
       console.error('❌ [LOBBY CONTEXT] NUCLEAR CLEANUP had critical error:', error);
 
@@ -277,17 +270,36 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
       setActiveLobby(null);
 
       console.log('🆘 [LOBBY CONTEXT] EMERGENCY CLEANUP - Cleared in-memory state as last resort');
-
-      return {
-        success: false,
-        error: error,
-        message: 'Emergency cleanup performed - in-memory state cleared'
-      };
     }
   };
 
   /**
+   * Helper: Clean up all stale lobby keys and related session data from AsyncStorage
+   */
+  const cleanupStaleLobbyKeys = async (keys: string[], userId: string) => {
+    for (const key of keys) {
+      try {
+        await AsyncStorage.removeItem(key);
+      } catch (e) {
+        console.error('[LOBBY CONTEXT] Failed to remove key:', key, e);
+      }
+    }
+    // Also clear active session data
+    try {
+      const activeSessionKey = `activeSession_user_${userId}`;
+      await AsyncStorage.removeItem(activeSessionKey);
+    } catch (e) {
+      console.error('[LOBBY CONTEXT] Failed to clear session key:', e);
+    }
+    console.log(`[LOBBY CONTEXT] Cleaned up ${keys.length} stale lobby key(s)`);
+  };
+
+  /**
    * Check for active lobby in AsyncStorage and validate with backend
+   *
+   * Validates BOTH that the lobby exists AND that the current user is still a member.
+   * This prevents stale indicators from appearing after the user has left a lobby
+   * but AsyncStorage wasn't properly cleaned up (e.g., app crash, hot reload, etc.)
    */
   const checkForActiveLobby = async () => {
     if (!user) return;
@@ -299,25 +311,50 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
         key.startsWith('activeLobby_group_') && key.endsWith(`_user_${user.id}`)
       );
 
-      console.log('🔍 [LOBBY CONTEXT] Found lobby keys:', lobbyKeys);
+      console.log('[LOBBY CONTEXT] Found lobby keys:', lobbyKeys);
 
       if (lobbyKeys.length === 0) {
         setActiveLobby(null);
         return;
       }
 
-      // Get the first lobby session (users should only have one active lobby)
-      const lobbyKey = lobbyKeys[0];
-      const storedData = await AsyncStorage.getItem(lobbyKey);
+      // If user somehow has multiple lobby keys, we'll validate the most recent one
+      // and clean up all others
+      const keysToClean: string[] = [];
 
-      if (!storedData) {
+      // Parse all stored sessions and sort by joinedAt (most recent first)
+      const storedSessions: { key: string; session: LobbySession }[] = [];
+      for (const key of lobbyKeys) {
+        try {
+          const data = await AsyncStorage.getItem(key);
+          if (data) {
+            storedSessions.push({ key, session: JSON.parse(data) });
+          } else {
+            keysToClean.push(key);
+          }
+        } catch (e) {
+          keysToClean.push(key);
+        }
+      }
+      storedSessions.sort((a, b) => (b.session.joinedAt || 0) - (a.session.joinedAt || 0));
+
+      // Take the most recent session for validation
+      const candidate = storedSessions[0];
+      // Mark all others for cleanup
+      for (let i = 1; i < storedSessions.length; i++) {
+        keysToClean.push(storedSessions[i].key);
+      }
+
+      if (!candidate) {
+        await cleanupStaleLobbyKeys(keysToClean, user.id);
         setActiveLobby(null);
         return;
       }
 
-      const lobbySession: LobbySession = JSON.parse(storedData);
+      const lobbyKey = candidate.key;
+      const lobbySession = candidate.session;
 
-      console.log('✅ [LOBBY CONTEXT] Found stored lobby session:', {
+      console.log('[LOBBY CONTEXT] Validating stored lobby session:', {
         sessionId: lobbySession.sessionId,
         groupId: lobbySession.groupId,
         groupName: lobbySession.groupName,
@@ -325,42 +362,95 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
         autoCleanupOnReload
       });
 
-      // Check if session has expired
+      // Check if session has expired (client-side)
       if (Date.now() > lobbySession.expiresAt) {
-        console.log('⏰ [LOBBY CONTEXT] Lobby session expired, clearing...');
-        await AsyncStorage.removeItem(lobbyKey);
+        console.log('[LOBBY CONTEXT] Lobby session expired (client-side), clearing...');
+        keysToClean.push(lobbyKey);
+        await cleanupStaleLobbyKeys(keysToClean, user.id);
         setActiveLobby(null);
         return;
       }
 
       // AUTO-CLEANUP ON RELOAD (for development)
       if (autoCleanupOnReload) {
-        console.log('🔄 [LOBBY CONTEXT] Auto-cleanup enabled, leaving lobby on reload...');
+        console.log('[LOBBY CONTEXT] Auto-cleanup enabled, leaving lobby on reload...');
         try {
-          // leaveLobbyV2 now handles "already left" gracefully
           await socialService.leaveLobbyV2(lobbySession.sessionId);
-          console.log('✅ [LOBBY CONTEXT] Left lobby on backend');
+          console.log('[LOBBY CONTEXT] Left lobby on backend');
         } finally {
-          // Always clear local storage
-          await AsyncStorage.removeItem(lobbyKey);
+          keysToClean.push(lobbyKey);
+          await cleanupStaleLobbyKeys(keysToClean, user.id);
           setActiveLobby(null);
-          console.log('✅ [LOBBY CONTEXT] Auto-cleanup complete (local storage cleared)');
+          console.log('[LOBBY CONTEXT] Auto-cleanup complete');
           return;
         }
       }
 
-      // Validate with backend that lobby still exists
+      // Clean up any extra keys before validation
+      if (keysToClean.length > 0) {
+        await cleanupStaleLobbyKeys(keysToClean, user.id);
+      }
+
+      // Validate with backend: lobby exists AND user is still a member
       try {
         const response = await socialService.getLobbyStateV2(lobbySession.sessionId);
 
         if (response.status === 'success' && response.data) {
           const lobbyState = response.data.lobby_state;
-          console.log('✅ [LOBBY CONTEXT] Lobby still active on server, status:', lobbyState?.status);
+          console.log('[LOBBY CONTEXT] Lobby found on server:', {
+            status: lobbyState?.status,
+            memberCount: lobbyState?.members?.length || 0,
+          });
+
+          // CHECK 1: Is lobby completed or expired on server?
+          if (lobbyState?.status === 'completed' || lobbyState?.is_expired) {
+            console.log('[LOBBY CONTEXT] Lobby is completed/expired on server, clearing stale session...');
+            await AsyncStorage.removeItem(lobbyKey);
+            setActiveLobby(null);
+            setActiveSessionData(null);
+            return;
+          }
+
+          // CHECK 2: Is the current user still a member of this lobby?
+          const currentUserId = parseInt(user.id);
+          const members: any[] = lobbyState?.members || [];
+          const isUserMember = members.some((m: any) => m.user_id === currentUserId);
+
+          if (!isUserMember) {
+            console.log('[LOBBY CONTEXT] User is NOT a member of this lobby, clearing stale session...', {
+              userId: currentUserId,
+              memberIds: members.map((m: any) => m.user_id),
+            });
+            await AsyncStorage.removeItem(lobbyKey);
+            setActiveLobby(null);
+            setActiveSessionData(null);
+            return;
+          }
+
+          // CHECK 3: Lobby has 0 members (zombie lobby)
+          if (members.length === 0) {
+            console.log('[LOBBY CONTEXT] Lobby has 0 members (zombie), clearing...');
+            await AsyncStorage.removeItem(lobbyKey);
+            setActiveLobby(null);
+            setActiveSessionData(null);
+            return;
+          }
+
+          // All checks passed — user is confirmed as an active member
+          console.log('[LOBBY CONTEXT] User confirmed as active member, restoring lobby');
           setActiveLobby(lobbySession);
+
+          // Populate Zustand store with backend data so GlobalLobbyIndicator has accurate info
+          try {
+            useLobbyStore.getState().setLobbyState(lobbyState);
+            console.log('[LOBBY CONTEXT] Zustand store populated with backend lobby data');
+          } catch (e) {
+            console.error('[LOBBY CONTEXT] Failed to populate Zustand store:', e);
+          }
 
           // Check if a workout session is in progress (user may need to reconnect)
           if (lobbyState?.status === 'in_progress') {
-            console.log('🔄 [LOBBY CONTEXT] Workout is in progress! Checking for reconnect data...');
+            console.log('[LOBBY CONTEXT] Workout is in progress! Checking for reconnect data...');
 
             // First try: check AsyncStorage for saved session data (most reliable)
             const activeSessionKey = `activeSession_user_${user.id}`;
@@ -368,7 +458,7 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
 
             if (storedSession) {
               const sessionInfo = JSON.parse(storedSession);
-              console.log('✅ [LOBBY CONTEXT] Found stored session data for reconnect:', {
+              console.log('[LOBBY CONTEXT] Found stored session data for reconnect:', {
                 sessionId: sessionInfo.sessionId,
                 groupId: sessionInfo.groupId,
               });
@@ -380,7 +470,7 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
               });
             } else if (lobbyState.workout_data) {
               // Fallback: reconstruct session data from backend lobby state
-              console.log('🔄 [LOBBY CONTEXT] No stored session, reconstructing from backend workout_data');
+              console.log('[LOBBY CONTEXT] No stored session, reconstructing from backend workout_data');
               setActiveSessionData({
                 sessionData: JSON.stringify(lobbyState.workout_data),
                 initiatorId: String(lobbyState.initiator_id),
@@ -388,7 +478,7 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
                 sessionId: lobbyState.session_id,
               });
             } else {
-              console.log('⚠️ [LOBBY CONTEXT] Workout in progress but no session data available');
+              console.log('[LOBBY CONTEXT] Workout in progress but no session data available');
             }
           } else {
             // Lobby is waiting/not in progress — clear any stale session data
@@ -397,22 +487,19 @@ export function LobbyProvider({ children }: { children: ReactNode }) {
             await AsyncStorage.removeItem(activeSessionKey);
           }
         } else {
-          console.log('⚠️ [LOBBY CONTEXT] Lobby not found on server, clearing...');
+          console.log('[LOBBY CONTEXT] Lobby not found on server, clearing stale session...');
           await AsyncStorage.removeItem(lobbyKey);
           setActiveLobby(null);
           setActiveSessionData(null);
-          // Also clear stale active session data
-          const activeSessionKey = `activeSession_user_${user.id}`;
-          await AsyncStorage.removeItem(activeSessionKey);
         }
       } catch (error) {
-        console.error('❌ [LOBBY CONTEXT] Failed to validate lobby, clearing...', error);
+        console.error('[LOBBY CONTEXT] Failed to validate lobby with backend, clearing...', error);
         await AsyncStorage.removeItem(lobbyKey);
         setActiveLobby(null);
         setActiveSessionData(null);
       }
     } catch (error) {
-      console.error('❌ [LOBBY CONTEXT] Error checking for active lobby:', error);
+      console.error('[LOBBY CONTEXT] Error checking for active lobby:', error);
       setActiveLobby(null);
     }
   };

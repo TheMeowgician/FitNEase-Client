@@ -113,8 +113,9 @@ export function GlobalLobbyIndicator() {
   // Determine if we're in reconnect mode (workout in progress)
   const isSessionReconnect = !!activeSessionData;
 
-  // Get member info from Zustand store (real-time) or fallback
-  const memberCount = currentLobby?.members?.length || lobbyMembers.length || 1;
+  // Get member info from Zustand store (real-time) if available
+  const hasZustandData = !!(currentLobby?.members?.length || lobbyMembers.length);
+  const memberCount = currentLobby?.members?.length || lobbyMembers.length || 0;
   const readyCount = currentLobby?.members?.filter((m: any) => m.status === 'ready').length ||
                      lobbyMembers.filter((m: any) => m.status === 'ready').length || 0;
 
@@ -327,7 +328,9 @@ export function GlobalLobbyIndicator() {
                   {activeLobby.groupName}
                 </Text>
                 <Text style={styles.subtitle}>
-                  {memberCount} {memberCount === 1 ? 'member' : 'members'} • {readyCount} ready
+                  {hasZustandData
+                    ? `${memberCount} ${memberCount === 1 ? 'member' : 'members'} \u2022 ${readyCount} ready`
+                    : 'Tap to return to lobby'}
                 </Text>
               </>
             )}
