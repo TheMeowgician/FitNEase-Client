@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,10 @@ export default function WeeklyPlanScreen() {
   );
   const [selectedDate, setSelectedDate] = useState(new Date());
 
+  // Prevent useFocusEffect from firing loadData on the very first mount
+  // (useEffect already handles initial load — running both causes a race condition)
+  const hasLoadedOnce = useRef(false);
+
   // Track completed days based on actual workout sessions
   const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
 
@@ -86,12 +90,18 @@ export default function WeeklyPlanScreen() {
 
 
   useEffect(() => {
+    hasLoadedOnce.current = false; // Reset on dependency change so focus also reloads
     loadData();
   }, [user, currentWeekStart]);
 
-  // Refresh completion state when returning to this screen
+  // Refresh when returning to this screen (e.g. after completing a workout)
+  // Skip on first mount — useEffect already handles that to avoid a race condition
   useFocusEffect(
     useCallback(() => {
+      if (!hasLoadedOnce.current) {
+        hasLoadedOnce.current = true;
+        return; // First focus is handled by useEffect above
+      }
       if (user) {
         loadData();
       }
