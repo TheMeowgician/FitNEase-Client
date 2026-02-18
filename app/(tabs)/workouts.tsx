@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
@@ -22,7 +22,7 @@ import { COLORS, FONTS } from '../../constants/colors';
 // ====================================================================
 // 🧪 TESTING FLAG: Daily Workout Limit Control
 // ====================================================================
-const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKOUTS
+const ENABLE_DAILY_WORKOUT_LIMIT = true;
 // ====================================================================
 
 export default function WorkoutsScreen() {
@@ -41,11 +41,20 @@ export default function WorkoutsScreen() {
   const [alternativePool, setAlternativePool] = useState<any[]>([]);
 
   // NEW: Determine if user can customize based on fitness level
-  const canCustomize = user?.fitnessLevel === 'advanced' || user?.fitnessLevel === 'expert';
+  const canCustomize = user?.fitnessLevel === 'advanced';
 
   useEffect(() => {
     loadWorkoutData();
   }, []);
+
+  // Refresh completion status when returning to this screen (e.g. after finishing a workout)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        checkTodayWorkoutCompletion();
+      }
+    }, [user])
+  );
 
   const isWorkoutDay = () => {
     if (!user?.workoutDays || user.workoutDays.length === 0) {
@@ -79,7 +88,9 @@ export default function WorkoutsScreen() {
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
 
+      // Only count individual sessions — group workouts don't mark the day complete
       const todaySession = sessions.sessions.find((session: any) => {
+        if (session.sessionType === 'group') return false;
         const sessionDate = new Date(session.createdAt);
         return sessionDate >= todayStart && sessionDate <= todayEnd;
       });
@@ -143,7 +154,7 @@ export default function WorkoutsScreen() {
         console.log('[WORKOUTS] Fetching alternatives for customization...');
         const { mlService } = await import('../../services/microservices/mlService');
         const response = await mlService.getRecommendations(String(user.id), {
-          count: 6,
+          num_recommendations: 6,
           include_alternatives: true,
           num_alternatives: 6,
         });
@@ -166,7 +177,7 @@ export default function WorkoutsScreen() {
     setShowWorkoutSetModal(true);
   };
 
-  const handleStartWorkoutSet = () => {
+  const doStartWorkoutSet = () => {
     if (!currentWorkoutSet || !user) return;
 
     setShowWorkoutSetModal(false);
@@ -189,6 +200,21 @@ export default function WorkoutsScreen() {
         type: 'tabata'
       }
     });
+  };
+
+  const handleStartWorkoutSet = () => {
+    if (isTodayWorkoutCompleted) {
+      alert.confirm(
+        'Already Completed Today',
+        "You've already finished today's workout plan! Would you like to do another Tabata set?",
+        () => doStartWorkoutSet(),
+        undefined,
+        "Let's Go!",
+        'Not Now'
+      );
+      return;
+    }
+    doStartWorkoutSet();
   };
 
   // NEW: Handler for exercise swap (customization feature for advanced/mentor users)
@@ -272,21 +298,7 @@ export default function WorkoutsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {isWorkoutDay() ? (
-          isTodayWorkoutCompleted ? (
-            <View style={styles.completedCard}>
-              <View style={styles.completedIconContainer}>
-                <Ionicons name="checkmark-circle" size={72} color={COLORS.SUCCESS[500]} />
-              </View>
-              <Text style={styles.completedTitle}>Workout Complete!</Text>
-              <Text style={styles.completedText}>
-                Great job! You've finished your Tabata workout for today. Come back tomorrow for your next session.
-              </Text>
-              <View style={styles.completedBadge}>
-                <Ionicons name="trophy" size={20} color={COLORS.WARNING[500]} />
-                <Text style={styles.completedBadgeText}>Keep your streak going!</Text>
-              </View>
-            </View>
-          ) : exercises.length === 0 ? (
+          exercises.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="fitness-outline" size={64} color={COLORS.NEUTRAL[300]} />
               <Text style={styles.emptyTitle}>No Exercises Available</Text>
@@ -296,6 +308,15 @@ export default function WorkoutsScreen() {
             </View>
           ) : (
             <>
+              {/* Completed Today Banner */}
+              {isTodayWorkoutCompleted && (
+                <View style={styles.completedTodayBanner}>
+                  <Ionicons name="checkmark-circle" size={16} color={COLORS.SUCCESS[500]} />
+                  <Text style={styles.completedTodayBannerText}>Completed Today!</Text>
+                  <Text style={styles.completedTodayBannerSub}>Tap to do another set</Text>
+                </View>
+              )}
+
               {/* Today's Workout Card */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Today's Tabata</Text>
@@ -606,7 +627,32 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Completed Card
+  // Completed Today Banner
+  completedTodayBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  completedTodayBannerText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#065F46',
+    flex: 1,
+  },
+  completedTodayBannerSub: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: '#047857',
+  },
+
+  // Completed Card (kept for legacy reference)
   completedCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 20,
