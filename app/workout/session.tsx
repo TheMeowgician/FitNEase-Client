@@ -13,9 +13,6 @@ import {
   PanResponder,
   Animated,
   Dimensions,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,11 +41,6 @@ import MemberDisconnectedToast from '../../components/workout/MemberDisconnected
 import MemberReconnectedToast from '../../components/workout/MemberReconnectedToast';
 import { hasExerciseDemo } from '../../constants/exerciseDemos';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
 type SessionPhase = 'prepare' | 'work' | 'rest' | 'roundRest' | 'complete';
 type SessionStatus = 'ready' | 'running' | 'paused' | 'completed';
 
@@ -62,6 +54,16 @@ interface SessionState {
   totalTime: number;
   caloriesBurned: number;
 }
+
+// Phase colors — defined outside component so they can be referenced for interpolation
+const PHASE_COLORS: Record<string, string> = {
+  prepare: '#3B82F6',
+  work: '#EF4444',
+  rest: '#10B981',
+  roundRest: '#F59E0B',
+  complete: '#8B5CF6',
+  default: '#3B82F6',
+};
 
 export default function WorkoutSessionScreen() {
   const { user } = useAuth();
@@ -107,6 +109,12 @@ export default function WorkoutSessionScreen() {
   const halfwayPlayedRef = useRef<boolean>(false); // Track if halfway sound played this phase
   const appState = useRef(AppState.currentState);
   const [isInitiator, setIsInitiator] = useState(user?.id.toString() === initiatorId);
+
+  // Background cross-fade: two color layers, animate the new one from 0→1 opacity
+  // Using opacity (not color interpolation) lets us use useNativeDriver: true (GPU thread)
+  const bgFadeAnim = useRef(new Animated.Value(1)).current;
+  const [fromBgColor, setFromBgColor] = useState<string>(PHASE_COLORS.prepare);
+  const [toBgColor, setToBgColor] = useState<string>(PHASE_COLORS.prepare);
 
   // Progress modal state
   const [showProgressModal, setShowProgressModal] = useState(false);
@@ -316,14 +324,49 @@ export default function WorkoutSessionScreen() {
     };
   }, [sessionState.status]);
 
-  // Smooth layout animation when transitioning to completed state
-  // This prevents the visual "blink" when buttons and UI elements swap out
+  // Animate background color on every phase change (prepare→work→rest→complete)
+  // Pattern: render the OLD color as base layer, fade the NEW color in on top.
+  // Pure opacity animation → useNativeDriver: true → runs on GPU, no JS jank.
+  const currentBgColorRef = useRef<string>(PHASE_COLORS.prepare);
+  const prevPhaseRef = useRef<SessionPhase>(sessionState.phase);
+  useEffect(() => {
+    const newColor = PHASE_COLORS[sessionState.phase] ?? PHASE_COLORS.default;
+
+    if (prevPhaseRef.current === sessionState.phase) {
+      // Initial mount — set colors directly with no animation
+      currentBgColorRef.current = newColor;
+      setFromBgColor(newColor);
+      setToBgColor(newColor);
+      bgFadeAnim.setValue(1);
+      return;
+    }
+    prevPhaseRef.current = sessionState.phase;
+
+    const fromColor = currentBgColorRef.current;
+    currentBgColorRef.current = newColor;
+
+    // Set from=previous color (base), to=new color (overlay fades in)
+    setFromBgColor(fromColor);
+    setToBgColor(newColor);
+    bgFadeAnim.setValue(0);
+    Animated.timing(bgFadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true, // opacity on native driver = smooth GPU animation
+    }).start();
+  }, [sessionState.phase]);
+
+  // Animated fade-in for the COMPLETE button when workout ends
+  const completionFade = useRef(new Animated.Value(0)).current;
   const prevStatusRef = useRef<SessionStatus>(sessionState.status);
   useEffect(() => {
     if (prevStatusRef.current !== 'completed' && sessionState.status === 'completed') {
-      LayoutAnimation.configureNext(
-        LayoutAnimation.create(300, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
-      );
+      completionFade.setValue(0);
+      Animated.timing(completionFade, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
     }
     prevStatusRef.current = sessionState.status;
   }, [sessionState.status]);
@@ -1703,8 +1746,13 @@ export default function WorkoutSessionScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: getPhaseColor() }]} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor={getPhaseColor()} />
+    <SafeAreaView style={[styles.container, { backgroundColor: fromBgColor }]} edges={['top', 'bottom']}>
+      {/* Animated new-phase color overlay — fades in on top of the previous phase color */}
+      <Animated.View
+        style={{ ...StyleSheet.absoluteFillObject, backgroundColor: toBgColor, opacity: bgFadeAnim }}
+        pointerEvents="none"
+      />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Top Bar with Video and Close Button */}
       <View style={styles.topBar}>
@@ -1990,10 +2038,12 @@ export default function WorkoutSessionScreen() {
           )}
 
           {sessionState.status === 'completed' && (
-            <TouchableOpacity style={styles.primaryButton} onPress={completeSession}>
-              <Ionicons name="checkmark" size={32} color={getPhaseColor()} />
-              <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>COMPLETE</Text>
-            </TouchableOpacity>
+            <Animated.View style={{ opacity: completionFade, width: '100%' }}>
+              <TouchableOpacity style={styles.primaryButton} onPress={completeSession}>
+                <Ionicons name="checkmark" size={32} color={getPhaseColor()} />
+                <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>COMPLETE</Text>
+              </TouchableOpacity>
+            </Animated.View>
           )}
         </View>
 
