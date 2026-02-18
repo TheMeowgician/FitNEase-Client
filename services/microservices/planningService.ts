@@ -295,18 +295,19 @@ export class PlanningService {
   /**
    * Get the current week's workout plan for the user
    */
-  public async getCurrentWeekPlan(userId: number, sessionCount?: number): Promise<{
+  public async getCurrentWeekPlan(userId: number, sessionCount?: number, completedDates?: string[]): Promise<{
     success: boolean;
     message: string;
     data: WeeklyWorkoutPlan | null;
   }> {
     try {
       const sessionParam = sessionCount !== undefined ? `&session_count=${sessionCount}` : '';
+      const datesParam = completedDates?.length ? `&completed_dates=${completedDates.join(',')}` : '';
       const response = await apiClient.get<{
         success: boolean;
         message: string;
         data: WeeklyWorkoutPlan | null;
-      }>('planning', `/api/planning/weekly-plans/current?user_id=${userId}${sessionParam}`);
+      }>('planning', `/api/planning/weekly-plans/current?user_id=${userId}${sessionParam}${datesParam}`);
 
       // Transform the data before returning
       if (response.data && response.data.data) {

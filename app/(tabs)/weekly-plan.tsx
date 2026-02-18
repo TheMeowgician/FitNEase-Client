@@ -86,61 +86,64 @@ export default function WeeklyPlanScreen() {
 
 
   useEffect(() => {
-    loadWeeklyPlan();
-    checkCompletedDays();
+    loadData();
   }, [user, currentWeekStart]);
 
-  // Refresh when screen comes into focus
+  // Refresh completion state when returning to this screen
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        checkCompletedDays();
+        loadData();
       }
     }, [user])
   );
 
-  const checkCompletedDays = async () => {
-    if (!user) return;
+  // Single fetch for both session count and completed days, then load plan
+  const loadData = async () => {
+    if (!user?.id) return;
 
     try {
+      setLoading(true);
       const userId = String(user.id);
+
+      // Fetch all completed individual sessions in one call
       const sessions = await trackingService.getSessions({
         userId,
         status: 'completed',
         limit: 100,
       });
 
-      // Get week boundaries
+      const individualSessions = (sessions?.sessions || []).filter(
+        (s: any) => s.sessionType !== 'group'
+      );
+
+      // Cumulative session count for progressive overload tier detection
+      const sessionCount = individualSessions.length;
+
+      // Completed dates within this week for exercise preservation
       const weekEnd = addDays(currentWeekStart, 6);
       weekEnd.setHours(23, 59, 59, 999);
-
-      // Filter sessions for this week — only count individual workouts, not group sessions
       const completed = new Set<string>();
-      sessions.sessions.forEach((session: any) => {
-        if (session.sessionType === 'group') return;
+      individualSessions.forEach((session: any) => {
         const sessionDate = new Date(session.createdAt);
         if (sessionDate >= currentWeekStart && sessionDate <= weekEnd) {
           completed.add(format(sessionDate, 'yyyy-MM-dd'));
         }
       });
-
       setCompletedDays(completed);
-    } catch (error) {
-      console.error('Failed to check completed days:', error);
-    }
-  };
 
-  const loadWeeklyPlan = async () => {
-    if (!user?.id) return;
-
-    try {
-      setLoading(true);
-      // Always fetch current week's plan (auto-generates if needed)
-      const response = await planningService.getCurrentWeekPlan(parseInt(user.id));
+      // Load plan with session count + completed dates so PHP can detect tier changes
+      // and preserve exercise data for already-completed days
+      const completedDates = Array.from(completed);
+      const response = await planningService.getCurrentWeekPlan(
+        parseInt(user.id),
+        sessionCount,
+        completedDates
+      );
       const plan = (response.data as any)?.plan || response.data;
       setWeeklyPlan(plan);
     } catch (error) {
-      console.error('Failed to load weekly plan:', error);
+      console.error('Failed to load weekly plan data:', error);
       setWeeklyPlan(null);
     } finally {
       setLoading(false);
@@ -149,8 +152,7 @@ export default function WeeklyPlanScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadWeeklyPlan();
-    await checkCompletedDays();
+    await loadData();
     setRefreshing(false);
   };
 
