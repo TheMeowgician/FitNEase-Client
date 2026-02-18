@@ -107,13 +107,32 @@ export default function WorkoutsScreen() {
     }
   };
 
+  const fetchSessionCount = async (): Promise<number> => {
+    try {
+      const sessions = await trackingService.getSessions({
+        userId: String(user?.id),
+        status: 'completed',
+        limit: 50,
+      });
+      const individual = (sessions?.sessions || []).filter((s: any) => s.sessionType !== 'group');
+      return individual.length;
+    } catch {
+      return 0;
+    }
+  };
+
   const loadWorkoutData = async () => {
     if (!user) return;
 
     try {
       setIsLoading(true);
       const userId = String(user.id);
-      const todayExercises = await getTodayExercises(userId);
+
+      // Fetch session count first so PHP can detect progressive overload tier changes
+      const sessionCount = await fetchSessionCount();
+      setCompletedSessionCount(sessionCount);
+
+      const todayExercises = await getTodayExercises(userId, sessionCount);
       setExercises(todayExercises || []);
       await checkTodayWorkoutCompletion();
     } catch (error) {

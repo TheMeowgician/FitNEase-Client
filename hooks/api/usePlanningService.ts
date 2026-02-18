@@ -21,7 +21,7 @@ export const usePlanningService = () => {
    * @param userId - The user ID
    * @returns Array of exercises for today, or empty array if today is a rest day
    */
-  const getTodayExercises = useCallback(async (userId: string | number): Promise<any[]> => {
+  const getTodayExercises = useCallback(async (userId: string | number, sessionCount?: number): Promise<any[]> => {
     try {
       setIsLoading(true);
       setError(null);
@@ -29,7 +29,7 @@ export const usePlanningService = () => {
       console.log('[PLANNING] Fetching weekly plan for user:', userId);
 
       // Fetch current week's plan from Planning Service
-      const response = await planningService.getCurrentWeeklyPlan(userId);
+      const response = await planningService.getCurrentWeeklyPlan(userId, sessionCount);
 
       // Backend returns: { data: { plan: {...}, today: {...}, today_day_name: "..." } }
       // The response from planningService.getCurrentWeeklyPlan is response.data
@@ -78,12 +78,12 @@ export const usePlanningService = () => {
    * @param userId - The user ID
    * @returns The weekly plan object
    */
-  const getWeeklyPlan = useCallback(async (userId: string | number) => {
+  const getWeeklyPlan = useCallback(async (userId: string | number, sessionCount?: number) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const response = await planningService.getCurrentWeeklyPlan(userId);
+      const response = await planningService.getCurrentWeeklyPlan(userId, sessionCount);
       return response;
     } catch (err) {
       console.error('[PLANNING] Error fetching weekly plan:', err);

@@ -295,17 +295,18 @@ export class PlanningService {
   /**
    * Get the current week's workout plan for the user
    */
-  public async getCurrentWeekPlan(userId: number): Promise<{
+  public async getCurrentWeekPlan(userId: number, sessionCount?: number): Promise<{
     success: boolean;
     message: string;
     data: WeeklyWorkoutPlan | null;
   }> {
     try {
+      const sessionParam = sessionCount !== undefined ? `&session_count=${sessionCount}` : '';
       const response = await apiClient.get<{
         success: boolean;
         message: string;
         data: WeeklyWorkoutPlan | null;
-      }>('planning', `/api/planning/weekly-plans/current?user_id=${userId}`);
+      }>('planning', `/api/planning/weekly-plans/current?user_id=${userId}${sessionParam}`);
 
       // Transform the data before returning
       if (response.data && response.data.data) {
@@ -430,9 +431,10 @@ export class PlanningService {
    * Get current weekly plan with the new format (plan_data with exercises per day)
    * This matches the actual API response format
    */
-  public async getCurrentWeeklyPlan(userId: number | string): Promise<any> {
+  public async getCurrentWeeklyPlan(userId: number | string, sessionCount?: number): Promise<any> {
     try {
-      const response = await apiClient.get<any>('planning', `/api/planning/weekly-plans/current?user_id=${userId}`);
+      const sessionParam = sessionCount !== undefined ? `&session_count=${sessionCount}` : '';
+      const response = await apiClient.get<any>('planning', `/api/planning/weekly-plans/current?user_id=${userId}${sessionParam}`);
       const rawData = response.data || response;
 
       // Transform the plan data to ensure field name consistency
