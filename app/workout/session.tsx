@@ -805,6 +805,11 @@ export default function WorkoutSessionScreen() {
         if (type === 'group_tabata') {
           // GROUP WORKOUTS: Smooth interpolation from server refs
           // This interval is the ONLY writer to React state - no blinking
+
+          // Guard: never overwrite a completed state — transitionToCompleted() may have fired
+          // between the last server tick and this interval tick
+          if (prev.status === 'completed') return prev;
+
           const elapsedMs = now - lastServerTickRef.current;
           const elapsedSeconds = Math.floor(elapsedMs / 1000);
           newTimeRemaining = Math.max(0, lastServerTimeRef.current - elapsedSeconds);
@@ -1694,6 +1699,19 @@ export default function WorkoutSessionScreen() {
 
   // Smooth transition to completed state — animates layout changes (buttons swapping, etc.)
   const transitionToCompleted = () => {
+    // Tear down video immediately when workout ends (covers all exit paths that go through here)
+    setShowVideoCall(false);
+    setAgoraCredentials(null);
+    setIsVideoFullScreen(false);
+
+    // Update server state refs so the interval timer doesn't overwrite the completed state
+    // on its next tick (the interval reads serverStateRef, not React state)
+    serverStateRef.current = {
+      ...serverStateRef.current,
+      status: 'completed',
+      phase: 'complete',
+    };
+
     setSessionState(prev => ({ ...prev, status: 'completed', phase: 'complete' }));
   };
 
