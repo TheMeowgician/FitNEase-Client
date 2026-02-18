@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -137,6 +138,11 @@ export default function GroupLobbyScreen() {
   const [selectedExerciseForSwap, setSelectedExerciseForSwap] = useState<{ index: number; exercise: any } | null>(null);
   const [isSwappingExercise, setIsSwappingExercise] = useState(false);
 
+  // Vote bottom sheet animation (matches WorkoutSetModal pattern)
+  const [voteSheetVisible, setVoteSheetVisible] = useState(false);
+  const votingBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const votingSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+
   // Check if current user can customize (mentor or advanced fitness level)
   const currentUserMember = lobbyMembers.find(m => m.user_id === parseInt(currentUser?.id || '0'));
   const canUserCustomize = currentUserMember?.user_role === 'mentor' ||
@@ -240,6 +246,46 @@ export default function GroupLobbyScreen() {
 
     return () => clearInterval(interval);
   }, [isVotingActive, votingExpiresAt, isInitiator, sessionId]);
+
+  /**
+   * Vote bottom sheet animation — matches WorkoutSetModal:
+   * backdrop fades in + sheet springs up on open, both animate out on close
+   */
+  useEffect(() => {
+    const screenHeight = Dimensions.get('window').height;
+    if (isVotingActive) {
+      setVoteSheetVisible(true);
+      votingBackdropOpacity.setValue(0);
+      votingSlideAnim.setValue(screenHeight);
+      Animated.parallel([
+        Animated.timing(votingBackdropOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(votingSlideAnim, {
+          toValue: 0,
+          damping: 20,
+          stiffness: 150,
+          mass: 1,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(votingBackdropOpacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(votingSlideAnim, {
+          toValue: screenHeight,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => setVoteSheetVisible(false));
+    }
+  }, [isVotingActive]);
 
   /**
    * Initialize lobby on mount
@@ -2129,57 +2175,50 @@ export default function GroupLobbyScreen() {
         {/* Members Section */}
         <View style={styles.membersSection}>
           <View style={styles.membersSectionHeader}>
-            <Text style={styles.sectionTitle}>
-              Members ({lobbyMembers.length})
-            </Text>
-            {/* Invite Members Button - Available to All Users */}
+            <View style={styles.membersSectionLeft}>
+              <Text style={styles.sectionTitle}>Members ({lobbyMembers.length})</Text>
+              <Text style={styles.readyCountBadge}>
+                {lobbyMembers.filter(m => m.status === 'ready').length}/{lobbyMembers.length} ready
+              </Text>
+            </View>
             <TouchableOpacity onPress={handleInviteMembers} style={styles.inviteIconButton}>
               <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.membersScrollView}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.membersAvatarRow}
+            contentContainerStyle={styles.membersAvatarRowContent}
+          >
             {lobbyMembers.map((member) => {
-              // Use global online users instead of lobby-specific presence
               const isOnline = onlineUsers.has(member.user_id.toString());
               const isCurrentUser = member.user_id === parseInt(currentUser.id);
-              // Check initiator from lobby state instead of URL param (for role transfer)
               const isLobbyInitiator = member.user_id === currentLobby?.initiator_id;
-              const canTransferRole = isInitiator && !isCurrentUser && !isLobbyInitiator;
-
-              console.log(`🔍 [LOBBY] Checking member ${member.user_name}:`, {
-                userId: member.user_id,
-                isOnline,
-                globalOnlineUsers: Array.from(onlineUsers)
-              });
-
-              // Get fitness level color
-              const getFitnessLevelColor = (level: string) => {
-                switch (level?.toLowerCase()) {
-                  case 'advanced': return { bg: '#FEE2E2', text: '#DC2626' }; // Red
-                  case 'intermediate': return { bg: '#FEF3C7', text: '#D97706' }; // Orange
-                  case 'beginner':
-                  default: return { bg: '#D1FAE5', text: '#059669' }; // Green
-                }
-              };
-              const fitnessColors = getFitnessLevelColor(member.fitness_level || 'beginner');
+              const memberIsReady = member.status === 'ready';
 
               return (
                 <TouchableOpacity
                   key={member.user_id}
-                  style={styles.memberCard}
+                  style={styles.memberAvatarChip}
                   activeOpacity={0.7}
                   onPress={() => {
                     setSelectedLobbyMember(member);
                     setShowMemberPreview(true);
                   }}
                 >
-                  {/* Avatar */}
-                  <View style={styles.memberAvatar}>
-                    <Avatar profilePicture={member.profile_picture} size="sm" backgroundColor={COLORS.PRIMARY[100]} iconColor={COLORS.PRIMARY[600]} />
+                  {/* Avatar ring — green border = ready, orange = waiting */}
+                  <View style={[styles.memberAvatarRing, memberIsReady ? styles.memberAvatarRingReady : styles.memberAvatarRingWaiting]}>
+                    <Avatar
+                      profilePicture={member.profile_picture}
+                      size="sm"
+                      backgroundColor={COLORS.PRIMARY[100]}
+                      iconColor={COLORS.PRIMARY[600]}
+                    />
                     {isLobbyInitiator && (
                       <View style={styles.crownBadge}>
-                        <Ionicons name="star" size={12} color={COLORS.WARNING[500]} />
+                        <Ionicons name="star" size={10} color={COLORS.WARNING[500]} />
                       </View>
                     )}
                     <View
@@ -2189,66 +2228,14 @@ export default function GroupLobbyScreen() {
                       ]}
                     />
                   </View>
-
-                  {/* Content */}
-                  <View style={styles.memberContent}>
-                    {/* Top Row: Name + You badge */}
-                    <View style={styles.memberTopRow}>
-                      <Text style={styles.memberName} numberOfLines={1}>
-                        {member.user_name}
-                      </Text>
-                      {isCurrentUser && (
-                        <View style={styles.youBadge}>
-                          <Text style={styles.youBadgeText}>You</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Bottom Row: Badges */}
-                    <View style={styles.memberBadgeRow}>
-                      {/* Fitness Level Badge */}
-                      {member.fitness_level && (
-                        <View style={[styles.fitnessLevelBadge, { backgroundColor: fitnessColors.bg }]}>
-                          <Text style={[styles.fitnessLevelText, { color: fitnessColors.text }]}>
-                            {member.fitness_level.charAt(0).toUpperCase() + member.fitness_level.slice(1)}
-                          </Text>
-                        </View>
-                      )}
-                      {/* Mentor Badge */}
-                      {member.user_role === 'mentor' && (
-                        <View style={styles.mentorBadge}>
-                          <Ionicons name="school" size={10} color="#FFFFFF" />
-                          <Text style={styles.mentorBadgeText}>Mentor</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* Status Badge */}
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      member.status === 'ready'
-                        ? styles.statusBadgeReady
-                        : styles.statusBadgeWaiting,
-                    ]}
-                  >
-                    <Ionicons
-                      name={member.status === 'ready' ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={14}
-                      color={member.status === 'ready' ? COLORS.SUCCESS[700] : COLORS.WARNING[700]}
-                    />
-                    <Text
-                      style={[
-                        styles.statusText,
-                        member.status === 'ready'
-                          ? styles.statusTextReady
-                          : styles.statusTextWaiting,
-                      ]}
-                    >
-                      {member.status === 'ready' ? 'Ready' : 'Waiting'}
-                    </Text>
-                  </View>
+                  {/* Name below avatar */}
+                  <Text style={styles.memberChipName} numberOfLines={1}>
+                    {isCurrentUser ? 'You' : member.user_name}
+                  </Text>
+                  {/* Ready status label */}
+                  <Text style={[styles.memberChipStatus, memberIsReady ? styles.memberChipStatusReady : styles.memberChipStatusWaiting]}>
+                    {memberIsReady ? '✓ Ready' : 'Waiting'}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -2276,91 +2263,6 @@ export default function GroupLobbyScreen() {
             />
           </ScrollView>
 
-          {/* Voting Panel - Shows when voting is active */}
-          {isVotingActive && (
-            <View style={styles.votingPanel}>
-              <View style={styles.votingHeader}>
-                <Ionicons name="people" size={20} color={COLORS.PRIMARY[600]} />
-                <Text style={styles.votingTitle}>Group Vote</Text>
-                <View style={styles.votingTimer}>
-                  <Ionicons name="time-outline" size={16} color={votingTimeRemaining <= 10 ? COLORS.ERROR[500] : COLORS.SECONDARY[600]} />
-                  <Text style={[styles.votingTimerText, votingTimeRemaining <= 10 && styles.votingTimerTextUrgent]}>
-                    {votingTimeRemaining}s
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.votingDescription}>
-                Accept the recommended workout or vote to customize?
-              </Text>
-
-              {/* Vote Counts */}
-              <View style={styles.voteCountsContainer}>
-                <View style={styles.voteCount}>
-                  <Text style={styles.voteCountNumber}>{getVoteCounts().accept}</Text>
-                  <Text style={styles.voteCountLabel}>Accept</Text>
-                </View>
-                <View style={styles.voteCountDivider} />
-                <View style={styles.voteCount}>
-                  <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
-                  <Text style={styles.voteCountLabel}>Customize</Text>
-                </View>
-                <View style={styles.voteCountDivider} />
-                <View style={styles.voteCount}>
-                  <Text style={styles.voteCountNumber}>{getVoteCounts().pending}</Text>
-                  <Text style={styles.voteCountLabel}>Pending</Text>
-                </View>
-              </View>
-
-              {/* Vote Buttons - ALL members can vote for both options */}
-              {currentUser && !hasUserVoted(parseInt(currentUser.id)) ? (
-                <View style={styles.voteButtonsContainer}>
-                  <TouchableOpacity
-                    style={[styles.voteButton, styles.voteButtonAccept]}
-                    onPress={() => handleVoteSubmit('accept')}
-                    disabled={isSubmittingVote}
-                  >
-                    {isSubmittingVote ? (
-                      <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
-                    ) : (
-                      <>
-                        <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
-                        <Text style={styles.voteButtonText}>Accept</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.voteButton, styles.voteButtonCustomize]}
-                    onPress={() => handleVoteSubmit('customize')}
-                    disabled={isSubmittingVote}
-                  >
-                    {isSubmittingVote ? (
-                      <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
-                    ) : (
-                      <>
-                        <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
-                        <Text style={styles.voteButtonText}>Customize</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.votedIndicator}>
-                  <Ionicons name="checkmark-done" size={20} color={COLORS.SUCCESS[600]} />
-                  <Text style={styles.votedText}>
-                    You voted: {currentUser ? memberVotes[parseInt(currentUser.id)]?.vote || 'pending' : 'pending'}
-                  </Text>
-                </View>
-              )}
-
-              {/* Info text explaining customization privileges */}
-              {!canUserCustomize && (
-                <Text style={styles.votingInfoText}>
-                  If "Customize" wins, mentors/advanced users will modify the workout.
-                </Text>
-              )}
-            </View>
-          )}
 
           {/* Voting Result Banner */}
           {votingResult && votingResult !== 'pending' && votingResult === 'accept_recommended' && (
@@ -2683,12 +2585,6 @@ export default function GroupLobbyScreen() {
                   // Use global online users instead of group-specific presence
                   const isMemberOnline = onlineUsers.has(member.userId.toString());
 
-                  console.log(`🔍 [INVITE MODAL] Checking member ${member.username}:`, {
-                    userId: member.userId,
-                    isOnline: isMemberOnline,
-                    globalOnlineUsers: Array.from(onlineUsers)
-                  });
-
                   return (
                     <TouchableOpacity
                       key={member.id}
@@ -2891,6 +2787,110 @@ export default function GroupLobbyScreen() {
         }}
       />
 
+      {/* Group Vote Bottom Sheet - animated backdrop + spring slide-up (matches WorkoutSetModal) */}
+      <Modal
+        visible={voteSheetVisible}
+        transparent
+        animationType="none"
+        onRequestClose={() => {}}
+        statusBarTranslucent
+      >
+        <View style={styles.voteSheetOverlay}>
+          {/* Animated backdrop */}
+          <Animated.View
+            style={[StyleSheet.absoluteFill, styles.voteSheetBackdrop, { opacity: votingBackdropOpacity }]}
+          />
+          {/* Animated sheet - springs up from bottom */}
+          <Animated.View style={[styles.voteSheet, { transform: [{ translateY: votingSlideAnim }] }]}>
+            {/* Handle bar */}
+            <View style={styles.voteSheetHandle} />
+
+            {/* Header */}
+            <View style={styles.voteSheetHeader}>
+              <View style={styles.voteSheetHeaderLeft}>
+                <Ionicons name="people" size={22} color={COLORS.PRIMARY[600]} />
+                <Text style={styles.voteSheetTitle}>Group Vote</Text>
+              </View>
+              <View style={[styles.voteSheetTimer, votingTimeRemaining <= 10 && styles.voteSheetTimerUrgent]}>
+                <Ionicons name="time-outline" size={16} color={votingTimeRemaining <= 10 ? COLORS.ERROR[500] : COLORS.SECONDARY[600]} />
+                <Text style={[styles.voteSheetTimerText, votingTimeRemaining <= 10 && styles.votingTimerTextUrgent]}>
+                  {votingTimeRemaining}s
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.voteSheetSubtitle}>
+              Accept the recommended workout or vote to customize?
+            </Text>
+
+            {/* Vote counts */}
+            <View style={styles.voteCountsContainer}>
+              <View style={styles.voteCount}>
+                <Text style={styles.voteCountNumber}>{getVoteCounts().accept}</Text>
+                <Text style={styles.voteCountLabel}>Accept</Text>
+              </View>
+              <View style={styles.voteCountDivider} />
+              <View style={styles.voteCount}>
+                <Text style={styles.voteCountNumber}>{getVoteCounts().customize}</Text>
+                <Text style={styles.voteCountLabel}>Customize</Text>
+              </View>
+              <View style={styles.voteCountDivider} />
+              <View style={styles.voteCount}>
+                <Text style={styles.voteCountNumber}>{getVoteCounts().pending}</Text>
+                <Text style={styles.voteCountLabel}>Pending</Text>
+              </View>
+            </View>
+
+            {/* Buttons or voted state */}
+            {currentUser && !hasUserVoted(parseInt(currentUser.id)) ? (
+              <View style={styles.voteButtonsContainer}>
+                <TouchableOpacity
+                  style={[styles.voteButton, styles.voteButtonAccept]}
+                  onPress={() => handleVoteSubmit('accept')}
+                  disabled={isSubmittingVote}
+                >
+                  {isSubmittingVote ? (
+                    <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color={COLORS.NEUTRAL.WHITE} />
+                      <Text style={styles.voteButtonText}>Accept</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.voteButton, styles.voteButtonCustomize]}
+                  onPress={() => handleVoteSubmit('customize')}
+                  disabled={isSubmittingVote}
+                >
+                  {isSubmittingVote ? (
+                    <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
+                  ) : (
+                    <>
+                      <Ionicons name="options" size={20} color={COLORS.NEUTRAL.WHITE} />
+                      <Text style={styles.voteButtonText}>Customize</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.votedIndicator}>
+                <Ionicons name="checkmark-done" size={20} color={COLORS.SUCCESS[600]} />
+                <Text style={styles.votedText}>
+                  You voted: {currentUser ? memberVotes[parseInt(currentUser.id)]?.vote || 'pending' : 'pending'}
+                </Text>
+              </View>
+            )}
+
+            {!canUserCustomize && (
+              <Text style={styles.votingInfoText}>
+                If "Customize" wins, mentors/advanced users will modify the workout.
+              </Text>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -2971,17 +2971,17 @@ const styles = StyleSheet.create({
   },
   membersSection: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
-    paddingTop: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.SECONDARY[200],
-    maxHeight: 320,
   },
   membersSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: FONT_SIZES.BASE,
@@ -2996,25 +2996,66 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  membersScrollView: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  memberCard: {
+  membersSectionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: COLORS.SECONDARY[100],
-    shadowColor: COLORS.SECONDARY[900],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    gap: 12,
+    gap: 10,
+  },
+  readyCountBadge: {
+    fontSize: 11,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SUCCESS[600],
+    backgroundColor: COLORS.SUCCESS[50],
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  membersAvatarRow: {
+    // horizontal scroll handles overflow
+  },
+  membersAvatarRowContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+    gap: 14,
+  },
+  memberAvatarChip: {
+    alignItems: 'center',
+    gap: 4,
+    width: 62,
+  },
+  memberAvatarRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    backgroundColor: COLORS.PRIMARY[50],
+  },
+  memberAvatarRingReady: {
+    borderColor: COLORS.SUCCESS[500],
+  },
+  memberAvatarRingWaiting: {
+    borderColor: COLORS.WARNING[300],
+  },
+  memberChipName: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[800],
+    textAlign: 'center',
+    maxWidth: 62,
+  },
+  memberChipStatus: {
+    fontSize: 9,
+    fontFamily: FONTS.SEMIBOLD,
+    textAlign: 'center',
+  },
+  memberChipStatusReady: {
+    color: COLORS.SUCCESS[600],
+  },
+  memberChipStatusWaiting: {
+    color: COLORS.WARNING[600],
   },
   memberAvatar: {
     width: 44,
@@ -3047,85 +3088,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: COLORS.NEUTRAL.WHITE,
-  },
-  memberContent: {
-    flex: 1,
-    gap: 6,
-  },
-  memberTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  memberName: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
-    flexShrink: 1,
-  },
-  youBadge: {
-    backgroundColor: COLORS.PRIMARY[100],
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  youBadgeText: {
-    fontSize: 10,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[700],
-  },
-  memberBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  fitnessLevelBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  fitnessLevelText: {
-    fontSize: 11,
-    fontFamily: FONTS.SEMIBOLD,
-  },
-  mentorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.SUCCESS[600],
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 4,
-  },
-  mentorBadgeText: {
-    fontSize: 10,
-    fontFamily: FONTS.SEMIBOLD,
-    color: '#FFFFFF',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-  },
-  statusBadgeReady: {
-    backgroundColor: COLORS.SUCCESS[100],
-  },
-  statusBadgeWaiting: {
-    backgroundColor: COLORS.WARNING[100],
-  },
-  statusText: {
-    fontSize: 11,
-    fontFamily: FONTS.BOLD,
-  },
-  statusTextReady: {
-    color: COLORS.SUCCESS[700],
-  },
-  statusTextWaiting: {
-    color: COLORS.WARNING[700],
   },
   memberActions: {
     flexDirection: 'row',
@@ -3713,8 +3675,8 @@ const styles = StyleSheet.create({
   votingPanel: {
     backgroundColor: COLORS.PRIMARY[50],
     borderRadius: 16,
-    padding: 16,
-    marginTop: 16,
+    padding: 12,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: COLORS.PRIMARY[200],
   },
@@ -3792,7 +3754,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 12,
   },
   voteButtonAccept: {
@@ -3832,6 +3794,76 @@ const styles = StyleSheet.create({
     color: COLORS.SUCCESS[700],
     textTransform: 'capitalize',
   },
+  // ── Group Vote Bottom Sheet ───────────────────────────────────────────────
+  voteSheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  voteSheetBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  voteSheet: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  voteSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.SECONDARY[300],
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  voteSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  voteSheetHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  voteSheetTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  voteSheetTimer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.SECONDARY[100],
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  voteSheetTimerUrgent: {
+    backgroundColor: COLORS.ERROR[50],
+  },
+  voteSheetTimerText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[600],
+  },
+  voteSheetSubtitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+    marginBottom: 16,
+  },
+  // ─────────────────────────────────────────────────────────────────────────
+
   votingResultBanner: {
     flexDirection: 'row',
     alignItems: 'center',
