@@ -110,6 +110,7 @@ export default function HomeScreen() {
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
   const [isRefreshingWorkouts, setIsRefreshingWorkouts] = useState(false);
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false); // Track if today's workout is done
+  const [completedSessionCount, setCompletedSessionCount] = useState(0); // For progressive overload
   const [weeklyAssessmentStatus, setWeeklyAssessmentStatus] = useState<{
     completed_this_week: boolean;
     this_week_assessment: { id: number; submitted_at: string; score: number } | null;
@@ -199,9 +200,12 @@ export default function HomeScreen() {
 
       console.log(`📅 [DASHBOARD] Today range: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
 
+      // Count total individual sessions for progressive overload
+      const individualSessions = sessions.sessions.filter((s: any) => s.sessionType !== 'group');
+      setCompletedSessionCount(individualSessions.length);
+
       // Check if any INDIVIDUAL session was completed today (group workouts don't count)
-      const todaySession = sessions.sessions.find((session: any) => {
-        if (session.sessionType === 'group') return false;
+      const todaySession = individualSessions.find((session: any) => {
         const sessionDate = new Date(session.createdAt);
         return sessionDate >= todayStart && sessionDate <= todayEnd;
       });
@@ -501,12 +505,12 @@ export default function HomeScreen() {
         return;
       }
 
-      if (!hasEnoughExercises(recommendations, fitnessLevel)) {
+      if (!hasEnoughExercises(recommendations, fitnessLevel, completedSessionCount)) {
         alert.warning('Insufficient Exercises', `You need more exercise recommendations for a proper ${fitnessLevel} level workout session. Please try again later.`);
         return;
       }
 
-      const session = generateTabataSession(recommendations, fitnessLevel, user.id);
+      const session = generateTabataSession(recommendations, fitnessLevel, user.id, completedSessionCount);
       setShowWorkoutSetModal(false);
 
       router.push({

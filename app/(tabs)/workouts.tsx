@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { trackingService } from '../../services/microservices/trackingService';
+import { getExerciseCountForLevel } from '../../services/workoutSessionGenerator';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { COLORS, FONTS } from '../../constants/colors';
 
@@ -36,6 +37,7 @@ export default function WorkoutsScreen() {
   const [showWorkoutSetModal, setShowWorkoutSetModal] = useState(false);
   const [currentWorkoutSet, setCurrentWorkoutSet] = useState<any>(null);
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false);
+  const [completedSessionCount, setCompletedSessionCount] = useState(0); // For progressive overload
 
   // NEW: State for workout customization (advanced/mentor users)
   const [alternativePool, setAlternativePool] = useState<any[]>([]);
@@ -88,9 +90,12 @@ export default function WorkoutsScreen() {
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
 
+      // Count total individual sessions for progressive overload
+      const individualSessions = sessions.sessions.filter((s: any) => s.sessionType !== 'group');
+      setCompletedSessionCount(individualSessions.length);
+
       // Only count individual sessions — group workouts don't mark the day complete
-      const todaySession = sessions.sessions.find((session: any) => {
-        if (session.sessionType === 'group') return false;
+      const todaySession = individualSessions.find((session: any) => {
         const sessionDate = new Date(session.createdAt);
         return sessionDate >= todayStart && sessionDate <= todayEnd;
       });
@@ -132,8 +137,8 @@ export default function WorkoutsScreen() {
     }
 
     const fitnessLevel = user?.fitnessLevel || 'beginner';
-    // Exercise count based on fitness level (consistent with ML service and getWorkoutStats)
-    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+    // Exercise count uses progressive overload based on completed session count
+    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
     const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
 
     const totalDuration = workoutExercises.length * 4;

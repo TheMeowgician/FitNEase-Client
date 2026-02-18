@@ -376,7 +376,7 @@ export class MLService {
         {
           user_ids: userIds,
           workout_format: options?.workout_format || 'tabata',
-          target_exercises: options?.target_exercises || 8,
+          target_exercises: options?.target_exercises,
           include_alternatives: options?.include_alternatives || false,  // NEW
           num_alternatives: options?.num_alternatives || 6               // NEW
         },

@@ -2,11 +2,11 @@
  * Workout Session Generator
  *
  * Generates proper Tabata workout sessions with multiple exercises
- * based on user fitness level:
+ * using progressive overload based on fitness level and completed session count:
  *
- * - Beginner: 4 exercises (16 minutes)
- * - Intermediate: 5 exercises (20 minutes)
- * - Advanced: 6 exercises (24 minutes)
+ * - Beginner:     4→5→6 exercises  (0-5 / 6-15 / 16+ sessions)
+ * - Intermediate: 6→7→8 exercises  (0-5 / 6-15 / 16+ sessions)
+ * - Advanced:     8→10→12 exercises (0-5 / 6-15 / 16+ sessions)
  *
  * Each exercise follows standard Tabata protocol:
  * 20 seconds work, 10 seconds rest, 8 sets = 4 minutes per exercise
@@ -55,17 +55,28 @@ export const TABATA_CONFIG: TabataSessionConfig = {
 };
 
 /**
- * Get the number of exercises based on fitness level
+ * Get the number of exercises based on fitness level and completed session count (progressive overload).
+ *
+ * Progressive overload ranges (per professor requirements):
+ *   Beginner:     0-5 sessions→4, 6-15→5, 16+→6
+ *   Intermediate: 0-5 sessions→6, 6-15→7, 16+→8
+ *   Advanced:     0-5 sessions→8, 6-15→10, 16+→12
  */
-export function getExerciseCountForLevel(fitnessLevel: string): number {
+export function getExerciseCountForLevel(fitnessLevel: string, sessionCount: number = 0): number {
   const level = fitnessLevel.toLowerCase();
 
   if (level === 'beginner') {
-    return 4; // 16 minutes
+    if (sessionCount < 6) return 4;
+    if (sessionCount < 16) return 5;
+    return 6;
   } else if (level === 'intermediate' || level === 'medium') {
-    return 5; // 20 minutes
+    if (sessionCount < 6) return 6;
+    if (sessionCount < 16) return 7;
+    return 8;
   } else if (level === 'advanced' || level === 'expert') {
-    return 6; // 24 minutes
+    if (sessionCount < 6) return 8;
+    if (sessionCount < 16) return 10;
+    return 12;
   }
 
   // Default to beginner
@@ -97,9 +108,10 @@ export function calculateSessionDuration(exerciseCount: number): number {
 export function generateTabataSession(
   recommendations: MLRecommendation[],
   fitnessLevel: string,
-  userId: string
+  userId: string,
+  sessionCount: number = 0
 ): TabataWorkoutSession {
-  const exerciseCount = getExerciseCountForLevel(fitnessLevel);
+  const exerciseCount = getExerciseCountForLevel(fitnessLevel, sessionCount);
 
   // Select the top N exercises based on fitness level
   const selectedExercises = recommendations.slice(0, exerciseCount);
@@ -142,9 +154,10 @@ export function generateTabataSession(
  */
 export function hasEnoughExercises(
   recommendations: MLRecommendation[],
-  fitnessLevel: string
+  fitnessLevel: string,
+  sessionCount: number = 0
 ): boolean {
-  const required = getExerciseCountForLevel(fitnessLevel);
+  const required = getExerciseCountForLevel(fitnessLevel, sessionCount);
   return recommendations.length >= required;
 }
 

@@ -1664,7 +1664,6 @@ export default function GroupLobbyScreen() {
       // Call ML group recommendations API with alternatives for voting
       const response = await mlService.getGroupWorkoutRecommendations(userIds, {
         workout_format: 'tabata',
-        target_exercises: 8,
         include_alternatives: true,
         num_alternatives: 6
       });
