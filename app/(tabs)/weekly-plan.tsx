@@ -420,11 +420,6 @@ export default function WeeklyPlanScreen() {
                       <Text style={styles.exerciseMetaText}>4 min</Text>
                     </View>
                   </View>
-                  {selectedDayData.completed && (
-                    <View style={styles.exerciseCheckmark}>
-                      <Ionicons name="checkmark" size={14} color="white" />
-                    </View>
-                  )}
                 </View>
               ))}
             </View>
