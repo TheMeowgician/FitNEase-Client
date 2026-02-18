@@ -80,7 +80,7 @@ const getAchievementIcon = (achievementName: string) => {
 // TODO: RESTORE TO TRUE BEFORE PRODUCTION DEPLOYMENT!
 // Set to false during testing to allow unlimited workouts per day
 // Set to true in production to enforce one workout per day limit
-const ENABLE_DAILY_WORKOUT_LIMIT = false; // 🧪 TESTING MODE - UNLIMITED WORKOUTS
+const ENABLE_DAILY_WORKOUT_LIMIT = true;
 // ====================================================================
 
 export default function HomeScreen() {
@@ -199,8 +199,9 @@ export default function HomeScreen() {
 
       console.log(`📅 [DASHBOARD] Today range: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
 
-      // Check if any session was completed today
+      // Check if any INDIVIDUAL session was completed today (group workouts don't count)
       const todaySession = sessions.sessions.find((session: any) => {
+        if (session.sessionType === 'group') return false;
         const sessionDate = new Date(session.createdAt);
         return sessionDate >= todayStart && sessionDate <= todayEnd;
       });
@@ -236,9 +237,10 @@ export default function HomeScreen() {
       const weekEnd = addDays(currentWeekStart, 6);
       weekEnd.setHours(23, 59, 59, 999);
 
-      // Filter sessions for this week and map to date strings
+      // Filter sessions for this week — only count individual workouts, not group sessions
       const completed = new Set<string>();
       sessions.sessions.forEach((session: any) => {
+        if (session.sessionType === 'group') return;
         const sessionDate = new Date(session.createdAt);
         if (sessionDate >= currentWeekStart && sessionDate <= weekEnd) {
           completed.add(format(sessionDate, 'yyyy-MM-dd'));
@@ -490,29 +492,23 @@ export default function HomeScreen() {
     setShowWorkoutSetModal(true);
   };
 
-  const handleStartWorkout = async () => {
+  const doStartWorkout = async () => {
     if (!user) return;
 
     try {
-      // Check if we have enough recommendations
       if (recommendations.length === 0) {
         alert.info('No Recommendations', 'Please wait while we load your personalized workout recommendations.');
         return;
       }
 
-      // Check if we have enough exercises for the user's fitness level
       if (!hasEnoughExercises(recommendations, fitnessLevel)) {
         alert.warning('Insufficient Exercises', `You need more exercise recommendations for a proper ${fitnessLevel} level workout session. Please try again later.`);
         return;
       }
 
-      // Generate a proper Tabata session with multiple exercises
       const session = generateTabataSession(recommendations, fitnessLevel, user.id);
-
-      // Close modal if open
       setShowWorkoutSetModal(false);
 
-      // Navigate to workout session with the generated session
       router.push({
         pathname: '/workout/session',
         params: {
@@ -524,6 +520,21 @@ export default function HomeScreen() {
       console.error('Error starting workout:', error);
       alert.error('Error', 'Failed to start workout. Please try again.');
     }
+  };
+
+  const handleStartWorkout = async () => {
+    if (isTodayWorkoutCompleted) {
+      alert.confirm(
+        'Already Completed Today',
+        "You've already finished today's workout plan! Would you like to do another Tabata set?",
+        () => doStartWorkout(),
+        undefined,
+        "Let's Go!",
+        'Not Now'
+      );
+      return;
+    }
+    await doStartWorkout();
   };
 
   const handleViewProgress = () => {
@@ -862,25 +873,14 @@ export default function HomeScreen() {
                 )}
               </TouchableOpacity>
             </View>
-            {isTodayWorkoutCompleted ? (
-              // Show completion message if today's workout is done
-              <View style={styles.completedWorkoutCard}>
-                <View style={styles.completedWorkoutIconContainer}>
-                  <Ionicons name="checkmark-circle" size={64} color="#10B981" />
-                </View>
-                <Text style={styles.completedWorkoutTitle}>Today's Workout Complete!</Text>
-                <Text style={styles.completedWorkoutText}>
-                  Excellent work! You've finished your Tabata workout for today.
-                  Come back tomorrow for your next session.
-                </Text>
-                <View style={styles.completedWorkoutStats}>
-                  <Ionicons name="trophy" size={20} color="#F59E0B" />
-                  <Text style={styles.completedWorkoutStatsText}>
-                    Keep your streak going!
-                  </Text>
-                </View>
+            {isTodayWorkoutCompleted && (
+              <View style={styles.completedTodayBanner}>
+                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                <Text style={styles.completedTodayBannerText}>Completed Today!</Text>
+                <Text style={styles.completedTodayBannerSub}>Tap to do another set</Text>
               </View>
-            ) : recommendations.length > 0 ? (
+            )}
+            {recommendations.length > 0 ? (
               <TouchableOpacity
                 style={styles.workoutCard}
                 onPress={handleViewWorkoutSet}
@@ -1643,6 +1643,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  completedTodayBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  completedTodayBannerText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#065F46',
+    flex: 1,
+  },
+  completedTodayBannerSub: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: '#047857',
   },
   completedWorkoutCard: {
     backgroundColor: '#F0FDF4', // Light green background
