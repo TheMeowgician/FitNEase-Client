@@ -56,6 +56,7 @@ export interface WorkoutSession {
   workoutId: string;
   workoutName: string;
   userId: string;
+  sessionType?: 'individual' | 'group';
   startTime: string;
   endTime?: string;
   duration?: number;
@@ -557,6 +558,7 @@ export class TrackingService {
         workoutId: session.workout_id?.toString(),
         workoutName: 'Tabata Workout', // We don't have workout names yet
         userId: session.user_id?.toString(),
+        sessionType: session.session_type as 'individual' | 'group' | undefined,
         startTime: session.start_time,
         endTime: session.end_time,
         duration: session.actual_duration_minutes,

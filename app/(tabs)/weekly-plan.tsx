@@ -114,9 +114,10 @@ export default function WeeklyPlanScreen() {
       const weekEnd = addDays(currentWeekStart, 6);
       weekEnd.setHours(23, 59, 59, 999);
 
-      // Filter sessions for this week and map to date strings
+      // Filter sessions for this week — only count individual workouts, not group sessions
       const completed = new Set<string>();
       sessions.sessions.forEach((session: any) => {
+        if (session.sessionType === 'group') return;
         const sessionDate = new Date(session.createdAt);
         if (sessionDate >= currentWeekStart && sessionDate <= weekEnd) {
           completed.add(format(sessionDate, 'yyyy-MM-dd'));
