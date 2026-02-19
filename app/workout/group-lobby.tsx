@@ -169,6 +169,8 @@ export default function GroupLobbyScreen() {
   const hasJoinedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  // Holds voting data until the exercise reveal animation finishes
+  const pendingVotingDataRef = useRef<{ exercises: any[]; alternatives: any[] } | null>(null);
   const isLobbyDeletedRef = useRef(false); // Track if LobbyDeleted event was received (blocks further actions)
   const isMinimizedRef = useRef(false); // Track if user minimized (to explore app while staying in lobby)
   const isWorkoutStartedRef = useRef(false); // Track if WorkoutStarted fired (don't leave lobby on unmount)
@@ -1701,12 +1703,12 @@ export default function GroupLobbyScreen() {
 
         console.log('✅ Exercises saved to lobby successfully');
 
-        // Auto-start voting after a short delay (allow exercise reveal animation)
-        setTimeout(() => {
-          if (!isCleaningUpRef.current && isMountedRef.current) {
-            triggerVoting(response.workout.exercises, alternatives);
-          }
-        }, 2000);
+        // Store voting data — triggerVoting fires after the reveal animation completes
+        // via onRevealComplete on AnimatedExerciseReveal (not a hardcoded timeout)
+        pendingVotingDataRef.current = {
+          exercises: response.workout.exercises,
+          alternatives,
+        };
       } else {
         throw new Error('No exercises generated');
       }
@@ -2094,6 +2096,21 @@ export default function GroupLobbyScreen() {
     // Once cleanup starts, this component instance should never accept more events
   };
 
+  /**
+   * Called by AnimatedExerciseReveal when all exercises have finished animating.
+   * Triggers voting only on the initiator's side (triggerVoting has its own guard).
+   */
+  const handleRevealComplete = () => {
+    if (!pendingVotingDataRef.current) return;
+    if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+    const { exercises, alternatives } = pendingVotingDataRef.current;
+    pendingVotingDataRef.current = null;
+
+    console.log('🎬 [REVEAL] Animation complete — triggering voting now');
+    triggerVoting(exercises, alternatives);
+  };
+
   // Show loading only if user is not available
   // Don't check currentLobby here as it's populated AFTER initializeLobby completes
   if (!currentUser) {
@@ -2264,6 +2281,7 @@ export default function GroupLobbyScreen() {
             <AnimatedExerciseReveal
               exercises={currentLobby?.workout_data?.exercises || []}
               isGenerating={isGenerating}
+              onRevealComplete={handleRevealComplete}
             />
           </ScrollView>
 
