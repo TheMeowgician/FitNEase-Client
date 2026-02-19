@@ -39,10 +39,23 @@ export default function AgoraVideoCall({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
+  // Incremented each time this effect starts — lets async setup detect if it became stale
+  // (e.g. React StrictMode fires cleanup+remount, or parent unmounts mid-setup)
+  const setupIdRef = useRef(0);
+
   useEffect(() => {
-    setupVideoSDKEngine();
+    const mySetupId = ++setupIdRef.current;
+    setupVideoSDKEngine(mySetupId);
+
     return () => {
-      leaveChannel();
+      // Invalidate any still-running async setup so it aborts before touching a
+      // released engine.  Do NOT call onLeave here — the parent already decided
+      // to unmount us (it set showVideoCall=false / agoraCredentials=null).
+      // Calling onLeave from cleanup would double-clear parent state and, during
+      // React StrictMode's mount→cleanup→remount cycle, would prevent the
+      // component from ever staying open.
+      setupIdRef.current++;
+      cleanupEngine();
     };
   }, []);
 
@@ -65,19 +78,47 @@ export default function AgoraVideoCall({
     return true; // iOS permissions handled via Info.plist
   };
 
-  const setupVideoSDKEngine = async () => {
+  // Release the native Agora engine without notifying the parent.
+  // Safe to call multiple times (guarded by null check).
+  const cleanupEngine = () => {
+    if (agoraEngineRef.current) {
+      try {
+        agoraEngineRef.current.stopPreview();
+        agoraEngineRef.current.leaveChannel();
+        agoraEngineRef.current.release();
+      } catch (error) {
+        console.error('❌ Failed to release Agora engine:', error);
+      } finally {
+        agoraEngineRef.current = null;
+      }
+      console.log('📹 Agora engine released');
+    }
+  };
+
+  const setupVideoSDKEngine = async (mySetupId: number) => {
     try {
       // Request camera and microphone permissions (required on Android)
       const hasPermissions = await getPermissions();
+
+      // Abort if a newer setup cycle has started (e.g. StrictMode remount) or we were unmounted
+      if (setupIdRef.current !== mySetupId) return;
+
       if (!hasPermissions) {
         console.error('❌ Camera/microphone permissions denied');
+        onLeave?.(); // Notify parent so it can close the video UI
         return;
       }
 
       // Create RTC engine
       const engine = createAgoraRtcEngine();
-      engine.initialize({ appId });
 
+      // Abort again — permissions dialog can take time; another cycle may have started
+      if (setupIdRef.current !== mySetupId) {
+        engine.release();
+        return;
+      }
+
+      engine.initialize({ appId });
       agoraEngineRef.current = engine;
 
       // Enable video and start local camera preview
@@ -113,25 +154,20 @@ export default function AgoraVideoCall({
       console.log('📹 Joining Agora channel:', channelName);
     } catch (error) {
       console.error('❌ Failed to setup Agora SDK:', error);
+      // Only notify parent if this setup is still the active one
+      if (setupIdRef.current === mySetupId) {
+        onLeave?.(); // Let parent close the video UI on init failure
+      }
     }
   };
 
+  // User-initiated leave: clean up engine AND notify parent to close the UI.
   const leaveChannel = async () => {
-    try {
-      if (agoraEngineRef.current) {
-        agoraEngineRef.current.stopPreview();
-        agoraEngineRef.current.leaveChannel();
-        agoraEngineRef.current.release();
-        agoraEngineRef.current = null; // Prevent double cleanup
-        console.log('📹 Left channel');
-      }
-      setIsJoined(false);
-      setRemoteUids([]);
-    } catch (error) {
-      console.error('❌ Failed to leave channel:', error);
-    }
+    cleanupEngine();
+    setIsJoined(false);
+    setRemoteUids([]);
 
-    // Always notify parent regardless of cleanup errors
+    // Notify parent that the user explicitly left
     onLeave?.();
 
     // Revoke token in background (non-blocking)
