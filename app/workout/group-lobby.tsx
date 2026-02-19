@@ -463,12 +463,17 @@ export default function GroupLobbyScreen() {
         console.log('📥 [FETCH EXERCISES] Fetching details for', exerciseIds.length, 'exercises:', exerciseIds);
 
         const detailsPromises = exerciseIds.map((id: number) => contentService.getExercise(String(id)));
-        const details = await Promise.all(detailsPromises);
-
-        // Filter out null results (failed fetches)
-        const validDetails = details.filter((d): d is Exercise => d !== null);
+        // allSettled so a single slow/failed exercise doesn't wipe out the rest
+        const results = await Promise.allSettled(detailsPromises);
+        const validDetails = results
+          .filter((r): r is PromiseFulfilledResult<Exercise> => r.status === 'fulfilled' && r.value !== null)
+          .map(r => r.value);
         setExerciseDetails(validDetails);
 
+        const failCount = results.length - validDetails.length;
+        if (failCount > 0) {
+          console.warn(`⚠️ [FETCH EXERCISES] ${failCount}/${results.length} exercise detail(s) failed to load`);
+        }
         console.log('✅ [FETCH EXERCISES] Loaded', validDetails.length, 'exercise details');
       } catch (error) {
         console.error('❌ [FETCH EXERCISES] Error fetching exercise details:', error);
@@ -2428,6 +2433,16 @@ export default function GroupLobbyScreen() {
         </View>
       </View>
 
+      {/* WebSocket connection warning */}
+      {!isConnected && (
+        <View style={styles.connectionWarning}>
+          <ActivityIndicator size="small" color="#FFFFFF" />
+          <Text style={styles.connectionWarningText}>
+            {connectionState === 'reconnecting' ? 'Reconnecting to lobby...' : 'Connection lost — some actions may not work'}
+          </Text>
+        </View>
+      )}
+
       {/* Footer Actions */}
       <View style={styles.footer}>
         {/* Ready Button - Everyone including creator */}
@@ -3562,6 +3577,20 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.BOLD,
     color: COLORS.NEUTRAL.WHITE,
+  },
+  connectionWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#F59E0B',
+  },
+  connectionWarningText: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#FFFFFF',
   },
   footer: {
     padding: 16,
