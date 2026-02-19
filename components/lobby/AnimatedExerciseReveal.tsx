@@ -27,46 +27,62 @@ interface AnimatedExerciseRevealProps {
 /**
  * Animated Exercise Reveal Component
  *
- * Shows exercises one by one with smooth animations when workout is generated.
- * Used in the group lobby when all users are ready.
+ * Center Stage animation: each exercise pops up as a large spotlight card
+ * in the center, holds for 1s so the group can read it, then slides down
+ * and lands in the growing list below — one by one.
  */
 export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
   exercises,
   isGenerating,
   onRevealComplete,
 }) => {
+  // How many exercises have fully landed in the list
   const [revealedCount, setRevealedCount] = useState(0);
+  // Which exercise is currently in the spotlight (-1 = none)
+  const [spotlightIndex, setSpotlightIndex] = useState(-1);
   const [isRevealing, setIsRevealing] = useState(false);
-  const animatedValues = useRef<Animated.Value[]>([]);
-  const scaleValues = useRef<Animated.Value[]>([]);
+
+  // Per-card list animations — card slides up from slightly below
+  const listOpacity = useRef<Animated.Value[]>([]);
+  const listTranslateY = useRef<Animated.Value[]>([]);
+
+  // Spotlight card animations
+  const spotlightOpacity = useRef(new Animated.Value(0)).current;
+  const spotlightScale = useRef(new Animated.Value(0.82)).current;
+  const spotlightTranslateY = useRef(new Animated.Value(0)).current;
+
+  // "Exercise X of Y" label fade
+  const labelOpacity = useRef(new Animated.Value(0)).current;
+
+  // Shimmer for generating placeholders
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
-  // Initialize animated values for each exercise, or reset when exercises are cleared
+  // Initialize per-card animated values whenever exercise count changes
   useEffect(() => {
     if (exercises.length > 0) {
-      animatedValues.current = exercises.map(() => new Animated.Value(0));
-      scaleValues.current = exercises.map(() => new Animated.Value(0.8));
+      listOpacity.current = exercises.map(() => new Animated.Value(0));
+      listTranslateY.current = exercises.map(() => new Animated.Value(18));
     } else {
-      // Reset reveal state when exercises are cleared so animation re-triggers
-      // when new exercises arrive (e.g., after member leaves and rejoins)
+      // Reset everything so animation re-triggers when new exercises arrive
       setRevealedCount(0);
+      setSpotlightIndex(-1);
       setIsRevealing(false);
-      animatedValues.current = [];
-      scaleValues.current = [];
+      listOpacity.current = [];
+      listTranslateY.current = [];
     }
   }, [exercises.length]);
 
-  // Start reveal animation when exercises are loaded
+  // Trigger the reveal sequence once exercises arrive
   useEffect(() => {
     if (exercises.length > 0 && !isGenerating && !isRevealing && revealedCount === 0) {
       startRevealAnimation();
     }
   }, [exercises, isGenerating]);
 
-  // Shimmer animation during generation
+  // Shimmer loop while generating
   useEffect(() => {
     if (isGenerating) {
-      const shimmerLoop = Animated.loop(
+      const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(shimmerAnim, {
             toValue: 1,
@@ -82,44 +98,112 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
           }),
         ])
       );
-      shimmerLoop.start();
-      return () => shimmerLoop.stop();
+      loop.start();
+      return () => loop.stop();
     }
   }, [isGenerating]);
 
-  const startRevealAnimation = () => {
-    setIsRevealing(true);
-    let delay = 0;
+  /**
+   * Reveal a single exercise:
+   * 1. Pop the spotlight card in (spring scale + opacity)
+   * 2. Hold for 1000ms
+   * 3. Exit spotlight (fade + slide down) while list card fades in
+   * 4. Call onDone so caller can move to next exercise
+   */
+  const revealExercise = (index: number, onDone: () => void) => {
+    // Reset spotlight animations for this exercise
+    spotlightOpacity.setValue(0);
+    spotlightScale.setValue(0.82);
+    spotlightTranslateY.setValue(0);
+    labelOpacity.setValue(0);
 
-    exercises.forEach((_, index) => {
+    // Show this exercise in spotlight zone
+    setSpotlightIndex(index);
+
+    // Phase 1: Spotlight pops in
+    Animated.parallel([
+      Animated.timing(spotlightOpacity, {
+        toValue: 1,
+        duration: 380,
+        easing: Easing.out(Easing.back(1.3)),
+        useNativeDriver: true,
+      }),
+      Animated.spring(spotlightScale, {
+        toValue: 1,
+        friction: 7,
+        tension: 130,
+        useNativeDriver: true,
+      }),
+      Animated.timing(labelOpacity, {
+        toValue: 1,
+        duration: 320,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Phase 2: Hold so the group can read the exercise
       setTimeout(() => {
-        // Animate opacity and scale
+        // Phase 3: Spotlight exits + list card appears simultaneously
         Animated.parallel([
-          Animated.timing(animatedValues.current[index], {
-            toValue: 1,
-            duration: 400,
-            easing: Easing.out(Easing.back(1.2)),
+          // Spotlight fades out + drifts slightly downward
+          Animated.timing(spotlightOpacity, {
+            toValue: 0,
+            duration: 320,
+            easing: Easing.in(Easing.ease),
             useNativeDriver: true,
           }),
-          Animated.spring(scaleValues.current[index], {
+          Animated.timing(spotlightTranslateY, {
+            toValue: 14,
+            duration: 320,
+            easing: Easing.in(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(spotlightScale, {
+            toValue: 0.9,
+            duration: 320,
+            useNativeDriver: true,
+          }),
+          // List card springs up into place
+          Animated.timing(listOpacity.current[index], {
             toValue: 1,
-            friction: 6,
-            tension: 100,
+            duration: 360,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(listTranslateY.current[index], {
+            toValue: 0,
+            duration: 360,
+            easing: Easing.out(Easing.back(1.1)),
             useNativeDriver: true,
           }),
         ]).start(() => {
           setRevealedCount(index + 1);
-          if (index === exercises.length - 1) {
-            setIsRevealing(false);
-            onRevealComplete?.();
-          }
+          setSpotlightIndex(-1);
+          // Short breathing gap before next exercise
+          setTimeout(onDone, 200);
         });
-      }, delay);
-      delay += 200; // 200ms between each exercise reveal
+      }, 1000);
     });
   };
 
-  // Format muscle group text
+  const startRevealAnimation = () => {
+    setIsRevealing(true);
+
+    const revealNext = (index: number) => {
+      if (index >= exercises.length) {
+        setIsRevealing(false);
+        onRevealComplete?.();
+        return;
+      }
+      revealExercise(index, () => revealNext(index + 1));
+    };
+
+    // Brief pause before the first exercise pops in
+    setTimeout(() => revealNext(0), 350);
+  };
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
   const formatMuscleGroup = (text: string): string => {
     if (!text) return 'Full Body';
     return text
@@ -129,21 +213,20 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
       .join(' ');
   };
 
-  // Get difficulty color
   const getDifficultyColor = (level: number): string => {
     if (level <= 1) return COLORS.SUCCESS[500];
     if (level === 2) return COLORS.WARNING[500];
     return COLORS.ERROR[500];
   };
 
-  // Get difficulty label
   const getDifficultyLabel = (level: number): string => {
     if (level <= 1) return 'Beginner';
     if (level === 2) return 'Intermediate';
     return 'Advanced';
   };
 
-  // Generating state - show shimmer placeholders
+  // ─── Generating state ─────────────────────────────────────────────────────
+
   if (isGenerating) {
     return (
       <View style={styles.container}>
@@ -169,8 +252,7 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
           </Text>
         </View>
 
-        {/* Shimmer placeholder cards */}
-        {[1, 2, 3, 4].map((_, index) => (
+        {[0, 1, 2, 3].map((_, index) => (
           <Animated.View
             key={index}
             style={[
@@ -194,7 +276,8 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
     );
   }
 
-  // No exercises yet
+  // ─── Empty state ──────────────────────────────────────────────────────────
+
   if (exercises.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -209,58 +292,158 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
     );
   }
 
-  // Reveal exercises with animation
+  // ─── Reveal state ─────────────────────────────────────────────────────────
+
+  const spotlightExercise = spotlightIndex >= 0 ? exercises[spotlightIndex] : null;
+  const spotlightDiffLevel = Number(spotlightExercise?.difficulty_level || 2);
+
   return (
     <View style={styles.container}>
-      {/* Summary Header */}
-      <View style={styles.summaryHeader}>
-        <LinearGradient
-          colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.summaryGradient}
-        >
-          <View style={styles.summaryItem}>
-            <Ionicons name="fitness" size={20} color="white" />
-            <Text style={styles.summaryValue}>{exercises.length}</Text>
-            <Text style={styles.summaryLabel}>Exercises</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Ionicons name="time" size={20} color="white" />
-            <Text style={styles.summaryValue}>{exercises.length * 4}</Text>
-            <Text style={styles.summaryLabel}>Minutes</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Ionicons name="flame" size={20} color="white" />
-            <Text style={styles.summaryValue}>~{exercises.length * 15}</Text>
-            <Text style={styles.summaryLabel}>Calories</Text>
-          </View>
-        </LinearGradient>
-      </View>
 
-      {/* Progress indicator during reveal */}
+      {/* ── Spotlight Zone ──────────────────────────────────────────────── */}
       {isRevealing && (
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressText}>
-            Revealing exercises... {revealedCount}/{exercises.length}
-          </Text>
-          <View style={styles.progressBar}>
+        <View style={styles.spotlightZone}>
+
+          {/* "Exercise X of Y" label */}
+          <Animated.Text style={[styles.spotlightLabel, { opacity: labelOpacity }]}>
+            ✨  Exercise {spotlightIndex + 1} of {exercises.length}
+          </Animated.Text>
+
+          {/* Big spotlight card */}
+          {spotlightExercise && (
             <Animated.View
               style={[
-                styles.progressFill,
-                { width: `${(revealedCount / exercises.length) * 100}%` },
+                styles.spotlightCard,
+                {
+                  opacity: spotlightOpacity,
+                  transform: [
+                    { scale: spotlightScale },
+                    { translateY: spotlightTranslateY },
+                  ],
+                },
               ]}
-            />
+            >
+              {/* Number badge row */}
+              <View style={styles.spotlightBadgeRow}>
+                <LinearGradient
+                  colors={[COLORS.PRIMARY[400], COLORS.PRIMARY[700]]}
+                  style={styles.spotlightNumberBadge}
+                >
+                  <Text style={styles.spotlightNumberText}>{spotlightIndex + 1}</Text>
+                </LinearGradient>
+              </View>
+
+              {/* Exercise name */}
+              <Text style={styles.spotlightExerciseName} numberOfLines={2}>
+                {spotlightExercise.exercise_name}
+              </Text>
+
+              {/* Muscle group + difficulty row */}
+              <View style={styles.spotlightMetaRow}>
+                <View style={styles.spotlightMetaItem}>
+                  <Ionicons name="body-outline" size={15} color={COLORS.SECONDARY[500]} />
+                  <Text style={styles.spotlightMetaText}>
+                    {formatMuscleGroup(spotlightExercise.target_muscle_group || '')}
+                  </Text>
+                </View>
+                <View style={[
+                  styles.spotlightDifficultyBadge,
+                  { backgroundColor: getDifficultyColor(spotlightDiffLevel) + '22' },
+                ]}>
+                  <View style={styles.difficultyStars}>
+                    {[1, 2, 3].map(star => (
+                      <Ionicons
+                        key={star}
+                        name={star <= spotlightDiffLevel ? 'star' : 'star-outline'}
+                        size={13}
+                        color={getDifficultyColor(spotlightDiffLevel)}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[
+                    styles.spotlightDifficultyText,
+                    { color: getDifficultyColor(spotlightDiffLevel) },
+                  ]}>
+                    {getDifficultyLabel(spotlightDiffLevel)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Tabata stats row */}
+              <View style={styles.spotlightTabataRow}>
+                <View style={styles.tabataItem}>
+                  <Text style={styles.spotlightTabataValue}>20s</Text>
+                  <Text style={styles.tabataLabel}>Work</Text>
+                </View>
+                <View style={styles.tabataDivider} />
+                <View style={styles.tabataItem}>
+                  <Text style={styles.spotlightTabataValue}>10s</Text>
+                  <Text style={styles.tabataLabel}>Rest</Text>
+                </View>
+                <View style={styles.tabataDivider} />
+                <View style={styles.tabataItem}>
+                  <Text style={styles.spotlightTabataValue}>8</Text>
+                  <Text style={styles.tabataLabel}>Rounds</Text>
+                </View>
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Progress dots */}
+          <View style={styles.progressDotsRow}>
+            {exercises.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.progressDot,
+                  i < revealedCount && styles.progressDotDone,
+                  i === spotlightIndex && styles.progressDotActive,
+                ]}
+              />
+            ))}
           </View>
         </View>
       )}
 
-      {/* Exercise Cards */}
+      {/* ── Summary header — appears after all exercises land ──────────── */}
+      {revealedCount === exercises.length && !isRevealing && (
+        <View style={styles.summaryHeader}>
+          <LinearGradient
+            colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.summaryGradient}
+          >
+            <View style={styles.summaryItem}>
+              <Ionicons name="fitness" size={20} color="white" />
+              <Text style={styles.summaryValue}>{exercises.length}</Text>
+              <Text style={styles.summaryLabel}>Exercises</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Ionicons name="time" size={20} color="white" />
+              <Text style={styles.summaryValue}>{exercises.length * 4}</Text>
+              <Text style={styles.summaryLabel}>Minutes</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Ionicons name="flame" size={20} color="white" />
+              <Text style={styles.summaryValue}>~{exercises.length * 15}</Text>
+              <Text style={styles.summaryLabel}>Calories</Text>
+            </View>
+          </LinearGradient>
+        </View>
+      )}
+
+      {/* ── Revealed exercise list ─────────────────────────────────────── */}
       {exercises.map((exercise, index) => {
-        const opacity = animatedValues.current[index] || new Animated.Value(1);
-        const scale = scaleValues.current[index] || new Animated.Value(1);
+        // Render only exercises that have landed in the list or are about to
+        // (index === revealedCount means it's the one currently in spotlight,
+        // pre-rendered as invisible so its list animation is ready to fire)
+        if (index > revealedCount) return null;
+
+        const opacity = listOpacity.current[index] ?? new Animated.Value(1);
+        const translateY = listTranslateY.current[index] ?? new Animated.Value(0);
         const difficultyLevel = Number(exercise.difficulty_level || 2);
 
         return (
@@ -270,19 +453,11 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
               styles.exerciseCard,
               {
                 opacity,
-                transform: [
-                  { scale },
-                  {
-                    translateY: opacity.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0],
-                    }),
-                  },
-                ],
+                transform: [{ translateY }],
               },
             ]}
           >
-            {/* Exercise Number Badge */}
+            {/* Number badge */}
             <View style={styles.numberBadge}>
               <LinearGradient
                 colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
@@ -292,40 +467,42 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
               </LinearGradient>
             </View>
 
-            {/* Exercise Content */}
+            {/* Exercise content */}
             <View style={styles.exerciseContent}>
               <Text style={styles.exerciseName} numberOfLines={2}>
                 {exercise.exercise_name}
               </Text>
 
               <View style={styles.exerciseMeta}>
-                {/* Muscle Group */}
                 <View style={styles.metaItem}>
                   <Ionicons name="body-outline" size={14} color={COLORS.SECONDARY[500]} />
                   <Text style={styles.metaText}>
                     {formatMuscleGroup(exercise.target_muscle_group || '')}
                   </Text>
                 </View>
-
-                {/* Difficulty */}
-                <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(difficultyLevel) + '20' }]}>
+                <View style={[
+                  styles.difficultyBadge,
+                  { backgroundColor: getDifficultyColor(difficultyLevel) + '20' },
+                ]}>
                   <View style={styles.difficultyStars}>
-                    {[1, 2, 3].map((star) => (
+                    {[1, 2, 3].map(star => (
                       <Ionicons
                         key={star}
-                        name={star <= difficultyLevel ? "star" : "star-outline"}
+                        name={star <= difficultyLevel ? 'star' : 'star-outline'}
                         size={10}
                         color={getDifficultyColor(difficultyLevel)}
                       />
                     ))}
                   </View>
-                  <Text style={[styles.difficultyText, { color: getDifficultyColor(difficultyLevel) }]}>
+                  <Text style={[
+                    styles.difficultyText,
+                    { color: getDifficultyColor(difficultyLevel) },
+                  ]}>
                     {getDifficultyLabel(difficultyLevel)}
                   </Text>
                 </View>
               </View>
 
-              {/* Tabata Info */}
               <View style={styles.tabataInfo}>
                 <View style={styles.tabataItem}>
                   <Text style={styles.tabataValue}>20s</Text>
@@ -355,7 +532,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  // Generating state
+  // ── Generating state ────────────────────────────────────────────────────
+
   generatingHeader: {
     alignItems: 'center',
     paddingVertical: 24,
@@ -383,7 +561,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Shimmer cards
+  // ── Shimmer placeholder cards ────────────────────────────────────────────
+
   shimmerCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -416,7 +595,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.SECONDARY[200],
   },
 
-  // Empty state
+  // ── Empty state ──────────────────────────────────────────────────────────
+
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 48,
@@ -444,7 +624,127 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 
-  // Summary header
+  // ── Spotlight zone ───────────────────────────────────────────────────────
+
+  spotlightZone: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    marginBottom: 20,
+    borderRadius: 20,
+    backgroundColor: COLORS.PRIMARY[50],
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[200],
+  },
+  spotlightLabel: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+    letterSpacing: 0.5,
+    marginBottom: 16,
+  },
+  spotlightCard: {
+    width: '90%',
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: COLORS.PRIMARY[600],
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[100],
+  },
+  spotlightBadgeRow: {
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  spotlightNumberBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spotlightNumberText: {
+    fontSize: 24,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.NEUTRAL.WHITE,
+  },
+  spotlightExerciseName: {
+    fontSize: 20,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+    textAlign: 'center',
+    marginBottom: 14,
+    lineHeight: 28,
+  },
+  spotlightMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  spotlightMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  spotlightMetaText: {
+    fontSize: 13,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[600],
+  },
+  spotlightDifficultyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 5,
+  },
+  spotlightDifficultyText: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+  },
+  spotlightTabataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  spotlightTabataValue: {
+    fontSize: FONT_SIZES.BASE,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  progressDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 18,
+  },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.PRIMARY[200],
+  },
+  progressDotDone: {
+    backgroundColor: COLORS.PRIMARY[500],
+  },
+  progressDotActive: {
+    width: 24,
+    borderRadius: 4,
+    backgroundColor: COLORS.PRIMARY[600],
+  },
+
+  // ── Summary header ───────────────────────────────────────────────────────
+
   summaryHeader: {
     marginBottom: 20,
     borderRadius: 16,
@@ -482,30 +782,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
 
-  // Progress indicator
-  progressContainer: {
-    marginBottom: 16,
-  },
-  progressText: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.PRIMARY[600],
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: COLORS.PRIMARY[100],
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.PRIMARY[600],
-    borderRadius: 2,
-  },
+  // ── Exercise cards (list) ────────────────────────────────────────────────
 
-  // Exercise card
   exerciseCard: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 20,
@@ -520,8 +798,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.SECONDARY[100],
   },
-
-  // Number badge
   numberBadge: {
     marginRight: 14,
   },
@@ -537,8 +813,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BOLD,
     color: 'white',
   },
-
-  // Exercise content
   exerciseContent: {
     flex: 1,
   },
@@ -549,8 +823,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 22,
   },
-
-  // Meta info
   exerciseMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -567,8 +839,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
   },
-
-  // Difficulty badge
   difficultyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -585,8 +855,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: FONTS.SEMIBOLD,
   },
-
-  // Tabata info
   tabataInfo: {
     flexDirection: 'row',
     alignItems: 'center',
