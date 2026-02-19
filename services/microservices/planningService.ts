@@ -100,6 +100,7 @@ export interface GenerateWeeklyPlanRequest {
   user_id: number;
   regenerate?: boolean;
   week_start_date?: string; // Format: YYYY-MM-DD
+  client_session_count?: number; // Cumulative completed session count — PHP uses this as source of truth
 }
 
 export class PlanningService {

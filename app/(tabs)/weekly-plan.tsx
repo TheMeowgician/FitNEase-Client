@@ -40,6 +40,7 @@ export default function WeeklyPlanScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [sessionCount, setSessionCount] = useState(0);
 
   // Week navigation state
   const [currentWeekStart, setCurrentWeekStart] = useState(() =>
@@ -129,6 +130,7 @@ export default function WeeklyPlanScreen() {
 
       // Cumulative session count for progressive overload tier detection
       const sessionCount = individualSessions.length;
+      setSessionCount(sessionCount);
 
       // Completed dates within this week for exercise preservation
       const weekEnd = addDays(currentWeekStart, 6);
@@ -186,6 +188,7 @@ export default function WeeklyPlanScreen() {
       const response = await planningService.generateWeeklyPlan({
         user_id: parseInt(user.id),
         regenerate,
+        client_session_count: sessionCount,
       });
       const plan = (response.data as any)?.plan || response.data;
       setWeeklyPlan(plan);
