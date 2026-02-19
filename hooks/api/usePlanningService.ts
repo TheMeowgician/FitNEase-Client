@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { planningService } from '../../services/microservices/planningService';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
@@ -22,6 +23,9 @@ export const usePlanningService = () => {
    * @returns Array of exercises for today, or empty array if today is a rest day
    */
   const getTodayExercises = useCallback(async (userId: string | number, sessionCount?: number): Promise<any[]> => {
+    const todayDate = new Date().toISOString().split('T')[0]; // "2026-02-19"
+    const cacheKey = `@fitnease:today_exercises:${userId}:${todayDate}`;
+
     try {
       setIsLoading(true);
       setError(null);
@@ -63,10 +67,25 @@ export const usePlanningService = () => {
         console.log('[PLANNING] First exercise:', exercises[0]?.exercise_name, `(ID: ${exercises[0]?.exercise_id})`);
       }
 
+      // Cache today's exercises for offline fallback — key includes date so stale data never bleeds in
+      if (exercises.length > 0) {
+        AsyncStorage.setItem(cacheKey, JSON.stringify(exercises)).catch(() => {});
+      }
+
       return exercises;
     } catch (err) {
       console.error('[PLANNING] Error fetching today\'s exercises:', err);
       setError(err as Error);
+
+      // Restore cached exercises if planning service unreachable (e.g. outdoor oval test)
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          console.log('[PLANNING] Network error — using cached exercises for today');
+          return JSON.parse(cached);
+        }
+      } catch {}
+
       return [];
     } finally {
       setIsLoading(false);
