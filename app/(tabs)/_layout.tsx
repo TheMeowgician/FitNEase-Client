@@ -18,7 +18,6 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <NetworkBanner />
       <Tabs
       screenOptions={{
         headerShown: false,
@@ -119,6 +118,7 @@ export default function TabLayout() {
       />
       </Tabs>
       <GlobalLobbyIndicator />
+      <NetworkBanner />
     </View>
   );
 }
