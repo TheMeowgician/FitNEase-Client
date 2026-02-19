@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
+import { NetworkBanner } from '../../components/ui/NetworkBanner';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function TabLayout() {
@@ -117,6 +118,7 @@ export default function TabLayout() {
       />
       </Tabs>
       <GlobalLobbyIndicator />
+      <NetworkBanner />
     </View>
   );
 }

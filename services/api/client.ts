@@ -46,6 +46,7 @@ export class APIClient {
   private clients: Map<string, AxiosInstance> = new Map();
   private isRefreshing = false;
   private refreshPromise: Promise<string | null> | null = null;
+  private inFlightRequests = new Map<string, Promise<ApiResponse<any>>>();
 
   // Rate limit retry configuration
   private readonly MAX_RETRIES = 3;
@@ -535,9 +536,22 @@ export class APIClient {
     url: string,
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> {
-    const client = this.getClient(service);
+    const key = `${service}:${url}:${JSON.stringify(config?.params || {})}`;
+
+    if (this.inFlightRequests.has(key)) {
+      console.log(`🔁 [GET DEDUP] Reusing in-flight request: ${key}`);
+      return this.inFlightRequests.get(key)! as Promise<ApiResponse<T>>;
+    }
+
     console.log(`🌐 [GET REQUEST] Service: ${service}, BaseURL: ${this.configs[service].baseURL}, Path: ${url}`);
-    return this.request<T>(service, { ...config, method: 'GET', url });
+    const promise = this.request<T>(service, { ...config, method: 'GET', url });
+    this.inFlightRequests.set(key, promise);
+
+    try {
+      return await promise;
+    } finally {
+      this.inFlightRequests.delete(key);
+    }
   }
 
   public async post<T = any>(

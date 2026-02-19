@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { usePlanningService } from '../../hooks/api/usePlanningService';
@@ -109,6 +110,8 @@ export default function WorkoutsScreen() {
     }
   };
 
+  const SESSION_COUNT_KEY = `@fitnease:session_count:${user?.id}`;
+
   const fetchSessionCount = async (): Promise<number> => {
     try {
       const sessions = await trackingService.getSessions({
@@ -117,8 +120,19 @@ export default function WorkoutsScreen() {
         limit: 50,
       });
       const individual = (sessions?.sessions || []).filter((s: any) => s.sessionType !== 'group');
-      return individual.length;
+      const count = individual.length;
+      // Cache for offline fallback so progressive overload tier survives network loss
+      await AsyncStorage.setItem(SESSION_COUNT_KEY, String(count));
+      return count;
     } catch {
+      // Use cached count on network failure — prevents tier-1 regression
+      try {
+        const cached = await AsyncStorage.getItem(SESSION_COUNT_KEY);
+        if (cached !== null) {
+          console.log('[WORKOUTS] Network error — using cached session count:', cached);
+          return parseInt(cached, 10);
+        }
+      } catch {}
       return 0;
     }
   };
