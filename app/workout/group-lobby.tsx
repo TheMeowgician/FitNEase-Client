@@ -217,16 +217,51 @@ export default function GroupLobbyScreen() {
   const canStartReadyCheck = !isReadyCheckActive && !hasExercises && lobbyMembers.length >= 2 && !isGenerating;
 
   /**
-   * Watch for ready check completion
-   * When all members accept the ready check, auto-generate exercises
+   * Watch for ready check completion — the ONLY trigger for auto-generating exercises.
+   *
+   * Safety checks:
+   * 1. readyCheckResult must be explicitly 'success' (set by ReadyCheckComplete backend event).
+   *    This prevents the allMembersReady selector from accidentally triggering generation
+   *    when leftover 'ready' statuses remain after a failed/incomplete ready check.
+   * 2. Cross-checks that every current lobby member actually responded 'accepted' in THIS
+   *    ready check. Guards against the race condition where a member joins AFTER the ready
+   *    check starts: the backend only tracks members present at start time, so it can fire
+   *    success even though the late joiner never responded.
    */
   useEffect(() => {
-    // Only proceed if ready check succeeded and we're the initiator
-    if (readyCheckResult === 'success' && isInitiator && !hasExercises && !isGenerating) {
-      console.log('🎯 [READY CHECK] All members ready! Auto-generating exercises...');
-      autoGenerateExercises(lobbyMembers.length);
+    if (readyCheckResult !== 'success' || !isInitiator || hasExercises || isGenerating) return;
+    if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+    // Read fresh state directly from stores (avoids stale closure values)
+    const freshMembers = useLobbyStore.getState().currentLobby?.members ?? [];
+    const responses = useReadyCheckStore.getState().responses;
+
+    const allCurrentMembersAccepted =
+      freshMembers.length >= 2 &&
+      freshMembers.every((m) => responses[m.user_id]?.response === 'accepted');
+
+    if (!allCurrentMembersAccepted) {
+      // A member joined after the ready check started — backend fired success for the
+      // original subset but the full current roster hasn't agreed. Clear the stale
+      // result and prompt the user to start a fresh check.
+      console.warn('⚠️ [READY CHECK] Success event received but not all current lobby members responded. Clearing.');
+      clearReadyCheck();
+      setIsReady(false);
+      addChatMessage({
+        message_id: `system-${Date.now()}-rc-incomplete`,
+        user_id: null,
+        user_name: 'System',
+        message: 'A member joined while the ready check was running. Please start a new ready check to include everyone.',
+        timestamp: Math.floor(Date.now() / 1000),
+        is_system_message: true,
+      });
+      return;
     }
-  }, [readyCheckResult, isInitiator, hasExercises, isGenerating, lobbyMembers.length]);
+
+    console.log('🎯 [READY CHECK] All members confirmed ready — generating exercises...');
+    autoGenerateExercises(freshMembers.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyCheckResult, isInitiator, hasExercises, isGenerating]);
 
   /**
    * Voting countdown timer
@@ -376,30 +411,12 @@ export default function GroupLobbyScreen() {
     };
   }, []);
 
-  /**
-   * Auto-generate exercises when ALL members are ready (minimum 2 users)
-   */
-  useEffect(() => {
-    // Guard against updates during cleanup
-    if (isCleaningUpRef.current || !isMountedRef.current) return;
-
-    // Skip if lobby not loaded yet
-    if (!currentLobby) {
-      return;
-    }
-
-    const totalMembers = lobbyMembers.length;
-
-    // Trigger auto-generation when:
-    // 1. At least 2 members in lobby
-    // 2. ALL members are ready
-    // 3. User is initiator
-    // 4. No exercises generated yet
-    if (totalMembers >= 2 && allMembersReady && isInitiator && !hasExercises && !isGenerating) {
-      console.log('🎯 [AUTO-GEN] All', totalMembers, 'members ready - triggering auto-generation');
-      autoGenerateExercises(totalMembers);
-    }
-  }, [currentLobby, lobbyMembers, allMembersReady, isInitiator, hasExercises, isGenerating]);
+  // NOTE: The allMembersReady auto-generation trigger was removed.
+  // Exercise generation is exclusively driven by readyCheckResult === 'success'
+  // (the useEffect above). Using allMembersReady as a trigger caused Bug 2:
+  // when a user left after a failed/incomplete ready check, the remaining members
+  // still had 'ready' status so allMembersReady became true and exercises generated
+  // without any successful ready check having occurred.
 
   /**
    * Clear exercises when member count drops below 2
@@ -840,6 +857,20 @@ export default function GroupLobbyScreen() {
         // Guard against updates during cleanup
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('👤 [REAL-TIME] Member left:', data);
+
+        // If a ready check had COMPLETED (result set, isActive=false) but was never
+        // cleared, clean it up now. The backend handles active ready checks by
+        // broadcasting ReadyCheckCancelled (which clears the store via onReadyCheckCancelled).
+        // This handles the residual case: ready check finished (success or failed) and
+        // then a member later leaves — without this, readyCheckResult stays set and
+        // could re-fire the generation useEffect on future state changes.
+        const rcState = useReadyCheckStore.getState();
+        if (!rcState.isActive && rcState.result !== null) {
+          clearReadyCheck();
+          setIsReady(false);
+          console.log('🧹 [MEMBER LEFT] Cleared completed ready check state (team changed)');
+        }
+
         // Add system chat message (don't update state - LobbyStateChanged handles it)
         if (data?.user_id) {
           addChatMessage({
@@ -1042,13 +1073,26 @@ export default function GroupLobbyScreen() {
         const updateResponse = useReadyCheckStore.getState().updateResponse;
         updateResponse(data.user_id, data.response);
 
-        // If user accepted, update their member status in lobby to 'ready'
         if (data.response === 'accepted') {
+          // Update member status to 'ready' in lobby store
           updateMemberStatus(data.user_id, 'ready');
-          // If it's the current user, also update local ready state
+          // Keep local ready state in sync for the current user
           if (currentUser && data.user_id === parseInt(currentUser.id)) {
             setIsReady(true);
           }
+        } else if (data.response === 'declined') {
+          // Show immediately in chat so everyone knows who declined.
+          // The backend also fires ReadyCheckComplete(success=false) right after,
+          // but this per-response message is more descriptive.
+          const declinerName = data.user_name || `User #${data.user_id}`;
+          addChatMessage({
+            message_id: `system-${Date.now()}-rc-decline-${data.user_id}`,
+            user_id: null,
+            user_name: 'System',
+            message: `${declinerName} is not ready — ready check failed.`,
+            timestamp: Math.floor(Date.now() / 1000),
+            is_system_message: true,
+          });
         }
       },
       onReadyCheckComplete: (data: any) => {
@@ -1056,17 +1100,31 @@ export default function GroupLobbyScreen() {
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('🏁 [REAL-TIME] Ready check complete:', data);
 
-        // Set result in store - this triggers exercise generation if success
+        // Set result in store — exercise generation is handled by the
+        // readyCheckResult useEffect (not here), which also validates that
+        // all current lobby members responded before generating.
         setReadyCheckResult(data.success ? 'success' : 'failed');
 
-        // If ready check succeeded, set all members to ready and update local state
         if (data.success) {
-          // Update all members' status to 'ready'
+          // Update all members' lobby status to 'ready' so the UI reflects it
           lobbyMembers.forEach(member => {
             updateMemberStatus(member.user_id, 'ready');
           });
-          // Set local ready state
           setIsReady(true);
+        } else {
+          // Show in chat if failed for a reason OTHER than decline
+          // (decline is already shown by onReadyCheckResponse above).
+          // The 'timeout' case has no per-user event, so we handle it here.
+          if (data.reason === 'timeout') {
+            addChatMessage({
+              message_id: `system-${Date.now()}-rc-timeout`,
+              user_id: null,
+              user_name: 'System',
+              message: 'Ready check timed out — not all members responded in time.',
+              timestamp: Math.floor(Date.now() / 1000),
+              is_system_message: true,
+            });
+          }
         }
       },
       onReadyCheckCancelled: (data: any) => {
@@ -1074,8 +1132,11 @@ export default function GroupLobbyScreen() {
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('❌ [REAL-TIME] Ready check cancelled:', data);
 
-        // Clear ready check in store
+        // Clear ready check store and reset local ready state.
+        // The backend sends this when: (a) initiator cancels manually,
+        // (b) a member joins mid-check, or (c) a member leaves mid-check.
         clearReadyCheck();
+        setIsReady(false);
       },
       // Voting events
       onVotingStarted: (data: any) => {
