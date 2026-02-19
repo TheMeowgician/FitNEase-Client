@@ -1,36 +1,50 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, AppState, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BANNER_HEIGHT = 32;
 
 export function NetworkBanner() {
   const [isOffline, setIsOffline] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-BANNER_HEIGHT)).current;
-  const { top } = useSafeAreaInsets();
+  const heightAnim = useRef(new Animated.Value(0)).current;
+
+  const updateStatus = (connected: boolean | null) => {
+    setIsOffline(connected === false);
+  };
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsOffline(state.isConnected === false);
+    // Fetch current state immediately — addEventListener alone can miss the initial value
+    NetInfo.fetch().then(state => updateStatus(state.isConnected));
+
+    // Real-time subscription for changes while app is active
+    const netUnsubscribe = NetInfo.addEventListener(state => {
+      updateStatus(state.isConnected);
     });
-    return () => unsubscribe();
+
+    // Re-check when app comes back to foreground (handles airplane toggle from notification panel)
+    const appStateSubscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        NetInfo.fetch().then(state => updateStatus(state.isConnected));
+      }
+    });
+
+    return () => {
+      netUnsubscribe();
+      appStateSubscription.remove();
+    };
   }, []);
 
   useEffect(() => {
-    Animated.timing(slideAnim, {
-      toValue: isOffline ? 0 : -BANNER_HEIGHT,
+    Animated.timing(heightAnim, {
+      toValue: isOffline ? BANNER_HEIGHT : 0,
       duration: 220,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [isOffline]);
 
   return (
-    <Animated.View
-      style={[styles.banner, { top, transform: [{ translateY: slideAnim }] }]}
-      pointerEvents="none"
-    >
+    <Animated.View style={[styles.banner, { height: heightAnim }]}>
       <Ionicons name="cloud-offline-outline" size={13} color="#FFFFFF" />
       <Text style={styles.text}>No internet · Features may not work</Text>
     </Animated.View>
@@ -39,16 +53,12 @@ export function NetworkBanner() {
 
 const styles = StyleSheet.create({
   banner: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 999,
+    overflow: 'hidden',
     backgroundColor: '#DC2626',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    height: BANNER_HEIGHT,
   },
   text: {
     color: '#FFFFFF',
