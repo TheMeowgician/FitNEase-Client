@@ -25,6 +25,8 @@ interface AnimatedExerciseRevealProps {
   exercises: Exercise[];
   isGenerating: boolean;
   onRevealComplete?: () => void;
+  /** When true, immediately shows all cards at full opacity — no animation played */
+  skipAnimation?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
   exercises,
   isGenerating,
   onRevealComplete,
+  skipAnimation = false,
 }) => {
   const [revealedCount, setRevealedCount] = useState(0);
   const [isRevealing, setIsRevealing] = useState(false);
@@ -54,6 +57,9 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
   // Single shimmer sweep shared across ALL cards — keeps the wave synchronized
   const shimmerTranslateX = useRef(new Animated.Value(-SCREEN_WIDTH)).current;
   const shimmerAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Pending reveal timeout — stored so skipAnimation can cancel it
+  const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Generating spinner animation
   const spinnerAnim = useRef(new Animated.Value(0)).current;
@@ -74,13 +80,40 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
     }
   }, [exercises.length]);
 
+  // ─── Instantly reveal all cards when skipAnimation is true ───────────────
+  // Used by the workout section while the fullscreen overlay is animating,
+  // so the section already shows all cards when the overlay disappears.
+
+  useEffect(() => {
+    if (skipAnimation && exercises.length > 0 && skeletonOpacities.current.length === exercises.length) {
+      // Cancel any pending reveal timeout
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+      // Snap all cards to fully revealed state
+      skeletonOpacities.current.forEach(anim => anim.setValue(0));
+      realOpacities.current.forEach(anim => anim.setValue(1));
+      cardScales.current.forEach(anim => anim.setValue(1));
+      setRevealedCount(exercises.length);
+      setIsRevealing(false);
+      shimmerAnimRef.current?.stop();
+    }
+  }, [skipAnimation, exercises.length]);
+
   // ─── Start reveal when exercises arrive after generation ─────────────────
 
   useEffect(() => {
-    if (exercises.length > 0 && !isGenerating && !isRevealing && revealedCount === 0) {
-      setTimeout(() => startRevealAnimation(), 300);
+    if (exercises.length > 0 && !isGenerating && !isRevealing && revealedCount === 0 && !skipAnimation) {
+      revealTimeoutRef.current = setTimeout(() => startRevealAnimation(), 300);
     }
-  }, [exercises, isGenerating]);
+    return () => {
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+    };
+  }, [exercises, isGenerating, skipAnimation]);
 
   // ─── Shimmer sweep — runs while any card is still skeleton ───────────────
 

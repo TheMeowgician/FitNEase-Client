@@ -160,17 +160,26 @@ export class APIClient {
           console.error(`❌ [${serviceName}] Network error retry exhausted after 2 attempts`);
         }
 
-        // Handle rate limiting (429) with exponential backoff retry
+        // Handle rate limiting (429) with exponential backoff retry.
+        // Skip retry entirely for hard hourly rate limits (Retry-After > 60s).
+        // These are per-hour quotas (e.g. 20 invitations/hour) where retrying
+        // is useless — each retry burns more quota and wastes user time.
+        // Only retry for burst/per-second limits (small Retry-After values).
         if (error.response?.status === 429) {
           const retryCount = originalRequest._retryCount || 0;
+          const retryAfterHeader = error.response.headers['retry-after'];
+          const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader) : 0;
+          const isHardRateLimit = retryAfterSeconds > 60;
 
-          if (retryCount < this.MAX_RETRIES) {
+          if (isHardRateLimit) {
+            // Hard hourly limit — don't retry, fall through to error handling immediately
+            console.log(`🚫 [${serviceName}] Hard rate limit (Retry-After: ${retryAfterSeconds}s) — not retrying`);
+          } else if (retryCount < this.MAX_RETRIES) {
             originalRequest._retryCount = retryCount + 1;
 
-            // Get retry-after header or calculate exponential backoff
-            const retryAfter = error.response.headers['retry-after'];
-            const delayMs = retryAfter
-              ? parseInt(retryAfter) * 1000
+            // Burst limit — exponential backoff retry is appropriate
+            const delayMs = retryAfterHeader
+              ? parseInt(retryAfterHeader) * 1000
               : this.INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
 
             console.log(`⏳ [${serviceName}] Rate limited (429), retrying in ${delayMs}ms (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);

@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
   Animated,
+  Easing,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -144,6 +145,13 @@ export default function GroupLobbyScreen() {
   const [voteSheetVisible, setVoteSheetVisible] = useState(false);
   const votingBackdropOpacity = useRef(new Animated.Value(0)).current;
   const votingSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+
+  // Fullscreen exercise reveal overlay
+  const [isFullscreenRevealVisible, setIsFullscreenRevealVisible] = useState(false);
+  const fullscreenOpacity = useRef(new Animated.Value(0)).current;
+  const fullscreenTranslateY = useRef(new Animated.Value(20)).current;
+  // Prevents replaying the fullscreen reveal on re-entry (e.g. after minimizing)
+  const hasPlayedRevealRef = useRef(false);
 
   // Check if current user can customize (mentor or advanced fitness level)
   const currentUserMember = lobbyMembers.find(m => m.user_id === parseInt(currentUser?.id || '0'));
@@ -1498,6 +1506,14 @@ export default function GroupLobbyScreen() {
 
   /**
    * Send invitations
+   *
+   * Edge cases handled:
+   * - 409 "already has a pending invitation": user was already invited (e.g.
+   *   from a previous "Invite All"). Treat as success — invite exists, no action needed.
+   * - 409 "already in this lobby": user joined between modal-open and send.
+   *   Also treated as success.
+   * - 429 rate limit: bail out of the loop immediately and show a clear message.
+   *   No point sending more — all subsequent attempts will also be rate-limited.
    */
   const handleSendInvitations = async () => {
     if (selectedMembers.size === 0) {
@@ -1510,6 +1526,7 @@ export default function GroupLobbyScreen() {
       // Send invitations sequentially to avoid race conditions on slow networks
       // (parallel sends can trigger simultaneous stale-lobby cleanup for the same user)
       const allResults: Array<{ userId: number; success: boolean; error?: string; userName?: string }> = [];
+      let rateLimitHit = false;
 
       for (const userId of Array.from(selectedMembers)) {
         try {
@@ -1521,6 +1538,24 @@ export default function GroupLobbyScreen() {
           );
           allResults.push({ userId, success: true });
         } catch (error: any) {
+          const msg: string = error.message || '';
+
+          // 409 "already has a pending invitation" — invitation already exists,
+          // treat as success so it doesn't show as a failure to the initiator.
+          // 409 "already in this lobby" — user joined between modal open and send.
+          if (msg.includes('already has a pending invitation') || msg.includes('already in this lobby')) {
+            allResults.push({ userId, success: true });
+            continue;
+          }
+
+          // 429 rate limit — bail immediately. All remaining users would also
+          // fail since the quota is exhausted for this hour.
+          if (msg.includes('Too many invitations') || msg.includes('maximum of 20')) {
+            rateLimitHit = true;
+            allResults.push({ userId, success: false, error: msg, userName: getMemberName(userId) });
+            break;
+          }
+
           allResults.push({ userId, success: false, error: error.message, userName: getMemberName(userId) });
         }
       }
@@ -1531,14 +1566,27 @@ export default function GroupLobbyScreen() {
 
       console.log('📊 Invitation results:', {
         total: selectedMembers.size,
+        attempted: allResults.length,
         successful: successful.length,
         failed: failed.length,
+        rateLimitHit,
         failedDetails: failed.map(f => ({ userId: f.userId, userName: f.userName, error: f.error }))
       });
 
+      // Rate limit hit — show specific message so user knows to wait
+      if (rateLimitHit) {
+        const sentCount = successful.length;
+        alert.error(
+          'Invite Limit Reached',
+          `${sentCount > 0 ? `${sentCount} invitation(s) sent. ` : ''}` +
+          `You've reached the invitation limit (20/hour). Please wait before inviting more members.`
+        );
+        return;
+      }
+
       // Show appropriate message
       if (successful.length === selectedMembers.size) {
-        // All succeeded
+        // All succeeded (includes those already-pending — invite exists either way)
         alert.success(
           'Invitations Sent',
           `Successfully invited ${successful.length} member(s) to the lobby.`,
@@ -2096,19 +2144,76 @@ export default function GroupLobbyScreen() {
     // Once cleanup starts, this component instance should never accept more events
   };
 
+  /** Expand the workout plan section to fullscreen for the exercise reveal animation */
+  const showFullscreenReveal = () => {
+    setIsFullscreenRevealVisible(true);
+    fullscreenOpacity.setValue(0);
+    fullscreenTranslateY.setValue(20);
+    Animated.parallel([
+      Animated.timing(fullscreenOpacity, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.spring(fullscreenTranslateY, {
+        toValue: 0,
+        damping: 20,
+        stiffness: 150,
+        mass: 1,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  /** Collapse the fullscreen overlay back toward the workout section, then call onDone */
+  const hideFullscreenReveal = (onDone?: () => void) => {
+    Animated.parallel([
+      Animated.timing(fullscreenOpacity, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fullscreenTranslateY, {
+        toValue: 30,
+        duration: 400,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsFullscreenRevealVisible(false);
+      onDone?.();
+    });
+  };
+
   /**
-   * Called by AnimatedExerciseReveal when all exercises have finished animating.
-   * Triggers voting only on the initiator's side (triggerVoting has its own guard).
+   * Show fullscreen reveal the first time exercises arrive.
+   * Guarded by hasPlayedRevealRef so it never replays on re-entry.
+   */
+  useEffect(() => {
+    if (hasExercises && !isGenerating && !hasPlayedRevealRef.current) {
+      hasPlayedRevealRef.current = true;
+      showFullscreenReveal();
+    }
+  }, [hasExercises, isGenerating]);
+
+  /**
+   * Called by the overlay's AnimatedExerciseReveal when all exercises have finished animating.
+   * Collapses the fullscreen overlay, then triggers voting (initiator only).
    */
   const handleRevealComplete = () => {
-    if (!pendingVotingDataRef.current) return;
     if (isCleaningUpRef.current || !isMountedRef.current) return;
 
-    const { exercises, alternatives } = pendingVotingDataRef.current;
-    pendingVotingDataRef.current = null;
+    hideFullscreenReveal(() => {
+      if (!pendingVotingDataRef.current) return;
+      if (isCleaningUpRef.current || !isMountedRef.current) return;
 
-    console.log('🎬 [REVEAL] Animation complete — triggering voting now');
-    triggerVoting(exercises, alternatives);
+      const { exercises, alternatives } = pendingVotingDataRef.current;
+      pendingVotingDataRef.current = null;
+
+      console.log('🎬 [REVEAL] Animation complete — triggering voting now');
+      triggerVoting(exercises, alternatives);
+    });
   };
 
   // Show loading only if user is not available
@@ -2142,6 +2247,7 @@ export default function GroupLobbyScreen() {
   }
 
   return (
+    <View style={styles.screenWrapper}>
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
@@ -2282,6 +2388,7 @@ export default function GroupLobbyScreen() {
               exercises={currentLobby?.workout_data?.exercises || []}
               isGenerating={isGenerating}
               onRevealComplete={handleRevealComplete}
+              skipAnimation={isFullscreenRevealVisible}
             />
           </ScrollView>
 
@@ -2941,10 +3048,52 @@ export default function GroupLobbyScreen() {
       </Modal>
 
     </SafeAreaView>
+
+      {/* ── Fullscreen Exercise Reveal Overlay ─────────────────────────────────
+          Appears when exercises are first generated, covers the whole screen
+          so the skeleton→reveal animation is cinematic. Fades out after
+          all cards are revealed, then smoothly returns to the workout section.  */}
+      {isFullscreenRevealVisible && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.fullscreenRevealOverlay,
+            {
+              opacity: fullscreenOpacity,
+              transform: [{ translateY: fullscreenTranslateY }],
+            },
+          ]}
+        >
+          <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+            {/* Header */}
+            <View style={styles.fullscreenRevealHeader}>
+              <Ionicons name="sparkles" size={22} color={COLORS.PRIMARY[500]} />
+              <Text style={styles.fullscreenRevealTitle}>Workout Plan Ready</Text>
+            </View>
+
+            {/* Animated exercise list */}
+            <ScrollView
+              style={styles.fullscreenRevealScroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.fullscreenRevealScrollContent}
+            >
+              <AnimatedExerciseReveal
+                exercises={currentLobby?.workout_data?.exercises || []}
+                isGenerating={false}
+                onRevealComplete={handleRevealComplete}
+              />
+            </ScrollView>
+          </SafeAreaView>
+        </Animated.View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.NEUTRAL.WHITE,
@@ -3160,6 +3309,36 @@ const styles = StyleSheet.create({
   kickButton: {
     padding: 4,
   },
+  // ── Fullscreen exercise reveal overlay ─────────────────────────────────────
+  fullscreenRevealOverlay: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    zIndex: 100,
+  },
+  fullscreenRevealHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[100],
+  },
+  fullscreenRevealTitle: {
+    fontSize: FONT_SIZES.LG,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  fullscreenRevealScroll: {
+    flex: 1,
+  },
+  fullscreenRevealScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
+
   workoutSection: {
     flex: 1,
     backgroundColor: COLORS.NEUTRAL.WHITE,
