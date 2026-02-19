@@ -21,7 +21,7 @@ import { useAlert } from '../../contexts/AlertContext';
 import { useLobbyStore, selectCurrentLobby, selectLobbyMembers, selectAreAllMembersReady, selectIsLobbyInitiator, selectUnreadMessageCount, selectLeftSessionId } from '../../stores/lobbyStore';
 import { useReadyCheckStore, selectIsReadyCheckActive, selectReadyCheckResult } from '../../stores/readyCheckStore';
 import { useVotingStore, selectIsVotingActive, selectVotingResult, selectMemberVotes, selectVotingExpiresAt, selectVotingAlternatives } from '../../stores/votingStore';
-import { useConnectionStore, selectIsConnected, selectConnectionState } from '../../stores/connectionStore';
+import { useConnectionStore, selectConnectionState } from '../../stores/connectionStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
 import { useReverb } from '../../contexts/ReverbProvider';
@@ -75,11 +75,12 @@ export default function GroupLobbyScreen() {
   const leftSessionId = useLobbyStore(selectLeftSessionId);
   const isLoading = useLobbyStore((state) => state.isLoading);
   const allMembersReady = useLobbyStore(selectAreAllMembersReady);
-  const isConnected = useConnectionStore(selectIsConnected);
   const connectionState = useConnectionStore(selectConnectionState);
 
-  // Global online users from Reverb context
-  const { onlineUsers, refreshGroupSubscriptions } = useReverb();
+  // Global online users and real connection status from Reverb context
+  // NOTE: connectionStore.isConnected is never updated (no caller sets it to true),
+  // so we use isConnected from ReverbProvider which IS correctly maintained.
+  const { onlineUsers, refreshGroupSubscriptions, isConnected } = useReverb();
   const setLobbyState = useLobbyStore((state) => state.setLobbyState);
   const updateMemberStatus = useLobbyStore((state) => state.updateMemberStatus);
   const addMember = useLobbyStore((state) => state.addMember);
