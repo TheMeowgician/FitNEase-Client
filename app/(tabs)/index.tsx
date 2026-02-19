@@ -200,8 +200,8 @@ export default function HomeScreen() {
 
       console.log(`📅 [DASHBOARD] Today range: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
 
-      // Count total individual sessions for progressive overload
-      const individualSessions = sessions.sessions.filter((s: any) => s.sessionType !== 'group');
+      // Count total individual sessions for progressive overload (completed only)
+      const individualSessions = sessions.sessions.filter((s: any) => s.sessionType !== 'group' && s.status === 'completed');
       setCompletedSessionCount(individualSessions.length);
 
       // Check if any INDIVIDUAL session was completed today (group workouts don't count)
@@ -241,10 +241,11 @@ export default function HomeScreen() {
       const weekEnd = addDays(currentWeekStart, 6);
       weekEnd.setHours(23, 59, 59, 999);
 
-      // Filter sessions for this week — only count individual workouts, not group sessions
+      // Filter sessions for this week — only count completed individual workouts, not group sessions
       const completed = new Set<string>();
       sessions.sessions.forEach((session: any) => {
         if (session.sessionType === 'group') return;
+        if (session.status !== 'completed') return;
         const sessionDate = new Date(session.createdAt);
         if (sessionDate >= currentWeekStart && sessionDate <= weekEnd) {
           completed.add(format(sessionDate, 'yyyy-MM-dd'));

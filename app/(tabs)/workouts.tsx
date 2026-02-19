@@ -93,11 +93,11 @@ export default function WorkoutsScreen() {
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
 
-      // Count total individual sessions for progressive overload
-      const individualSessions = sessions.sessions.filter((s: any) => s.sessionType !== 'group');
+      // Count total individual sessions for progressive overload (completed only)
+      const individualSessions = sessions.sessions.filter((s: any) => s.sessionType !== 'group' && s.status === 'completed');
       setCompletedSessionCount(individualSessions.length);
 
-      // Only count individual sessions — group workouts don't mark the day complete
+      // Only count individual completed sessions — group workouts and abandoned sessions don't mark the day complete
       const todaySession = individualSessions.find((session: any) => {
         const sessionDate = new Date(session.createdAt);
         return sessionDate >= todayStart && sessionDate <= todayEnd;
@@ -119,7 +119,7 @@ export default function WorkoutsScreen() {
         status: 'completed',
         limit: 50,
       });
-      const individual = (sessions?.sessions || []).filter((s: any) => s.sessionType !== 'group');
+      const individual = (sessions?.sessions || []).filter((s: any) => s.sessionType !== 'group' && s.status === 'completed');
       const count = individual.length;
       // Cache for offline fallback so progressive overload tier survives network loss
       await AsyncStorage.setItem(SESSION_COUNT_KEY, String(count));

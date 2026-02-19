@@ -1223,6 +1223,10 @@ export default function WorkoutSessionScreen() {
           completionPercentage: actualCompletionPercentage
         });
 
+        // Skip saving if user quit before completing a single set — no meaningful data to record
+        if (completedSets === 0) {
+          console.log('❌ [EXIT] No sets completed — skipping session save');
+        } else {
         // Save partial session data with ACTUAL completion percentage
         await trackingService.createWorkoutSession({
           workoutId: sessionId,
@@ -1237,6 +1241,7 @@ export default function WorkoutSessionScreen() {
           completionPercentage: actualCompletionPercentage, // Pass actual completion percentage
           notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises, set ${sessionState.currentSet + 1}/8` : 'Partial workout'} (${actualCompletionPercentage}% complete, ${actualDurationMinutes}min)`
         });
+        } // end else (completedSets > 0)
       }
 
       // For group workouts, leave lobby and clean up
