@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const BANNER_HEIGHT = 36;
+const BANNER_HEIGHT = 32;
 
 export function NetworkBanner() {
   const [isOffline, setIsOffline] = useState(false);
   const slideAnim = useRef(new Animated.Value(-BANNER_HEIGHT)).current;
+  const { top } = useSafeAreaInsets();
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -26,7 +28,7 @@ export function NetworkBanner() {
 
   return (
     <Animated.View
-      style={[styles.banner, { transform: [{ translateY: slideAnim }] }]}
+      style={[styles.banner, { top, transform: [{ translateY: slideAnim }] }]}
       pointerEvents="none"
     >
       <Ionicons name="cloud-offline-outline" size={13} color="#FFFFFF" />
@@ -38,7 +40,6 @@ export function NetworkBanner() {
 const styles = StyleSheet.create({
   banner: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     zIndex: 999,
