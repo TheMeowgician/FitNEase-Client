@@ -101,6 +101,7 @@ export interface GenerateWeeklyPlanRequest {
   regenerate?: boolean;
   week_start_date?: string; // Format: YYYY-MM-DD
   client_session_count?: number; // Cumulative completed session count — PHP uses this as source of truth
+  force_fresh?: boolean; // true = random seed → genuinely new exercises; false/absent = deterministic week seed
 }
 
 export class PlanningService {

@@ -189,6 +189,7 @@ export default function WeeklyPlanScreen() {
         user_id: parseInt(user.id),
         regenerate,
         client_session_count: sessionCount,
+        force_fresh: regenerate, // manual regenerate → random seed → genuinely new exercises
       });
       const plan = (response.data as any)?.plan || response.data;
       setWeeklyPlan(plan);
