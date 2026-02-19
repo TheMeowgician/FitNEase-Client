@@ -112,6 +112,7 @@ export default function GroupLobbyScreen() {
 
   // Local state
   const [isReady, setIsReady] = useState(false);
+  const [isTogglingReady, setIsTogglingReady] = useState(false);
   const [isInitiator, setIsInitiator] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -1245,8 +1246,9 @@ export default function GroupLobbyScreen() {
    * Toggle ready status
    */
   const handleToggleReady = async () => {
-    if (!sessionId || !currentUser) return;
+    if (!sessionId || !currentUser || isTogglingReady) return;
 
+    setIsTogglingReady(true);
     const newStatus = isReady ? 'waiting' : 'ready';
 
     // Optimistic update - update UI immediately
@@ -1267,6 +1269,8 @@ export default function GroupLobbyScreen() {
       setIsReady(isReady);
       updateMemberStatus(parseInt(currentUser.id), isReady ? 'ready' : 'waiting');
       alert.error('Error', 'Failed to update status. Please try again.');
+    } finally {
+      setIsTogglingReady(false);
     }
   };
 
@@ -2430,6 +2434,7 @@ export default function GroupLobbyScreen() {
         <TouchableOpacity
           style={[styles.readyButton, isReady && styles.readyButtonActive]}
           onPress={handleToggleReady}
+          disabled={isTogglingReady}
         >
           <Ionicons
             name={isReady ? 'checkmark-circle' : 'checkmark-circle-outline'}

@@ -24,7 +24,7 @@ import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
 import { engagementService } from '../../services/microservices/engagementService';
-import { generateTabataSession, hasEnoughExercises, getSessionSummary } from '../../services/workoutSessionGenerator';
+import { generateTabataSession, hasEnoughExercises, getSessionSummary, getExerciseCountForLevel } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 import { getAlgorithmDisplayName } from '../../utils/mlUtils';
@@ -476,8 +476,8 @@ export default function HomeScreen() {
       return;
     }
 
-    // Exercise count based on fitness level (consistent with ML service)
-    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+    // Exercise count uses progressive overload based on completed session count
+    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
     const exercises = recommendations.slice(0, Math.min(exerciseCount, recommendations.length));
 
     // Calculate total duration and calories
@@ -895,8 +895,8 @@ export default function HomeScreen() {
                   <View style={styles.workoutCardTitleContainer}>
                     <Text style={styles.workoutCardTitle}>Tabata Workout</Text>
                     <Text style={styles.workoutCardSubtitle}>
-                      {fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6} exercises • {(() => {
-                        const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+                      {getExerciseCountForLevel(fitnessLevel, completedSessionCount)} exercises • {(() => {
+                        const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
                         const workoutExercises = recommendations?.slice(0, exerciseCount) || [];
                         const muscleGroups = new Set<string>();
                         workoutExercises.forEach(ex => {
@@ -920,7 +920,7 @@ export default function HomeScreen() {
                 {/* Exercise Preview - Consistent with Workouts page */}
                 <View style={styles.exercisePreview}>
                   {(() => {
-                    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+                    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
 
                     return (
                       <>
@@ -948,19 +948,19 @@ export default function HomeScreen() {
                 <View style={styles.workoutStatsRow}>
                   <View style={styles.workoutStatItem}>
                     <Ionicons name="time-outline" size={18} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.workoutStatValue}>{(fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6) * 4} min</Text>
+                    <Text style={styles.workoutStatValue}>{getExerciseCountForLevel(fitnessLevel, completedSessionCount) * 4} min</Text>
                   </View>
                   <View style={styles.workoutStatDivider} />
                   <View style={styles.workoutStatItem}>
                     <Ionicons name="flame-outline" size={18} color={COLORS.WARNING[500]} />
                     <Text style={styles.workoutStatValue}>
-                      ~{recommendations?.slice(0, fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0)} cal
+                      ~{recommendations?.slice(0, getExerciseCountForLevel(fitnessLevel, completedSessionCount)).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0)} cal
                     </Text>
                   </View>
                   <View style={styles.workoutStatDivider} />
                   <View style={styles.workoutStatItem}>
                     <Ionicons name="fitness-outline" size={18} color={COLORS.SUCCESS[500]} />
-                    <Text style={styles.workoutStatValue}>{fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6} sets</Text>
+                    <Text style={styles.workoutStatValue}>{getExerciseCountForLevel(fitnessLevel, completedSessionCount)} sets</Text>
                   </View>
                 </View>
 

@@ -69,7 +69,7 @@ export class APIClient {
 
       const client = axios.create({
         baseURL: config.baseURL,
-        timeout: 60000, // Increased to 60 seconds for slow networks
+        timeout: 15000, // 15 seconds for mobile networks
         headers: {
           'Content-Type': 'application/json',
         },
@@ -120,7 +120,7 @@ export class APIClient {
     client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+        const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean; _retryCount?: number; _networkRetryCount?: number };
 
         // Check if this is an auth endpoint that should NOT trigger token refresh
         const authExcludedEndpoints = [
@@ -137,6 +137,27 @@ export class APIClient {
         const isAuthExcluded = authExcludedEndpoints.some(endpoint =>
           originalRequest.url?.includes(endpoint)
         );
+
+        // Handle network-level errors with retry (slow/no internet)
+        const isNetworkError = !error.response && (
+          error.code === 'ECONNABORTED' ||
+          error.code === 'ECONNRESET' ||
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ERR_NETWORK' ||
+          error.message === 'Network Error'
+        );
+
+        if (isNetworkError) {
+          const networkRetryCount = originalRequest._networkRetryCount || 0;
+          if (networkRetryCount < 2) {
+            originalRequest._networkRetryCount = networkRetryCount + 1;
+            const delayMs = networkRetryCount === 0 ? 1000 : 3000;
+            console.log(`🔄 [${serviceName}] Network error (${error.code || error.message}), retrying in ${delayMs}ms (attempt ${networkRetryCount + 1}/2)`);
+            await this.delay(delayMs);
+            return client(originalRequest);
+          }
+          console.error(`❌ [${serviceName}] Network error retry exhausted after 2 attempts`);
+        }
 
         // Handle rate limiting (429) with exponential backoff retry
         if (error.response?.status === 429) {

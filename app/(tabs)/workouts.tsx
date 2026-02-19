@@ -39,6 +39,8 @@ export default function WorkoutsScreen() {
   const [isTodayWorkoutCompleted, setIsTodayWorkoutCompleted] = useState(false);
   const [completedSessionCount, setCompletedSessionCount] = useState(0); // For progressive overload
 
+  const [isViewingWorkoutSet, setIsViewingWorkoutSet] = useState(false);
+
   // NEW: State for workout customization (advanced/mentor users)
   const [alternativePool, setAlternativePool] = useState<any[]>([]);
 
@@ -150,55 +152,61 @@ export default function WorkoutsScreen() {
   };
 
   const handleViewWorkoutSet = async () => {
+    if (isViewingWorkoutSet) return;
     if (!exercises || exercises.length === 0) {
       alert.info('No Exercises', 'No exercises available for today.');
       return;
     }
 
-    const fitnessLevel = user?.fitnessLevel || 'beginner';
-    // Exercise count uses progressive overload based on completed session count
-    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
-    const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
+    setIsViewingWorkoutSet(true);
+    try {
+      const fitnessLevel = user?.fitnessLevel || 'beginner';
+      // Exercise count uses progressive overload based on completed session count
+      const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
+      const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
 
-    const totalDuration = workoutExercises.length * 4;
-    const totalCalories = workoutExercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0);
+      const totalDuration = workoutExercises.length * 4;
+      const totalCalories = workoutExercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0);
 
-    const workoutSet = {
-      exercises: workoutExercises,
-      total_duration: totalDuration,
-      total_calories: totalCalories,
-      difficulty: fitnessLevel,
-    };
+      const workoutSet = {
+        exercises: workoutExercises,
+        total_duration: totalDuration,
+        total_calories: totalCalories,
+        difficulty: fitnessLevel,
+      };
 
-    setCurrentWorkoutSet(workoutSet);
+      setCurrentWorkoutSet(workoutSet);
 
-    // Fetch alternatives for advanced/expert users to enable customization
-    if (canCustomize && user) {
-      try {
-        console.log('[WORKOUTS] Fetching alternatives for customization...');
-        const { mlService } = await import('../../services/microservices/mlService');
-        const response = await mlService.getRecommendations(String(user.id), {
-          num_recommendations: 6,
-          include_alternatives: true,
-          num_alternatives: 6,
-        });
+      // Fetch alternatives for advanced/expert users to enable customization
+      if (canCustomize && user) {
+        try {
+          console.log('[WORKOUTS] Fetching alternatives for customization...');
+          const { mlService } = await import('../../services/microservices/mlService');
+          const response = await mlService.getRecommendations(String(user.id), {
+            num_recommendations: 6,
+            include_alternatives: true,
+            num_alternatives: 6,
+          });
 
-        if (response?.alternative_pool && response.alternative_pool.length > 0) {
-          // Filter out exercises that are already in the workout
-          const workoutExerciseIds = new Set(workoutExercises.map((ex: any) => ex.exercise_id));
-          const filteredAlternatives = response.alternative_pool.filter(
-            (alt: any) => !workoutExerciseIds.has(alt.exercise_id)
-          );
-          setAlternativePool(filteredAlternatives);
-          console.log(`[WORKOUTS] Loaded ${filteredAlternatives.length} alternatives for customization`);
+          if (response?.alternative_pool && response.alternative_pool.length > 0) {
+            // Filter out exercises that are already in the workout
+            const workoutExerciseIds = new Set(workoutExercises.map((ex: any) => ex.exercise_id));
+            const filteredAlternatives = response.alternative_pool.filter(
+              (alt: any) => !workoutExerciseIds.has(alt.exercise_id)
+            );
+            setAlternativePool(filteredAlternatives);
+            console.log(`[WORKOUTS] Loaded ${filteredAlternatives.length} alternatives for customization`);
+          }
+        } catch (error) {
+          console.error('[WORKOUTS] Failed to fetch alternatives:', error);
+          // Continue without alternatives - swap feature just won't be available
         }
-      } catch (error) {
-        console.error('[WORKOUTS] Failed to fetch alternatives:', error);
-        // Continue without alternatives - swap feature just won't be available
       }
-    }
 
-    setShowWorkoutSetModal(true);
+      setShowWorkoutSetModal(true);
+    } finally {
+      setIsViewingWorkoutSet(false);
+    }
   };
 
   const doStartWorkoutSet = () => {
@@ -354,6 +362,7 @@ export default function WorkoutsScreen() {
                 style={styles.workoutCard}
                 onPress={handleViewWorkoutSet}
                 activeOpacity={0.9}
+                disabled={isViewingWorkoutSet}
               >
                 {/* Card Header */}
                 <View style={styles.workoutCardHeader}>
