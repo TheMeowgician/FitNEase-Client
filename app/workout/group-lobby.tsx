@@ -1495,36 +1495,33 @@ export default function GroupLobbyScreen() {
 
     setIsInviting(true);
     try {
-      // Send invitations individually and track successes/failures
-      const results = await Promise.allSettled(
-        Array.from(selectedMembers).map(userId =>
-          socialService.inviteMemberToLobbyV2(
+      // Send invitations sequentially to avoid race conditions on slow networks
+      // (parallel sends can trigger simultaneous stale-lobby cleanup for the same user)
+      const allResults: Array<{ userId: number; success: boolean; error?: string; userName?: string }> = [];
+
+      for (const userId of Array.from(selectedMembers)) {
+        try {
+          await socialService.inviteMemberToLobbyV2(
             sessionId,
             userId,
             parseInt(groupId),
             currentLobby?.workout_data || { workout_format: 'tabata', exercises: [] }
-          ).then(() => ({ userId, success: true }))
-            .catch((error) => ({ userId, success: false, error: error.message, userName: getMemberName(userId) }))
-        )
-      );
+          );
+          allResults.push({ userId, success: true });
+        } catch (error: any) {
+          allResults.push({ userId, success: false, error: error.message, userName: getMemberName(userId) });
+        }
+      }
 
       // Count successes and failures
-      const successful = results.filter(
-        (r) => r.status === 'fulfilled' && r.value.success
-      );
-      const failed = results.filter(
-        (r) => r.status === 'fulfilled' && !r.value.success
-      );
+      const successful = allResults.filter(r => r.success);
+      const failed = allResults.filter(r => !r.success);
 
       console.log('📊 Invitation results:', {
         total: selectedMembers.size,
         successful: successful.length,
         failed: failed.length,
-        failedDetails: failed.map((f: any) => ({
-          userId: f.value?.userId,
-          userName: f.value?.userName,
-          error: f.value?.error
-        }))
+        failedDetails: failed.map(f => ({ userId: f.userId, userName: f.userName, error: f.error }))
       });
 
       // Show appropriate message
@@ -1540,10 +1537,8 @@ export default function GroupLobbyScreen() {
         );
       } else if (successful.length > 0) {
         // Some succeeded, some failed
-        const failedUsers = failed.map((f: any) => f.value?.userName || `User ${f.value?.userId}`).join(', ');
-        const hasLobbyError = failed.some((f: any) =>
-          f.value?.error?.includes('already in another lobby')
-        );
+        const failedUsers = failed.map(f => f.userName || `User ${f.userId}`).join(', ');
+        const hasLobbyError = failed.some(f => f.error?.includes('already in another lobby'));
 
         alert.warning(
           'Partial Success',
@@ -1557,9 +1552,9 @@ export default function GroupLobbyScreen() {
         );
       } else {
         // All failed
-        const firstError = (failed[0] as any)?.value?.error || 'Unknown error';
+        const firstError = failed[0]?.error || 'Unknown error';
         const hasLobbyError = firstError.includes('already in another lobby');
-        const failedUserNames = failed.map((f: any) => f.value?.userName || `User ${f.value?.userId}`).join(', ');
+        const failedUserNames = failed.map(f => f.userName || `User ${f.userId}`).join(', ');
 
         alert.error(
           'Invitation Failed',
@@ -2557,6 +2552,22 @@ export default function GroupLobbyScreen() {
                   </Text>
                 </View>
               </View>
+              {!isLoadingMembers && groupMembers.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedMembers.size === groupMembers.length) {
+                      setSelectedMembers(new Set());
+                    } else {
+                      setSelectedMembers(new Set(groupMembers.map((m: any) => parseInt(m.userId))));
+                    }
+                  }}
+                  style={styles.selectAllButton}
+                >
+                  <Text style={styles.selectAllText}>
+                    {selectedMembers.size === groupMembers.length ? 'Deselect All' : 'Select All'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -3336,6 +3347,9 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   inviteModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
@@ -3343,6 +3357,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+    flex: 1,
+  },
+  selectAllButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: COLORS.PRIMARY[50],
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[200],
+  },
+  selectAllText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
   },
   inviteModalBackButton: {
     padding: 4,

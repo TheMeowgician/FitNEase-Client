@@ -266,7 +266,7 @@ export default function WorkoutsScreen() {
 
   const getWorkoutStats = () => {
     const fitnessLevel = user?.fitnessLevel || 'beginner';
-    const exerciseCount = fitnessLevel === 'beginner' ? 4 : fitnessLevel === 'intermediate' ? 5 : 6;
+    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
     const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
 
     const totalDuration = workoutExercises.length * 4;

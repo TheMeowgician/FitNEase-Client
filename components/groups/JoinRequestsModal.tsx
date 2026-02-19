@@ -45,6 +45,7 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [isAcceptingAll, setIsAcceptingAll] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   // Separate animation values: overlay fades, content slides
@@ -116,6 +117,43 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const handleAcceptAll = async () => {
+    if (requests.length === 0 || isAcceptingAll) return;
+
+    alert.confirm(
+      'Accept All Requests',
+      `Accept all ${requests.length} pending request(s) and add them to the group?`,
+      async () => {
+        setIsAcceptingAll(true);
+        let successCount = 0;
+        let failCount = 0;
+
+        // Process sequentially to avoid race conditions on slow networks
+        for (const request of requests) {
+          try {
+            await socialService.approveJoinRequest(groupId, request.request_id);
+            successCount++;
+          } catch {
+            failCount++;
+          }
+        }
+
+        setRequests([]);
+        setIsAcceptingAll(false);
+        onRequestHandled?.();
+
+        if (failCount === 0) {
+          alert.success('Done', `Successfully accepted ${successCount} request(s).`);
+        } else {
+          alert.warning('Partial Success', `Accepted ${successCount}, failed ${failCount}. Try refreshing.`);
+        }
+      },
+      undefined,
+      'Accept All',
+      'Cancel'
+    );
   };
 
   const handleReject = async (requestId: number, username: string) => {
@@ -198,10 +236,41 @@ export const JoinRequestsModal: React.FC<JoinRequestsModalProps> = ({
               <Text style={styles.title}>Join Requests</Text>
               <Text style={styles.subtitle}>{groupName}</Text>
             </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={COLORS.SECONDARY[600]} />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                onPress={loadRequests}
+                style={styles.refreshButton}
+                disabled={isLoading}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={20}
+                  color={isLoading ? COLORS.SECONDARY[300] : COLORS.PRIMARY[600]}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[600]} />
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* Accept All (shown when there are requests) */}
+          {!isLoading && requests.length > 1 && (
+            <TouchableOpacity
+              style={[styles.acceptAllButton, isAcceptingAll && styles.acceptAllButtonDisabled]}
+              onPress={handleAcceptAll}
+              disabled={isAcceptingAll}
+            >
+              {isAcceptingAll ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
+              )}
+              <Text style={styles.acceptAllText}>
+                {isAcceptingAll ? 'Accepting...' : `Accept All (${requests.length})`}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Content */}
           {isLoading ? (
@@ -314,6 +383,35 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.SECONDARY[100],
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  refreshButton: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  acceptAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.SUCCESS[600],
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  acceptAllButtonDisabled: {
+    opacity: 0.6,
+  },
+  acceptAllText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#FFFFFF',
   },
   title: {
     fontSize: FONT_SIZES.LG,

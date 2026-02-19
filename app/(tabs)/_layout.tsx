@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
@@ -7,7 +8,12 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export default function TabLayout() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const isMentor = user?.role === 'mentor';
+
+  // On Android, use the actual bottom inset (handles gesture nav bar) with a minimum of 8px
+  const tabBarPaddingBottom = Platform.OS === 'ios' ? 20 : Math.max(8, insets.bottom);
+  const tabBarHeight = Platform.OS === 'ios' ? 88 : 56 + tabBarPaddingBottom;
 
   return (
     <View style={{ flex: 1 }}>
@@ -20,8 +26,8 @@ export default function TabLayout() {
           backgroundColor: COLORS.NEUTRAL.WHITE,
           borderTopWidth: 1,
           borderTopColor: COLORS.SECONDARY[200],
-          height: Platform.OS === 'ios' ? 88 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+          height: tabBarHeight,
+          paddingBottom: tabBarPaddingBottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
