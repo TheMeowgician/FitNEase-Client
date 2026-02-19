@@ -93,7 +93,8 @@ class ReverbService {
     });
 
     this.pusher.connection.bind('error', (err: any) => {
-      console.error('❌ Reverb connection error:', err);
+      // Use warn (not error) so Expo dev overlay doesn't show a toast — network loss is expected
+      console.warn('⚠️ Reverb connection error:', err);
     });
 
     // 🔥 FIX: Only schedule reconnect on 'disconnected' event to prevent duplicate reconnection attempts
