@@ -670,7 +670,8 @@ export default function GroupLobbyScreen() {
    * unnecessary re-renders. Stops polling during cleanup/unmount.
    */
   useEffect(() => {
-    if (!sessionId || !hasJoinedRef.current) return;
+    // Wait until lobby is initialized (lobbyMembers > 0 means store has been populated)
+    if (!sessionId || lobbyMembers.length === 0) return;
 
     const syncInterval = setInterval(async () => {
       if (isCleaningUpRef.current || !isMountedRef.current) return;
@@ -700,7 +701,7 @@ export default function GroupLobbyScreen() {
 
     return () => clearInterval(syncInterval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, lobbyMembers.length > 0]);
 
   /**
    * Initialize lobby on mount

@@ -65,6 +65,18 @@ export function ReadyCheckHandler() {
       return;
     }
 
+    // CRITICAL: If the channel is already subscribed by group-lobby.tsx, do NOT
+    // re-subscribe. subscribeToPrivateChannel calls unbind_global() which would
+    // KILL group-lobby's event handlers (LobbyStateChanged, MemberJoined, etc.),
+    // leaving only ready-check handlers. group-lobby already handles ALL events
+    // including ready checks, so we just piggyback on its subscription.
+    if (!isSubscribedRef.current && isActuallySubscribed) {
+      console.log('✅ [READY CHECK HANDLER] Channel already managed by group-lobby, piggybacking');
+      channelRef.current = sessionId;
+      isSubscribedRef.current = true;
+      return;
+    }
+
     // Unsubscribe from old channel if different session
     if (channelRef.current && channelRef.current !== sessionId) {
       console.log('🔕 [READY CHECK HANDLER] Switching lobby session, unsubscribing from old:', channelRef.current);
@@ -79,7 +91,8 @@ export function ReadyCheckHandler() {
     isSubscribedRef.current = true;
 
     // Subscribe using a separate listener for ready check events
-    // Note: We use the same channel as the lobby but only listen for ready check events
+    // Only reaches here when NO other component has subscribed to this channel
+    // (e.g., user is on home screen, not on the lobby screen)
     reverbService.subscribeToLobby(sessionId, {
       onReadyCheckStarted: (data: any) => {
         console.log('🔔 [READY CHECK HANDLER] Ready check started:', data);
