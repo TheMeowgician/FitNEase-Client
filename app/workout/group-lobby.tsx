@@ -301,15 +301,39 @@ export default function GroupLobbyScreen() {
       if (remaining === 0 && isInitiator && !hasForceCompletedVotingRef.current) {
         hasForceCompletedVotingRef.current = true;
         console.log('[VOTING] Timeout reached, forcing completion (once)');
-        socialService.forceCompleteVoting(sessionId).catch((err) => {
-          // Treat "No active voting found" as success — voting was already completed
-          // (e.g. all members voted before timeout, or another client beat us to it).
-          if (err?.message?.includes('No active voting found')) {
-            console.log('[VOTING] Voting already resolved before timeout fired — OK');
-          } else {
-            console.error('[VOTING] Force complete failed:', err);
+
+        // Retry helper: on 404 the cache may have JUST expired (tight TTL race).
+        // We retry up to 3 times with a 5-second gap. If all fail and the vote sheet
+        // is still showing, force-clear the UI as a last resort so nobody is stuck.
+        const tryForceComplete = async (retriesLeft: number) => {
+          try {
+            await socialService.forceCompleteVoting(sessionId);
+            console.log('[VOTING] Force complete succeeded');
+          } catch (err: any) {
+            const notFound = err?.message?.includes('No active voting found');
+            if (notFound) {
+              // If VotingComplete already arrived (isActive went false), we're done.
+              if (!useVotingStore.getState().isActive) {
+                console.log('[VOTING] Voting already resolved — OK');
+                return;
+              }
+              if (retriesLeft > 0) {
+                console.warn(`[VOTING] 404 but vote still active — retrying in 5s (${retriesLeft} left)`);
+                setTimeout(() => tryForceComplete(retriesLeft - 1), 5000);
+              } else {
+                // All retries exhausted, backend cache is gone. The VotingComplete event
+                // will never fire. Clear the UI on this device so at least the initiator
+                // is unblocked. Non-initiators are handled by their own safety valve.
+                console.error('[VOTING] Force complete failed 3×, clearing vote UI (initiator)');
+                clearVoting();
+              }
+            } else {
+              console.error('[VOTING] Force complete failed:', err);
+            }
           }
-        });
+        };
+
+        tryForceComplete(3);
       }
     };
 
@@ -321,6 +345,34 @@ export default function GroupLobbyScreen() {
 
     return () => clearInterval(interval);
   }, [isVotingActive, votingExpiresAt, isInitiator, sessionId]);
+
+  /**
+   * Non-initiator vote sheet safety valve.
+   *
+   * If the backend's voting cache expired before forceCompleteVoting was called (too-short
+   * TTL) or the VotingComplete WebSocket event was simply dropped, the non-initiator's vote
+   * sheet stays open indefinitely — they have no way to force-complete it themselves.
+   *
+   * This effect sets a timer for (expiresAt + 30 s) from now. If the vote sheet is STILL
+   * showing at that point, we self-clear it so the device is no longer stuck.
+   *
+   * 30 s = 3× the initiator's retry cycle (3 retries × 5 s) + generous margin.
+   */
+  useEffect(() => {
+    if (!isVotingActive || !votingExpiresAt || isInitiator) return;
+
+    const msUntilSafetyFires = Math.max(votingExpiresAt - Date.now() + 30000, 30000);
+
+    const safetyTimer = setTimeout(() => {
+      if (useVotingStore.getState().isActive) {
+        console.warn('[VOTING] Safety valve: VotingComplete never received — clearing vote UI');
+        clearVoting();
+      }
+    }, msUntilSafetyFires);
+
+    return () => clearTimeout(safetyTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVotingActive, votingExpiresAt, isInitiator]);
 
   /**
    * When voting starts and the fullscreen reveal overlay is still visible (which can happen
@@ -383,6 +435,95 @@ export default function GroupLobbyScreen() {
   }, [isVotingActive]);
 
   /**
+   * Non-initiator exercise polling — single source of truth fallback.
+   *
+   * After the ready check succeeds, the initiator generates exercises and the backend
+   * broadcasts LobbyStateChanged with workout_data. If the non-initiator misses that
+   * event (brief network hiccup, Reverb delivery lag, etc.) they're stuck in the lobby
+   * with hasExercises=false and no animation, while the initiator has already moved on.
+   *
+   * This effect polls getLobbyStateV2 every 3 seconds until:
+   *   a) exercises arrive (either via WebSocket or this poll), or
+   *   b) voting is already active (VotingStarted arrived; vote sheet is visible), or
+   *   c) 30 seconds have elapsed (exercise generation is always < 20s).
+   */
+  useEffect(() => {
+    if (readyCheckResult !== 'success' || isInitiator || hasExercises || !sessionId) return;
+    if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10; // 10 × 3 s = 30 s max
+
+    const pollInterval = setInterval(async () => {
+      if (isCleaningUpRef.current || !isMountedRef.current) {
+        clearInterval(pollInterval);
+        return;
+      }
+
+      // Stop if WebSocket already delivered VotingStarted (vote sheet open)
+      if (useVotingStore.getState().isActive) {
+        console.log('[EXERCISE POLL] Voting active — stopping poll');
+        clearInterval(pollInterval);
+        return;
+      }
+
+      // Stop if exercises landed via WebSocket while we were waiting
+      if ((useLobbyStore.getState().currentLobby?.workout_data?.exercises?.length ?? 0) > 0) {
+        console.log('[EXERCISE POLL] Exercises arrived via WebSocket — stopping poll');
+        clearInterval(pollInterval);
+        return;
+      }
+
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+        console.log('[EXERCISE POLL] Max attempts reached — stopping poll');
+        clearInterval(pollInterval);
+        return;
+      }
+
+      console.log(`[EXERCISE POLL] Polling for exercises (attempt ${attempts}/${MAX_ATTEMPTS})`);
+      try {
+        const response = await socialService.getLobbyStateV2(sessionId);
+        if (!isMountedRef.current || isCleaningUpRef.current) {
+          clearInterval(pollInterval);
+          return;
+        }
+
+        const lobbyState = response?.data?.lobby_state;
+        if ((lobbyState?.workout_data?.exercises?.length ?? 0) > 0) {
+          console.log('[EXERCISE POLL] Exercises found via HTTP poll — updating lobby state');
+          setLobbyState(lobbyState);
+          clearInterval(pollInterval);
+        } else if (lobbyState?.active_voting) {
+          // Voting already started on backend but we missed both events — recover
+          console.log('[EXERCISE POLL] Active voting found — recovering missed VotingStarted');
+          setLobbyState(lobbyState);
+          if (!useVotingStore.getState().isActive) {
+            const av = lobbyState.active_voting;
+            startVoting({
+              sessionId: av.session_id || sessionId,
+              votingId: av.voting_id,
+              initiatorId: av.initiator_id,
+              initiatorName: av.initiator_name || '',
+              members: av.members || [],
+              exercises: av.exercises || [],
+              alternativePool: av.alternative_pool || [],
+              timeoutSeconds: av.timeout_seconds,
+              expiresAt: av.expires_at,
+            });
+          }
+          clearInterval(pollInterval);
+        }
+      } catch (err) {
+        console.warn('[EXERCISE POLL] Poll failed (non-critical):', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyCheckResult, isInitiator, hasExercises, sessionId]);
+
+  /**
    * Reconnect recovery for missed VotingStarted events.
    *
    * When the WebSocket briefly drops and reconnects, any VotingStarted event
@@ -406,7 +547,7 @@ export default function GroupLobbyScreen() {
       // Give WebSocket time to deliver any in-flight events before falling back to HTTP
       const pollTimer = setTimeout(async () => {
         if (isCleaningUpRef.current || !isMountedRef.current) return;
-        if (useVotingStore.getState().isVotingActive) return; // already recovered via WS
+        if (useVotingStore.getState().isActive) return; // already recovered via WS
 
         console.log('[VOTING RECOVERY] Reconnected — polling lobby state for active voting');
         try {
@@ -414,7 +555,7 @@ export default function GroupLobbyScreen() {
           if (!isMountedRef.current || isCleaningUpRef.current) return;
 
           const av = response?.data?.lobby_state?.active_voting;
-          if (av && !useVotingStore.getState().isVotingActive) {
+          if (av && !useVotingStore.getState().isActive) {
             console.log('[VOTING RECOVERY] Active voting found via HTTP poll — recovering');
             startVoting({
               sessionId: av.session_id || sessionId,
@@ -947,7 +1088,7 @@ export default function GroupLobbyScreen() {
         // reconstruct the voting state now. This handles the case where LobbyStateChanged
         // fires (e.g. a member joins/leaves) while we're stuck mid-voting-wait.
         const av = data?.lobby_state?.active_voting;
-        if (av && !useVotingStore.getState().isVotingActive) {
+        if (av && !useVotingStore.getState().isActive) {
           console.log('[VOTING RECOVERY] Detected active_voting in LobbyStateChanged — recovering missed VotingStarted');
           startVoting({
             sessionId: av.session_id || sessionId,
@@ -2341,11 +2482,31 @@ export default function GroupLobbyScreen() {
     // Guard: don't start if component is unmounting or already cleaning up
     if (!isMountedRef.current || isCleaningUpRef.current) return;
 
+    // Guard: if voting is already active by the time we reach here (VotingStarted arrived
+    // in the ~1s async gap between hasExercises becoming true and measure() completing),
+    // skip the overlay entirely. The useEffect([isVotingActive]) can only dismiss an
+    // overlay that's already visible — it cannot pre-empt this async path.
+    if (useVotingStore.getState().isActive) {
+      console.log('[REVEAL] Skipping overlay — VotingStarted already arrived');
+      hasPlayedRevealRef.current = true;
+      hasCalledRevealCompleteRef.current = true;
+      return;
+    }
+
     workoutSectionRef.current?.measure(
       (_x: number, _y: number, _w: number, h: number, _px: number, py: number) => {
         // Guard again inside async callback — component may have unmounted between the
         // measure() call and this callback firing (e.g. user navigated away quickly)
         if (!isMountedRef.current || isCleaningUpRef.current) return;
+
+        // Re-check voting — VotingStarted can arrive in the async window between the
+        // outer check and this measure() callback completing.
+        if (useVotingStore.getState().isActive) {
+          console.log('[REVEAL] Skipping overlay (inner) — VotingStarted arrived mid-measure');
+          hasPlayedRevealRef.current = true;
+          hasCalledRevealCompleteRef.current = true;
+          return;
+        }
 
         // Validate that the section has been fully laid out.
         // On slow devices the layout may not be complete yet, returning h=0.
