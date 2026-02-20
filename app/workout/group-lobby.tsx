@@ -435,24 +435,27 @@ export default function GroupLobbyScreen() {
   }, [isVotingActive]);
 
   /**
-   * Non-initiator exercise polling — single source of truth fallback.
+   * Non-initiator state reconciler — single source of truth fallback.
    *
-   * After the ready check succeeds, the initiator generates exercises and the backend
-   * broadcasts LobbyStateChanged with workout_data. If the non-initiator misses that
-   * event (brief network hiccup, Reverb delivery lag, etc.) they're stuck in the lobby
-   * with hasExercises=false and no animation, while the initiator has already moved on.
+   * Polls getLobbyStateV2 every 3 s for the entire time the non-initiator
+   * is in the lobby without exercises. Does NOT require readyCheckResult to
+   * be 'success' first, because the non-initiator may have missed
+   * ReadyCheckComplete entirely (confirmed root cause of stuck-lobby bug).
    *
-   * This effect polls getLobbyStateV2 every 3 seconds until:
-   *   a) exercises arrive (either via WebSocket or this poll), or
-   *   b) voting is already active (VotingStarted arrived; vote sheet is visible), or
-   *   c) 30 seconds have elapsed (exercise generation is always < 20s).
+   * Stops when:
+   *   a) exercises appear (via this poll or via WebSocket), or
+   *   b) voting is already active (VotingStarted arrived via WebSocket), or
+   *   c) 3-minute safety cap is reached.
+   *
+   * When exercises are found via poll, setReadyCheckResult('success') is called
+   * to keep downstream state consistent.
    */
   useEffect(() => {
-    if (readyCheckResult !== 'success' || isInitiator || hasExercises || !sessionId) return;
+    if (isInitiator || hasExercises || !sessionId) return;
     if (isCleaningUpRef.current || !isMountedRef.current) return;
 
     let attempts = 0;
-    const MAX_ATTEMPTS = 10; // 10 × 3 s = 30 s max
+    const MAX_ATTEMPTS = 60; // 60 × 3 s = 3-minute safety cap
 
     const pollInterval = setInterval(async () => {
       if (isCleaningUpRef.current || !isMountedRef.current) {
@@ -476,12 +479,11 @@ export default function GroupLobbyScreen() {
 
       attempts++;
       if (attempts > MAX_ATTEMPTS) {
-        console.log('[EXERCISE POLL] Max attempts reached — stopping poll');
+        console.log('[EXERCISE POLL] Safety cap reached — stopping poll');
         clearInterval(pollInterval);
         return;
       }
 
-      console.log(`[EXERCISE POLL] Polling for exercises (attempt ${attempts}/${MAX_ATTEMPTS})`);
       try {
         const response = await socialService.getLobbyStateV2(sessionId);
         if (!isMountedRef.current || isCleaningUpRef.current) {
@@ -490,16 +492,16 @@ export default function GroupLobbyScreen() {
         }
 
         const lobbyState = response?.data?.lobby_state;
-        if ((lobbyState?.workout_data?.exercises?.length ?? 0) > 0) {
-          console.log('[EXERCISE POLL] Exercises found via HTTP poll — updating lobby state');
+        const exercisesInState = (lobbyState?.workout_data?.exercises?.length ?? 0) > 0;
+        const activeVoting = lobbyState?.active_voting;
+
+        if (exercisesInState || activeVoting) {
+          console.log('[EXERCISE POLL] State recovered via HTTP poll', { exercisesInState, hasVoting: !!activeVoting });
           setLobbyState(lobbyState);
-          clearInterval(pollInterval);
-        } else if (lobbyState?.active_voting) {
-          // Voting already started on backend but we missed both events — recover
-          console.log('[EXERCISE POLL] Active voting found — recovering missed VotingStarted');
-          setLobbyState(lobbyState);
-          if (!useVotingStore.getState().isActive) {
-            const av = lobbyState.active_voting;
+          // Keep readyCheckResult consistent — exercises exist means ready check succeeded
+          setReadyCheckResult('success');
+          if (activeVoting && !useVotingStore.getState().isActive) {
+            const av = activeVoting;
             startVoting({
               sessionId: av.session_id || sessionId,
               votingId: av.voting_id,
@@ -521,7 +523,7 @@ export default function GroupLobbyScreen() {
 
     return () => clearInterval(pollInterval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readyCheckResult, isInitiator, hasExercises, sessionId]);
+  }, [isInitiator, hasExercises, sessionId]);
 
   /**
    * Reconnect recovery for missed VotingStarted events.
