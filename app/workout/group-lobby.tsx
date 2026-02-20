@@ -940,6 +940,13 @@ export default function GroupLobbyScreen() {
 
     if (isReturningFromMinimized) {
       console.log('📦 [INIT] Returning from minimized state, refreshing lobby state');
+
+      // Reset animation refs so reveal doesn't fire on stale Zustand data
+      // while we fetch fresh state. The `!hasJoinedRef.current` guard in the
+      // reveal effect also prevents premature firing.
+      hasPlayedRevealRef.current = false;
+      hasCalledRevealCompleteRef.current = false;
+
       try {
         // Re-subscribe to channels first
         subscribeToChannels();
@@ -2745,6 +2752,10 @@ export default function GroupLobbyScreen() {
   useEffect(() => {
     if (hasExercises && !isGenerating && !hasPlayedRevealRef.current) {
       if (!isMountedRef.current || isCleaningUpRef.current) return;
+      // Don't trigger reveal until init is complete — stale Zustand data may
+      // briefly show exercises that no longer exist on the server (e.g. returning
+      // from minimize after members left and exercises were cleared server-side).
+      if (!hasJoinedRef.current) return;
       hasPlayedRevealRef.current = true;
       showFullscreenReveal();
     }
@@ -2753,9 +2764,20 @@ export default function GroupLobbyScreen() {
 
   // Reset the ref whenever exercises are cleared so the reveal can play again
   // if the lobby is reused (defensive — exercises are normally only set once).
+  // Also dismiss the overlay if it's stuck open with no exercises (e.g. user
+  // returned from minimize and fresh server state cleared exercises).
   useEffect(() => {
     if (!hasExercises) {
       hasPlayedRevealRef.current = false;
+
+      if (isFullscreenRevealVisible) {
+        console.log('[REVEAL] Exercises cleared while overlay visible — dismissing');
+        setIsFullscreenRevealVisible(false);
+        hasCalledRevealCompleteRef.current = true;
+        fullscreenOpacity.setValue(0);
+        fullscreenScale.setValue(0.6);
+        fullscreenTranslateY.setValue(200);
+      }
     }
   }, [hasExercises]);
 
