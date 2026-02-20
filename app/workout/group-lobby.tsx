@@ -161,6 +161,8 @@ export default function GroupLobbyScreen() {
   const workoutSectionFrameRef = useRef({ translateY: 200, scale: 0.6 });
   // Prevents replaying the reveal on re-entry; resets whenever exercises are cleared
   const hasPlayedRevealRef = useRef(false);
+  // Prevents handleRevealComplete from firing more than once per reveal cycle
+  const hasCalledRevealCompleteRef = useRef(false);
 
   // Check if current user can customize (mentor or advanced fitness level)
   const currentUserMember = lobbyMembers.find(m => m.user_id === parseInt(currentUser?.id || '0'));
@@ -2219,9 +2221,26 @@ export default function GroupLobbyScreen() {
    * fullscreen overlay from those exact bounds to cover the whole screen.
    * Works identically for every user — no pre-expansion phase.
    */
-  const showFullscreenReveal = () => {
+  const showFullscreenReveal = (retryCount = 0) => {
+    // Guard: don't start if component is unmounting or already cleaning up
+    if (!isMountedRef.current || isCleaningUpRef.current) return;
+
     workoutSectionRef.current?.measure(
       (_x: number, _y: number, _w: number, h: number, _px: number, py: number) => {
+        // Guard again inside async callback — component may have unmounted between the
+        // measure() call and this callback firing (e.g. user navigated away quickly)
+        if (!isMountedRef.current || isCleaningUpRef.current) return;
+
+        // Validate that the section has been fully laid out.
+        // On slow devices the layout may not be complete yet, returning h=0.
+        // Retry up to 3 times with a short delay to let layout settle.
+        if (h < 100) {
+          if (retryCount < 3) {
+            setTimeout(() => showFullscreenReveal(retryCount + 1), 150);
+          }
+          return;
+        }
+
         const screenHeight = Dimensions.get('window').height;
         // Translate so the overlay's center aligns with the section's center
         const initialTranslateY = (py + h / 2) - screenHeight / 2;
@@ -2230,6 +2249,8 @@ export default function GroupLobbyScreen() {
 
         // Store so hideFullscreenReveal collapses back to the exact same bounds
         workoutSectionFrameRef.current = { translateY: initialTranslateY, scale: initialScale };
+        // Reset double-fire guard for the new reveal cycle
+        hasCalledRevealCompleteRef.current = false;
 
         fullscreenOpacity.setValue(0);
         fullscreenScale.setValue(initialScale);
@@ -2291,6 +2312,8 @@ export default function GroupLobbyScreen() {
       }),
     ]).start(() => {
       setIsFullscreenRevealVisible(false);
+      // Reset double-fire guard so a subsequent lobby session works correctly
+      hasCalledRevealCompleteRef.current = false;
       onDone?.();
     });
   };
@@ -2301,6 +2324,7 @@ export default function GroupLobbyScreen() {
   // called in the finally block of autoGenerateExercises, after exercises are saved.
   useEffect(() => {
     if (hasExercises && !isGenerating && !hasPlayedRevealRef.current) {
+      if (!isMountedRef.current || isCleaningUpRef.current) return;
       hasPlayedRevealRef.current = true;
       showFullscreenReveal();
     }
@@ -2322,6 +2346,9 @@ export default function GroupLobbyScreen() {
    */
   const handleRevealComplete = () => {
     if (isCleaningUpRef.current || !isMountedRef.current) return;
+    // Guard against double-fire (e.g. safety timeout + normal chain both firing)
+    if (hasCalledRevealCompleteRef.current) return;
+    hasCalledRevealCompleteRef.current = true;
 
     hideFullscreenReveal(() => {
       if (!pendingVotingDataRef.current) return;

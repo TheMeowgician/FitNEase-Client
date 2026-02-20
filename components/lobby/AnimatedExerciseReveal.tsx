@@ -60,6 +60,8 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
 
   // Pending reveal timeout — stored so skipAnimation can cancel it
   const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Safety net timeout — forces reveal complete if chain breaks (e.g. on slow device)
+  const revealSafetyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Generating spinner animation
   const spinnerAnim = useRef(new Animated.Value(0)).current;
@@ -128,6 +130,10 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
       if (revealTimeoutRef.current) {
         clearTimeout(revealTimeoutRef.current);
         revealTimeoutRef.current = null;
+      }
+      if (revealSafetyTimeoutRef.current) {
+        clearTimeout(revealSafetyTimeoutRef.current);
+        revealSafetyTimeoutRef.current = null;
       }
     };
   }, [exercises, isGenerating, skipAnimation]);
@@ -214,8 +220,30 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
   const startRevealAnimation = () => {
     setIsRevealing(true);
 
+    // Safety net: if the reveal chain breaks (e.g. mid-animation disconnect,
+    // interrupted Animated callbacks on a slow device), force all cards to
+    // revealed state and call onRevealComplete so the overlay never gets stuck.
+    // Budget: 700ms initial delay + (800ms fade + 550ms gap) per card + 3s buffer.
+    const maxMs = 700 + exercises.length * (800 + 550) + 3000;
+    if (revealSafetyTimeoutRef.current) clearTimeout(revealSafetyTimeoutRef.current);
+    revealSafetyTimeoutRef.current = setTimeout(() => {
+      revealSafetyTimeoutRef.current = null;
+      skeletonOpacities.current.forEach(anim => anim.setValue(0));
+      realOpacities.current.forEach(anim => anim.setValue(1));
+      cardScales.current.forEach(anim => anim.setValue(1));
+      setRevealedCount(exercises.length);
+      setIsRevealing(false);
+      shimmerAnimRef.current?.stop();
+      onRevealComplete?.();
+    }, maxMs);
+
     const revealNext = (index: number) => {
       if (index >= exercises.length) {
+        // Chain completed normally — cancel safety net
+        if (revealSafetyTimeoutRef.current) {
+          clearTimeout(revealSafetyTimeoutRef.current);
+          revealSafetyTimeoutRef.current = null;
+        }
         setIsRevealing(false);
         shimmerAnimRef.current?.stop();
         onRevealComplete?.();
