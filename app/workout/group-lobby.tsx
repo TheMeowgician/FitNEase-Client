@@ -146,11 +146,20 @@ export default function GroupLobbyScreen() {
   const votingBackdropOpacity = useRef(new Animated.Value(0)).current;
   const votingSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
-  // Fullscreen exercise reveal overlay
+  // Fullscreen reveal overlay — fires for ALL lobby members when exercises first arrive.
+  // Entrance: starts at the workout section's EXACT screen bounds (measured via ref),
+  // scales/slides up to cover the whole screen. Exit: reverses to the same bounds.
+  // Using measured bounds means initiator and non-initiators see identical animations —
+  // no pre-expansion phase that could shift the workout section before the overlay appears.
   const [isFullscreenRevealVisible, setIsFullscreenRevealVisible] = useState(false);
-  const fullscreenOpacity = useRef(new Animated.Value(0)).current;
-  const fullscreenTranslateY = useRef(new Animated.Value(20)).current;
-  // Prevents replaying the fullscreen reveal on re-entry (e.g. after minimizing)
+  const fullscreenOpacity    = useRef(new Animated.Value(0)).current;
+  const fullscreenScale      = useRef(new Animated.Value(0.6)).current;
+  const fullscreenTranslateY = useRef(new Animated.Value(200)).current;
+  // Ref to the workout section View — used for measure() to get its exact screen bounds
+  const workoutSectionRef = useRef<any>(null);
+  // Stores the measured entrance/exit transform values so hide() uses the same target as show()
+  const workoutSectionFrameRef = useRef({ translateY: 200, scale: 0.6 });
+  // Prevents replaying the reveal on re-entry; resets whenever exercises are cleared
   const hasPlayedRevealRef = useRef(false);
 
   // Check if current user can customize (mentor or advanced fitness level)
@@ -2205,39 +2214,78 @@ export default function GroupLobbyScreen() {
     // Once cleanup starts, this component instance should never accept more events
   };
 
-  /** Expand the workout plan section to fullscreen for the exercise reveal animation */
+  /**
+   * Measure the workout section's exact screen position, then scale+slide the
+   * fullscreen overlay from those exact bounds to cover the whole screen.
+   * Works identically for every user — no pre-expansion phase.
+   */
   const showFullscreenReveal = () => {
-    setIsFullscreenRevealVisible(true);
-    fullscreenOpacity.setValue(0);
-    fullscreenTranslateY.setValue(20);
-    Animated.parallel([
-      Animated.timing(fullscreenOpacity, {
-        toValue: 1,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-      Animated.spring(fullscreenTranslateY, {
-        toValue: 0,
-        damping: 20,
-        stiffness: 150,
-        mass: 1,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    workoutSectionRef.current?.measure(
+      (_x: number, _y: number, _w: number, h: number, _px: number, py: number) => {
+        const screenHeight = Dimensions.get('window').height;
+        // Translate so the overlay's center aligns with the section's center
+        const initialTranslateY = (py + h / 2) - screenHeight / 2;
+        // Scale so the overlay's height matches the section's height
+        const initialScale = Math.max(h / screenHeight, 0.25);
+
+        // Store so hideFullscreenReveal collapses back to the exact same bounds
+        workoutSectionFrameRef.current = { translateY: initialTranslateY, scale: initialScale };
+
+        fullscreenOpacity.setValue(0);
+        fullscreenScale.setValue(initialScale);
+        fullscreenTranslateY.setValue(initialTranslateY);
+        setIsFullscreenRevealVisible(true);
+
+        Animated.parallel([
+          // Quick fade-in so user doesn't see the tiny scaled-down content
+          Animated.timing(fullscreenOpacity, {
+            toValue: 1,
+            duration: 220,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.spring(fullscreenScale, {
+            toValue: 1,
+            damping: 20,
+            stiffness: 140,
+            mass: 1,
+            useNativeDriver: true,
+          }),
+          Animated.spring(fullscreenTranslateY, {
+            toValue: 0,
+            damping: 20,
+            stiffness: 140,
+            mass: 1,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+    );
   };
 
-  /** Collapse the fullscreen overlay back toward the workout section, then call onDone */
+  /**
+   * Collapse the overlay back to the workout section's exact bounds, then call onDone.
+   * Uses the values stored by showFullscreenReveal so entrance and exit are symmetric.
+   */
   const hideFullscreenReveal = (onDone?: () => void) => {
+    const { translateY: finalTranslateY, scale: finalScale } = workoutSectionFrameRef.current;
+
     Animated.parallel([
       Animated.timing(fullscreenOpacity, {
         toValue: 0,
-        duration: 400,
+        duration: 350,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fullscreenScale, {
+        toValue: finalScale,
+        duration: 350,
         easing: Easing.in(Easing.ease),
         useNativeDriver: true,
       }),
       Animated.timing(fullscreenTranslateY, {
-        toValue: 30,
-        duration: 400,
+        toValue: finalTranslateY,
+        duration: 350,
         easing: Easing.in(Easing.ease),
         useNativeDriver: true,
       }),
@@ -2247,20 +2295,30 @@ export default function GroupLobbyScreen() {
     });
   };
 
-  /**
-   * Show fullscreen reveal the first time exercises arrive.
-   * Guarded by hasPlayedRevealRef so it never replays on re-entry.
-   */
+  // Show fullscreen reveal the first time exercises arrive — for ALL users.
+  // For non-initiators isGenerating is always false, so this fires the moment
+  // exercises land via WebSocket. For the initiator, setIsGenerating(false) is
+  // called in the finally block of autoGenerateExercises, after exercises are saved.
   useEffect(() => {
     if (hasExercises && !isGenerating && !hasPlayedRevealRef.current) {
       hasPlayedRevealRef.current = true;
       showFullscreenReveal();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasExercises, isGenerating]);
 
+  // Reset the ref whenever exercises are cleared so the reveal can play again
+  // if the lobby is reused (defensive — exercises are normally only set once).
+  useEffect(() => {
+    if (!hasExercises) {
+      hasPlayedRevealRef.current = false;
+    }
+  }, [hasExercises]);
+
   /**
-   * Called by the overlay's AnimatedExerciseReveal when all exercises have finished animating.
-   * Collapses the fullscreen overlay, then triggers voting (initiator only).
+   * Called by the overlay's AnimatedExerciseReveal when all cards have revealed.
+   * Collapses the overlay back to the workout section's bounds, then triggers voting
+   * (initiator only — non-initiators have no pending voting data).
    */
   const handleRevealComplete = () => {
     if (isCleaningUpRef.current || !isMountedRef.current) return;
@@ -2431,7 +2489,7 @@ export default function GroupLobbyScreen() {
         </View>
 
         {/* Workout Exercises Section */}
-        <View style={styles.workoutSection}>
+        <View ref={workoutSectionRef} style={styles.workoutSection}>
           <View style={styles.workoutHeader}>
             <Text style={styles.sectionTitle}>
               Workout Plan
@@ -3111,9 +3169,9 @@ export default function GroupLobbyScreen() {
     </SafeAreaView>
 
       {/* ── Fullscreen Exercise Reveal Overlay ─────────────────────────────────
-          Appears when exercises are first generated, covers the whole screen
-          so the skeleton→reveal animation is cinematic. Fades out after
-          all cards are revealed, then smoothly returns to the workout section.  */}
+          Fires for ALL lobby members (not just initiator) when exercises arrive.
+          Starts at the workout-section's position and scales/slides to fullscreen,
+          plays the skeleton → card reveal, then collapses back to the section.   */}
       {isFullscreenRevealVisible && (
         <Animated.View
           style={[
@@ -3121,18 +3179,18 @@ export default function GroupLobbyScreen() {
             styles.fullscreenRevealOverlay,
             {
               opacity: fullscreenOpacity,
-              transform: [{ translateY: fullscreenTranslateY }],
+              transform: [
+                { scale: fullscreenScale },
+                { translateY: fullscreenTranslateY },
+              ],
             },
           ]}
         >
           <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-            {/* Header */}
             <View style={styles.fullscreenRevealHeader}>
               <Ionicons name="sparkles" size={22} color={COLORS.PRIMARY[500]} />
               <Text style={styles.fullscreenRevealTitle}>Workout Plan Ready</Text>
             </View>
-
-            {/* Animated exercise list */}
             <ScrollView
               style={styles.fullscreenRevealScroll}
               showsVerticalScrollIndicator={false}
@@ -3370,6 +3428,7 @@ const styles = StyleSheet.create({
   kickButton: {
     padding: 4,
   },
+
   // ── Fullscreen exercise reveal overlay ─────────────────────────────────────
   fullscreenRevealOverlay: {
     backgroundColor: COLORS.NEUTRAL.WHITE,

@@ -64,13 +64,28 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
   // Generating spinner animation
   const spinnerAnim = useRef(new Animated.Value(0)).current;
 
+  // ─── Synchronous init — runs during render, before JSX is computed ───────
+  // Without this, the first render after exercises arrive uses the fallback
+  // values below (skeleton opacity 0, real opacity 1), flashing real content
+  // for one frame before the useEffect below runs.
+
+  if (exercises.length > 0 && skeletonOpacities.current.length !== exercises.length) {
+    skeletonOpacities.current = exercises.map(() => new Animated.Value(1));
+    realOpacities.current    = exercises.map(() => new Animated.Value(0));
+    cardScales.current       = exercises.map(() => new Animated.Value(0.97));
+  }
+
   // ─── Initialize per-card values when exercise count changes ──────────────
 
   useEffect(() => {
     if (exercises.length > 0) {
-      skeletonOpacities.current = exercises.map(() => new Animated.Value(1));
-      realOpacities.current    = exercises.map(() => new Animated.Value(0));
-      cardScales.current       = exercises.map(() => new Animated.Value(0.97));
+      // Guard: sync init above may have already populated arrays for this length.
+      // Only re-create if out of sync (e.g. exercises were replaced wholesale).
+      if (skeletonOpacities.current.length !== exercises.length) {
+        skeletonOpacities.current = exercises.map(() => new Animated.Value(1));
+        realOpacities.current    = exercises.map(() => new Animated.Value(0));
+        cardScales.current       = exercises.map(() => new Animated.Value(0.97));
+      }
     } else {
       setRevealedCount(0);
       setIsRevealing(false);
@@ -105,7 +120,9 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
 
   useEffect(() => {
     if (exercises.length > 0 && !isGenerating && !isRevealing && revealedCount === 0 && !skipAnimation) {
-      revealTimeoutRef.current = setTimeout(() => startRevealAnimation(), 300);
+      // 700ms gives the fullscreen overlay entrance animation time to settle
+      // before the first card starts revealing, so both feel sequential not simultaneous.
+      revealTimeoutRef.current = setTimeout(() => startRevealAnimation(), 700);
     }
     return () => {
       if (revealTimeoutRef.current) {
@@ -169,28 +186,28 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
       // Skeleton fades out
       Animated.timing(skeletonOpacities.current[index], {
         toValue: 0,
-        duration: 450,
+        duration: 800,
         easing: Easing.out(Easing.ease),
         useNativeDriver: true,
       }),
       // Real content fades in
       Animated.timing(realOpacities.current[index], {
         toValue: 1,
-        duration: 450,
+        duration: 800,
         easing: Easing.out(Easing.ease),
         useNativeDriver: true,
       }),
       // Subtle scale pop
       Animated.spring(cardScales.current[index], {
         toValue: 1,
-        friction: 7,
-        tension: 120,
+        friction: 6,
+        tension: 80,
         useNativeDriver: true,
       }),
     ]).start(() => {
       setRevealedCount(index + 1);
-      // Breathing gap before next card
-      setTimeout(onDone, 250);
+      // Breathing gap before next card — long enough to appreciate each reveal
+      setTimeout(onDone, 550);
     });
   };
 
