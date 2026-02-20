@@ -10,6 +10,8 @@ import {
   Modal,
   TextInput,
   Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -413,7 +415,10 @@ export default function GroupsScreen() {
         transparent={true}
         onRequestClose={() => setShowJoinModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <Animated.View style={[styles.modalContent, { opacity: joinModalFade, transform: [{ scale: joinModalScale }] }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Join by Code</Text>
@@ -457,7 +462,7 @@ export default function GroupsScreen() {
               </TouchableOpacity>
             </View>
           </Animated.View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Create Group Modal */}
