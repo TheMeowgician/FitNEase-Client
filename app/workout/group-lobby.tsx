@@ -190,6 +190,10 @@ export default function GroupLobbyScreen() {
   const isCleaningUpRef = useRef(false);
   // Holds voting data until the exercise reveal animation finishes
   const pendingVotingDataRef = useRef<{ exercises: any[]; alternatives: any[] } | null>(null);
+  // Prevents forceCompleteVoting from being called more than once per voting session.
+  // Without this, the 1-second timer fires the call every second after timeout, causing
+  // repeated "No active voting found" errors once the backend has already resolved it.
+  const hasForceCompletedVotingRef = useRef(false);
   const isLobbyDeletedRef = useRef(false); // Track if LobbyDeleted event was received (blocks further actions)
   const isMinimizedRef = useRef(false); // Track if user minimized (to explore app while staying in lobby)
   const isWorkoutStartedRef = useRef(false); // Track if WorkoutStarted fired (don't leave lobby on unmount)
@@ -280,6 +284,8 @@ export default function GroupLobbyScreen() {
    */
   useEffect(() => {
     if (!isVotingActive || !votingExpiresAt) {
+      // Reset force-complete guard when a voting session ends so the next one works
+      hasForceCompletedVotingRef.current = false;
       setVotingTimeRemaining(0);
       return;
     }
@@ -289,10 +295,21 @@ export default function GroupLobbyScreen() {
       const remaining = Math.max(0, Math.ceil((votingExpiresAt - now) / 1000));
       setVotingTimeRemaining(remaining);
 
-      // Auto-complete voting on timeout (initiator only)
-      if (remaining === 0 && isInitiator) {
-        console.log('[VOTING] Timeout reached, forcing completion');
-        socialService.forceCompleteVoting(sessionId).catch(console.error);
+      // Auto-complete voting on timeout (initiator only).
+      // Guard: only fire ONCE — the interval keeps running every second after remaining=0,
+      // so without this ref the backend gets hammered and returns "No active voting found".
+      if (remaining === 0 && isInitiator && !hasForceCompletedVotingRef.current) {
+        hasForceCompletedVotingRef.current = true;
+        console.log('[VOTING] Timeout reached, forcing completion (once)');
+        socialService.forceCompleteVoting(sessionId).catch((err) => {
+          // Treat "No active voting found" as success — voting was already completed
+          // (e.g. all members voted before timeout, or another client beat us to it).
+          if (err?.message?.includes('No active voting found')) {
+            console.log('[VOTING] Voting already resolved before timeout fired — OK');
+          } else {
+            console.error('[VOTING] Force complete failed:', err);
+          }
+        });
       }
     };
 
@@ -304,6 +321,26 @@ export default function GroupLobbyScreen() {
 
     return () => clearInterval(interval);
   }, [isVotingActive, votingExpiresAt, isInitiator, sessionId]);
+
+  /**
+   * When voting starts and the fullscreen reveal overlay is still visible (which can happen
+   * on slow devices where the reveal animation takes longer than the initiator's), dismiss
+   * the overlay immediately so the vote sheet is not hidden behind it.
+   *
+   * Root cause: reveal animation takes up to ~7s per exercise-set. The initiator finishes
+   * first, calls startVoting, and the VotingStarted event reaches other devices while they
+   * are still mid-animation. The vote sheet opens at zIndex < overlay → invisible.
+   */
+  useEffect(() => {
+    if (isVotingActive && isFullscreenRevealVisible) {
+      console.log('[VOTING] Voting started while overlay is visible — fast-dismissing overlay');
+      // Mark as handled so the reveal doesn't re-trigger or re-call handleRevealComplete
+      hasPlayedRevealRef.current = true;
+      hasCalledRevealCompleteRef.current = true;
+      hideFullscreenReveal(); // collapse overlay without calling onRevealComplete callback
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVotingActive]);
 
   /**
    * Vote bottom sheet animation — matches WorkoutSetModal:
@@ -344,6 +381,66 @@ export default function GroupLobbyScreen() {
       ]).start(() => setVoteSheetVisible(false));
     }
   }, [isVotingActive]);
+
+  /**
+   * Reconnect recovery for missed VotingStarted events.
+   *
+   * When the WebSocket briefly drops and reconnects, any VotingStarted event
+   * broadcast during the outage is silently lost. On reconnect we poll
+   * getLobbyStateV2 which now includes active_voting in its response (backend
+   * always attaches it when a voting session is live in the Redis cache).
+   *
+   * Flow: reconnect detected → 2 s delay (let WS settle, catch up-stream events)
+   *       → if still not in voting, poll HTTP → recover via startVoting()
+   *
+   * The 2-second delay is intentional: VotingStarted may arrive over the
+   * re-established socket just milliseconds after connected fires, so we give
+   * it a chance to beat the HTTP call and avoid a redundant double-trigger.
+   */
+  useEffect(() => {
+    if (!sessionId || !hasExercises) return;
+
+    const removeListener = reverbService.onConnectionStateChange((state) => {
+      if (state !== 'connected') return;
+
+      // Give WebSocket time to deliver any in-flight events before falling back to HTTP
+      const pollTimer = setTimeout(async () => {
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        if (useVotingStore.getState().isVotingActive) return; // already recovered via WS
+
+        console.log('[VOTING RECOVERY] Reconnected — polling lobby state for active voting');
+        try {
+          const response = await socialService.getLobbyStateV2(sessionId);
+          if (!isMountedRef.current || isCleaningUpRef.current) return;
+
+          const av = response?.data?.lobby_state?.active_voting;
+          if (av && !useVotingStore.getState().isVotingActive) {
+            console.log('[VOTING RECOVERY] Active voting found via HTTP poll — recovering');
+            startVoting({
+              sessionId: av.session_id || sessionId,
+              votingId: av.voting_id,
+              initiatorId: av.initiator_id,
+              initiatorName: av.initiator_name || '',
+              members: av.members || [],
+              exercises: av.exercises || [],
+              alternativePool: av.alternative_pool || [],
+              timeoutSeconds: av.timeout_seconds,
+              expiresAt: av.expires_at,
+            });
+          } else {
+            console.log('[VOTING RECOVERY] No active voting found after reconnect — all good');
+          }
+        } catch (err) {
+          console.warn('[VOTING RECOVERY] HTTP poll failed (non-critical):', err);
+        }
+      }, 2000);
+
+      return () => clearTimeout(pollTimer);
+    });
+
+    return () => removeListener();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, hasExercises]);
 
   /**
    * Initialize lobby on mount
@@ -845,6 +942,25 @@ export default function GroupLobbyScreen() {
           return;
         }
         console.log('📊 [REAL-TIME] Lobby state changed:', data);
+
+        // Recovery: if backend reports active_voting but our local store missed VotingStarted,
+        // reconstruct the voting state now. This handles the case where LobbyStateChanged
+        // fires (e.g. a member joins/leaves) while we're stuck mid-voting-wait.
+        const av = data?.lobby_state?.active_voting;
+        if (av && !useVotingStore.getState().isVotingActive) {
+          console.log('[VOTING RECOVERY] Detected active_voting in LobbyStateChanged — recovering missed VotingStarted');
+          startVoting({
+            sessionId: av.session_id || sessionId,
+            votingId: av.voting_id,
+            initiatorId: av.initiator_id,
+            initiatorName: av.initiator_name || '',
+            members: av.members || [],
+            exercises: av.exercises || [],
+            alternativePool: av.alternative_pool || [],
+            timeoutSeconds: av.timeout_seconds,
+            expiresAt: av.expires_at,
+          });
+        }
       },
       // NOTE: Individual events like MemberJoined, MemberLeft, MemberStatusUpdated are kept
       // for system chat messages only. State updates come from LobbyStateChanged above.
