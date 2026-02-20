@@ -659,6 +659,50 @@ export default function GroupLobbyScreen() {
   }, [sessionId, hasExercises]);
 
   /**
+   * Periodic lobby state sync — catches missed WebSocket events.
+   *
+   * WebSocket events (LobbyStateChanged, MemberJoined) can be lost due to
+   * network timing, subscription lag, or brief disconnects. Without recovery,
+   * a client that misses an event will show a stale member list forever.
+   *
+   * This effect polls the server every 10 seconds and updates the store ONLY
+   * when the server's member count differs from the local count, avoiding
+   * unnecessary re-renders. Stops polling during cleanup/unmount.
+   */
+  useEffect(() => {
+    if (!sessionId || !hasJoinedRef.current) return;
+
+    const syncInterval = setInterval(async () => {
+      if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+      try {
+        const response = await socialService.getLobbyStateV2(sessionId);
+        if (!isMountedRef.current || isCleaningUpRef.current) return;
+
+        const serverState = response?.data?.lobby_state;
+        if (!serverState?.members || serverState.members.length === 0) return;
+
+        const localMembers = useLobbyStore.getState().currentLobby?.members;
+        const localCount = localMembers?.length || 0;
+        const serverCount = serverState.members.length;
+
+        if (localCount !== serverCount) {
+          console.log('[LOBBY SYNC] Member count mismatch — syncing', {
+            local: localCount,
+            server: serverCount,
+          });
+          setLobbyState(serverState);
+        }
+      } catch {
+        // Non-critical — next interval will retry
+      }
+    }, 10000);
+
+    return () => clearInterval(syncInterval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  /**
    * Initialize lobby on mount
    */
   // Track sessionId in ref for cleanup
@@ -1184,7 +1228,20 @@ export default function GroupLobbyScreen() {
         // Guard against updates during cleanup
         if (isCleaningUpRef.current || !isMountedRef.current) return;
         console.log('👤 [REAL-TIME] Member joined:', data);
-        // Add system chat message (don't update state - LobbyStateChanged handles it)
+
+        // Update member list from full lobby_state if available (primary path)
+        // Falls back to addMember for immediate UI update if LobbyStateChanged was missed
+        if (data?.lobby_state) {
+          setLobbyState(data.lobby_state);
+        } else if (data?.member) {
+          addMember({
+            user_id: data.member.user_id,
+            user_name: data.member.user_name,
+            status: data.member.status || 'waiting',
+            joined_at: data.member.joined_at || Math.floor(Date.now() / 1000),
+          });
+        }
+
         if (data?.member) {
           addChatMessage({
             message_id: `system-${Date.now()}`,
