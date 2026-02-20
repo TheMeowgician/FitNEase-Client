@@ -455,7 +455,7 @@ export default function GroupLobbyScreen() {
     if (isCleaningUpRef.current || !isMountedRef.current) return;
 
     let attempts = 0;
-    const MAX_ATTEMPTS = 60; // 60 × 3 s = 3-minute safety cap
+    const MAX_ATTEMPTS = 120; // 120 × 1.5 s = 3-minute safety cap
 
     const pollInterval = setInterval(async () => {
       if (isCleaningUpRef.current || !isMountedRef.current) {
@@ -519,7 +519,7 @@ export default function GroupLobbyScreen() {
       } catch (err) {
         console.warn('[EXERCISE POLL] Poll failed (non-critical):', err);
       }
-    }, 3000);
+    }, 1500);
 
     return () => clearInterval(pollInterval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -544,7 +544,7 @@ export default function GroupLobbyScreen() {
     if (isCleaningUpRef.current || !isMountedRef.current) return;
 
     let attempts = 0;
-    const MAX_ATTEMPTS = 10; // 10 × 3 s = 30 s
+    const MAX_ATTEMPTS = 20; // 20 × 1.5 s = 30 s
 
     const pollInterval = setInterval(async () => {
       if (isCleaningUpRef.current || !isMountedRef.current) {
@@ -592,7 +592,7 @@ export default function GroupLobbyScreen() {
       } catch (err) {
         console.warn('[VOTING POLL] Poll failed (non-critical):', err);
       }
-    }, 3000);
+    }, 1500);
 
     return () => clearInterval(pollInterval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2236,9 +2236,18 @@ export default function GroupLobbyScreen() {
       }
 
       console.log('[VOTING] Vote submitted:', vote);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[VOTING] Error submitting vote:', error);
-      alert.error('Error', 'Failed to submit vote. Please try again.');
+      // "No active voting found" means the backend already completed voting
+      // (its 60s timer fired or all members voted) and we missed VotingComplete.
+      // The safety valve will clean up the UI — showing an alert is confusing
+      // and wrong since this is not a user error.
+      const alreadyDone = error?.message?.includes('No active voting found');
+      if (!alreadyDone) {
+        alert.error('Error', 'Failed to submit vote. Please try again.');
+      } else {
+        console.warn('[VOTING] Vote submit: voting already completed on backend — safety valve will clean up');
+      }
     } finally {
       setIsSubmittingVote(false);
     }
