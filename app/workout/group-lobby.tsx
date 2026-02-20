@@ -1405,6 +1405,7 @@ export default function GroupLobbyScreen() {
             user_name: m.user_name,
           })),
           timeoutSeconds: data.timeout_seconds || 25,
+          serverExpiresAt: data.expires_at,
         });
       },
       onReadyCheckResponse: (data: any) => {

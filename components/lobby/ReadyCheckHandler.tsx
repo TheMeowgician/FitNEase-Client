@@ -100,6 +100,7 @@ export function ReadyCheckHandler() {
           initiatorName: data.initiator_name || 'Host',
           members,
           timeoutSeconds: data.timeout_seconds || 25,
+          serverExpiresAt: data.expires_at,
         });
       },
 

@@ -37,6 +37,7 @@ interface ReadyCheckStore extends ReadyCheckState {
     initiatorName: string;
     members: Array<{ user_id: number; user_name: string }>;
     timeoutSeconds?: number;
+    serverExpiresAt?: number; // Unix timestamp (seconds) from server for synchronized countdown
   }) => void;
   updateResponse: (userId: number, response: 'accepted' | 'declined') => void;
   setResult: (result: 'success' | 'failed' | 'timeout') => void;
@@ -71,7 +72,11 @@ export const useReadyCheckStore = create<ReadyCheckStore>((set, get) => ({
   startReadyCheck: (data) => {
     const timeoutSeconds = data.timeoutSeconds || 25;
     const startedAt = Date.now();
-    const expiresAt = startedAt + (timeoutSeconds * 1000);
+    // Use server's expiresAt for synchronized countdown across all clients.
+    // Falls back to local calculation if server timestamp not provided.
+    const expiresAt = data.serverExpiresAt
+      ? data.serverExpiresAt * 1000 // Convert seconds → milliseconds
+      : startedAt + (timeoutSeconds * 1000);
 
     // Initialize responses for all members as pending
     const responses: Record<number, ReadyCheckResponse> = {};
@@ -139,7 +144,7 @@ export const useReadyCheckStore = create<ReadyCheckStore>((set, get) => ({
    * Set the final result of the ready check
    */
   setResult: (result) => {
-    set({ result, isActive: result === 'pending' });
+    set({ result, isActive: false });
     console.log('🏁 [READY CHECK] Result:', result);
   },
 
