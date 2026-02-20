@@ -305,6 +305,24 @@ export default function WorkoutSessionScreen() {
     }
   }, [tabataSession]);
 
+  // Re-subscribe to session channels after WebSocket reconnect.
+  // When the network drops, reverbService clears all channels and reconnects.
+  // Without this, all pause/resume/member events are silently missed for the
+  // rest of the session — the main cause of intermittent "missed toast" bugs.
+  useEffect(() => {
+    if (type !== 'group_tabata' || !tabataSession) return;
+
+    const removeListener = reverbService.onConnectionStateChange((state) => {
+      if (state === 'connected') {
+        console.log('🔄 [SESSION] WebSocket reconnected — re-subscribing session channels');
+        setupSessionSubscription();
+      }
+    });
+
+    return () => removeListener();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabataSession]);
+
   useEffect(() => {
     // ALL workouts (solo AND group) now use client-side prediction for smooth timer
     // Group workouts will sync to server ticks to correct drift
@@ -647,26 +665,33 @@ export default function WorkoutSessionScreen() {
         const memberId = Number(member?.id || member?.user_id || 0);
         if (!memberId || memberId === Number(user?.id || 0)) return;
 
-        // Skip if this member intentionally left (already handled by member.left toast)
-        if (recentlyLeftMembersRef.current.has(memberId)) {
-          console.log(`ℹ️ [SESSION] Member ${memberId} left intentionally, skipping disconnect toast`);
-          recentlyLeftMembersRef.current.delete(memberId);
-          return;
-        }
-
-        // Resolve member name: cached ref → Pusher auth info → live Zustand store → fallback
-        const memberName =
+        // Resolve member name early (before the delay) so we capture the info
+        // from the Pusher auth payload while it's still available in the event object.
+        const resolvedName =
           memberNamesRef.current.get(memberId) ||
           member?.info?.name ||
           member?.info?.user_name ||
           useLobbyStore.getState().currentLobby?.members?.find((m: any) => Number(m.user_id) === memberId)?.user_name ||
           'A member';
 
-        // Track as disconnected so we can show "reconnected" if they come back
-        disconnectedMembersRef.current.set(memberId, memberName);
+        // Delay processing by 400ms to let the member.left custom event arrive first.
+        // On slow networks the two events (presence member_removed + member.left broadcast)
+        // race each other. Giving member.left a 400ms head-start prevents showing a false
+        // "disconnected" toast for users who intentionally left the session.
+        setTimeout(() => {
+          // Skip if this member intentionally left (already handled by member.left toast)
+          if (recentlyLeftMembersRef.current.has(memberId)) {
+            console.log(`ℹ️ [SESSION] Member ${memberId} left intentionally, skipping disconnect toast`);
+            recentlyLeftMembersRef.current.delete(memberId);
+            return;
+          }
 
-        console.log(`📡 [SESSION] Member disconnected: ${memberName} (${memberId})`);
-        setMemberDisconnectedName(memberName);
+          // Track as disconnected so we can show "reconnected" if they come back
+          disconnectedMembersRef.current.set(memberId, resolvedName);
+
+          console.log(`📡 [SESSION] Member disconnected: ${resolvedName} (${memberId})`);
+          setMemberDisconnectedName(resolvedName);
+        }, 400);
       },
       onJoining: (member: any) => {
         // Ignore presence events during grace period (lobby → session transition)
@@ -1244,22 +1269,30 @@ export default function WorkoutSessionScreen() {
         } // end else (completedSets > 0)
       }
 
-      // For group workouts, leave lobby and clean up
+      // For group workouts, leave lobby and clean up.
+      // IMPORTANT: cleanup runs unconditionally even if the leave API fails or times out.
+      // On a slow network, leaveLobbyV2 may not reach the backend — that's acceptable:
+      // other users will see a "disconnected" toast from the presence channel instead
+      // of "left", which is a fine fallback. The critical thing is that we always clean
+      // up channels and storage so the app ends up in a consistent state.
       if (type === 'group_tabata' && tabataSession && user) {
+        console.log('👋 [EXIT] Leaving lobby and notifying session members...');
         try {
-          console.log('👋 [EXIT] Leaving lobby and notifying session members...');
-
-          // Leave the lobby (removes user from lobby members list)
-          // Backend automatically broadcasts member left event to LOBBY channel
-          await socialService.leaveLobbyV2(tabataSession.session_id);
+          // Race against a 5s timeout so we don't block the UI on a dead connection
+          await Promise.race([
+            socialService.leaveLobbyV2(tabataSession.session_id),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error('leave_timeout')), 5000)
+            ),
+          ]);
           console.log('✅ [EXIT] Left lobby successfully');
-
-          // Clear local storage and state
-          await clearLobbyAndStorage();
-          console.log('✅ [EXIT] Cleanup completed');
-        } catch (error) {
-          console.error('❌ [EXIT] Failed to leave lobby:', error);
+        } catch (error: any) {
+          console.warn('⚠️ [EXIT] Leave API failed/timed out:', error?.message,
+            '— continuing with local cleanup (others will see disconnect toast)');
         }
+        // Always clean up regardless of whether the leave API succeeded
+        await clearLobbyAndStorage();
+        console.log('✅ [EXIT] Cleanup completed');
       }
     } catch (error) {
       console.error('❌ [EXIT] Error saving partial session:', error);
@@ -1391,16 +1424,24 @@ export default function WorkoutSessionScreen() {
 
       console.log('📝 [EXIT & RATE] Completed exercises to rate:', completedExercises.length);
 
-      // For group workouts, clean up lobby and subscriptions
+      // For group workouts, clean up lobby and subscriptions.
+      // Same guaranteed-cleanup pattern as exitSession: always run clearLobbyAndStorage
+      // even if the leave API fails or times out (see exitSession for rationale).
       if (type === 'group_tabata' && tabataSession && user) {
+        console.log('👋 [EXIT & RATE] Leaving lobby and cleaning up...');
         try {
-          console.log('👋 [EXIT & RATE] Leaving lobby and cleaning up...');
-          await socialService.leaveLobbyV2(tabataSession.session_id);
-          await clearLobbyAndStorage();
-          console.log('✅ [EXIT & RATE] Cleanup completed');
-        } catch (error) {
-          console.error('❌ [EXIT & RATE] Failed to leave lobby:', error);
+          await Promise.race([
+            socialService.leaveLobbyV2(tabataSession.session_id),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error('leave_timeout')), 5000)
+            ),
+          ]);
+          console.log('✅ [EXIT & RATE] Left lobby successfully');
+        } catch (error: any) {
+          console.warn('⚠️ [EXIT & RATE] Leave API failed/timed out:', error?.message);
         }
+        await clearLobbyAndStorage();
+        console.log('✅ [EXIT & RATE] Cleanup completed');
       }
 
       // STEP 5: Navigate to exercise rating screen with completed exercises

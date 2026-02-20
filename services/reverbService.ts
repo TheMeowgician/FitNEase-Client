@@ -263,7 +263,11 @@ class ReverbService {
     const channel = this.pusher.subscribe(`private-${channelName}`);
     this.channels.set(`private-${channelName}`, channel);
 
-    // Bind to all events on this channel
+    // Unbind any previous global handler before adding the new one.
+    // Pusher returns the SAME channel object for duplicate subscribe() calls,
+    // so without this, every re-subscription (e.g. lobby→session transition or
+    // WebSocket reconnect) stacks an additional bind_global on top.
+    channel.unbind_global();
     channel.bind_global((eventName: string, data: any) => {
       console.log(`📨 Private event received on ${channelName}:`, eventName, data);
       callbacks.onEvent(eventName, data);
@@ -291,6 +295,11 @@ class ReverbService {
 
     const channel = this.pusher.subscribe(`presence-${channelName}`);
     this.channels.set(`presence-${channelName}`, channel);
+
+    // Unbind existing handlers to prevent accumulation on re-subscription
+    channel.unbind_global();
+    channel.unbind('pusher:member_added');
+    channel.unbind('pusher:member_removed');
 
     // Bind to all events on this channel
     channel.bind_global((eventName: string, data: any) => {
