@@ -526,6 +526,79 @@ export default function GroupLobbyScreen() {
   }, [isInitiator, hasExercises, sessionId]);
 
   /**
+   * Non-initiator voting recovery poll.
+   *
+   * After exercises arrive, the initiator starts voting shortly after.
+   * If the non-initiator misses the VotingStarted WebSocket event (silent
+   * drop — no reconnect fires, so reconnect recovery won't help), this
+   * effect polls getLobbyStateV2 every 3 s for up to 30 s watching for
+   * active_voting. Once found it calls startVoting() to open the vote sheet.
+   *
+   * Stops automatically when:
+   *   a) VotingStarted arrives via WebSocket (isVotingActive becomes true), or
+   *   b) active_voting found via poll, or
+   *   c) 30 s elapsed (voting window is 60 s; 30 s is enough to detect it).
+   */
+  useEffect(() => {
+    if (!hasExercises || isInitiator || isVotingActive || !sessionId) return;
+    if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10; // 10 × 3 s = 30 s
+
+    const pollInterval = setInterval(async () => {
+      if (isCleaningUpRef.current || !isMountedRef.current) {
+        clearInterval(pollInterval);
+        return;
+      }
+
+      // Stop if WebSocket delivered VotingStarted while we were waiting
+      if (useVotingStore.getState().isActive) {
+        console.log('[VOTING POLL] VotingStarted arrived via WebSocket — stopping poll');
+        clearInterval(pollInterval);
+        return;
+      }
+
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+        console.log('[VOTING POLL] 30 s elapsed — no active voting found (voting may not have started yet)');
+        clearInterval(pollInterval);
+        return;
+      }
+
+      try {
+        const response = await socialService.getLobbyStateV2(sessionId);
+        if (!isMountedRef.current || isCleaningUpRef.current) {
+          clearInterval(pollInterval);
+          return;
+        }
+
+        const av = response?.data?.lobby_state?.active_voting;
+        if (av && !useVotingStore.getState().isActive) {
+          console.log('[VOTING POLL] Recovered missed VotingStarted via HTTP poll');
+          startVoting({
+            sessionId: av.session_id || sessionId,
+            votingId: av.voting_id,
+            initiatorId: av.initiator_id,
+            initiatorName: av.initiator_name || '',
+            members: av.members || [],
+            exercises: av.exercises || [],
+            alternativePool: av.alternative_pool || [],
+            timeoutSeconds: av.timeout_seconds,
+            expiresAt: av.expires_at,
+          });
+          clearInterval(pollInterval);
+        }
+      } catch (err) {
+        console.warn('[VOTING POLL] Poll failed (non-critical):', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasExercises, isInitiator, isVotingActive, sessionId]);
+
+  /**
    * Reconnect recovery for missed VotingStarted events.
    *
    * When the WebSocket briefly drops and reconnects, any VotingStarted event
