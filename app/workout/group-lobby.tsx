@@ -683,14 +683,31 @@ export default function GroupLobbyScreen() {
         const serverState = response?.data?.lobby_state;
         if (!serverState?.members || serverState.members.length === 0) return;
 
-        const localMembers = useLobbyStore.getState().currentLobby?.members;
+        const localLobby = useLobbyStore.getState().currentLobby;
+        const localMembers = localLobby?.members;
         const localCount = localMembers?.length || 0;
         const serverCount = serverState.members.length;
 
-        if (localCount !== serverCount) {
-          console.log('[LOBBY SYNC] Member count mismatch — syncing', {
-            local: localCount,
-            server: serverCount,
+        // 1. Member count changed
+        const countChanged = localCount !== serverCount;
+
+        // 2. Same count but different people (A left + B joined simultaneously)
+        let compositionChanged = false;
+        if (!countChanged && localMembers) {
+          const localIds = new Set(localMembers.map((m: { user_id: number }) => m.user_id));
+          compositionChanged = serverState.members.some((m: { user_id: number }) => !localIds.has(m.user_id));
+        }
+
+        // 3. Missed initiator transfer, customizer change, or status change
+        const metadataChanged =
+          localLobby?.initiator_id !== serverState.initiator_id ||
+          localLobby?.customizer_id !== serverState.customizer_id ||
+          localLobby?.status !== serverState.status;
+
+        if (countChanged || compositionChanged || metadataChanged) {
+          console.log('[LOBBY SYNC] State mismatch — syncing', {
+            countChanged, compositionChanged, metadataChanged,
+            local: localCount, server: serverCount,
           });
           setLobbyState(serverState);
         }
