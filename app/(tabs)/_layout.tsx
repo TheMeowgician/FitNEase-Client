@@ -1,14 +1,16 @@
 import { Tabs } from 'expo-router';
-import { Platform, View } from 'react-native';
+import { Platform, View, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
 import { NetworkBanner } from '../../components/ui/NetworkBanner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 export default function TabLayout() {
   const { user } = useAuth();
+  const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
   const isMentor = user?.role === 'mentor';
 
@@ -43,11 +45,31 @@ export default function TabLayout() {
         options={{
           title: isMentor ? 'Dashboard' : 'Home',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={isMentor ? (focused ? 'school' : 'school-outline') : (focused ? 'home' : 'home-outline')}
-              size={size}
-              color={color}
-            />
+            <View>
+              <Ionicons
+                name={isMentor ? (focused ? 'school' : 'school-outline') : (focused ? 'home' : 'home-outline')}
+                size={size}
+                color={color}
+              />
+              {unreadCount > 0 && (
+                <View style={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -8,
+                  backgroundColor: '#EF4444',
+                  borderRadius: 8,
+                  minWidth: 16,
+                  height: 16,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingHorizontal: 3,
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           ),
         }}
       />

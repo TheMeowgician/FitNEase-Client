@@ -41,6 +41,21 @@ export default function NotificationsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Mark all notifications as read when the page opens (clears the badge counter)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        commsService.markAllAsRead(Number(user.id))
+          .then(() => {
+            refreshUnreadCount();
+            // Also mark local list as read visually
+            setNotifications(prev => prev.map(n => ({ ...n, is_read: true, read_at: n.read_at || new Date().toISOString() })));
+          })
+          .catch(err => console.warn('[NOTIFICATIONS] Failed to mark all as read:', err));
+      }
+    }, [user])
+  );
+
   useEffect(() => {
     loadNotifications();
 

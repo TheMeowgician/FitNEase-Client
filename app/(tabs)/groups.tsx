@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,21 +15,24 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { socialService, Group } from '../../services/microservices/socialService';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 
 export default function GroupsScreen() {
   const { user } = useAuth();
   const alert = useAlert();
+  const { addNotificationListener } = useNotifications();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [myGroups, setMyGroups] = useState<Group[]>([]);
   const [publicGroups, setPublicGroups] = useState<Group[]>([]);
   const [pendingRequestGroupIds, setPendingRequestGroupIds] = useState<Set<string>>(new Set());
+  const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null); // Debounce: tracks which group button is in-flight
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -55,9 +58,23 @@ export default function GroupsScreen() {
     }
   }, [showJoinModal]);
 
+  // Refresh groups when tab is focused (catches stale data after navigating away)
+  useFocusEffect(
+    useCallback(() => {
+      loadGroups();
+    }, [])
+  );
+
+  // Real-time: refresh groups when a join request is approved (user gets notified)
   useEffect(() => {
-    loadGroups();
-  }, []);
+    const unsubscribe = addNotificationListener((notification) => {
+      if (notification.notification_type === 'group_join_approved') {
+        console.log('🔔 [GROUPS] Join request approved — refreshing groups list');
+        loadGroups();
+      }
+    });
+    return unsubscribe;
+  }, [addNotificationListener]);
 
   const loadGroups = async () => {
     try {
@@ -175,6 +192,8 @@ export default function GroupsScreen() {
   };
 
   const handleJoinGroup = async (group: Group) => {
+    if (loadingGroupId) return; // Debounce: block if any group action is in-flight
+    setLoadingGroupId(group.id);
     try {
       // Create a join request instead of directly joining
       await socialService.createJoinRequest(group.id);
@@ -198,14 +217,18 @@ export default function GroupsScreen() {
       } else {
         alert.error('Error', errorMessage || 'Failed to send join request.');
       }
+    } finally {
+      setLoadingGroupId(null);
     }
   };
 
   const handleCancelJoinRequest = (group: Group) => {
+    if (loadingGroupId) return; // Debounce: block if any group action is in-flight
     alert.confirm(
       'Cancel Request',
       `Cancel your request to join "${group.name}"?`,
       async () => {
+        setLoadingGroupId(group.id);
         try {
           await socialService.cancelJoinRequest(group.id);
           // Remove from pending set so button reverts to "Request to Join"
@@ -217,6 +240,8 @@ export default function GroupsScreen() {
           alert.success('Cancelled', 'Your join request has been cancelled.');
         } catch (error: any) {
           alert.error('Error', error.message || 'Failed to cancel join request.');
+        } finally {
+          setLoadingGroupId(null);
         }
       },
       undefined,
@@ -384,20 +409,30 @@ export default function GroupsScreen() {
                     </View>
                     {pendingRequestGroupIds.has(group.id) ? (
                       <TouchableOpacity
-                        style={styles.pendingBadge}
+                        style={[styles.pendingBadge, loadingGroupId === group.id && { opacity: 0.5 }]}
                         onPress={() => handleCancelJoinRequest(group)}
                         activeOpacity={0.7}
+                        disabled={loadingGroupId !== null}
                       >
-                        <Ionicons name="close-circle" size={14} color={COLORS.WARNING[700]} />
+                        {loadingGroupId === group.id ? (
+                          <ActivityIndicator size={14} color={COLORS.WARNING[700]} />
+                        ) : (
+                          <Ionicons name="close-circle" size={14} color={COLORS.WARNING[700]} />
+                        )}
                         <Text style={styles.pendingBadgeText}>Cancel Request</Text>
                       </TouchableOpacity>
                     ) : (
                       <TouchableOpacity
-                        style={styles.joinButton}
+                        style={[styles.joinButton, loadingGroupId === group.id && { opacity: 0.5 }]}
                         onPress={() => handleJoinGroup(group)}
                         activeOpacity={0.7}
+                        disabled={loadingGroupId !== null}
                       >
-                        <Text style={styles.joinButtonText}>Request to Join</Text>
+                        {loadingGroupId === group.id ? (
+                          <ActivityIndicator size={12} color="#fff" />
+                        ) : (
+                          <Text style={styles.joinButtonText}>Request to Join</Text>
+                        )}
                       </TouchableOpacity>
                     )}
                   </View>
