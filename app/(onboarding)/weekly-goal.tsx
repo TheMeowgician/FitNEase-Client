@@ -121,8 +121,6 @@ export default function WeeklyGoalScreen() {
           primaryGoals: fitnessGoals,
           workoutExperience: parseInt(fitnessExperience),
           weeklyActivityLevel: activityLevel,
-          medicalConditions: '',
-          injuries: '',
           weight: physicalStatsData?.weight || 70,
           height: physicalStatsData?.height || 170,
           age: physicalStatsData?.age || 25,

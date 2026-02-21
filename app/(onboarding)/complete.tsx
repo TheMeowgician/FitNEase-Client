@@ -22,8 +22,6 @@ interface OnboardingData {
     primaryGoals: string[];
     workoutExperience: number;
     weeklyActivityLevel: string;
-    medicalConditions: string;
-    injuries: string;
     weight: number;
     height: number;
     age: number;
@@ -33,7 +31,6 @@ interface OnboardingData {
     targetMuscleGroups: string[];
     availableEquipment: string[];
     timeConstraints: number;
-    workoutTypes: string[];
     preferredDays: string[];
   };
 }
@@ -73,8 +70,6 @@ export default function CompleteScreen() {
           goals: onboardingData.assessment.primaryGoals,
           experience_years: onboardingData.assessment.workoutExperience,
           activity_level: onboardingData.assessment.weeklyActivityLevel,
-          medical_conditions: onboardingData.assessment.medicalConditions,
-          injuries: onboardingData.assessment.injuries,
           weight: onboardingData.assessment.weight,
           height: onboardingData.assessment.height,
           age: onboardingData.assessment.age,
@@ -83,7 +78,6 @@ export default function CompleteScreen() {
           target_muscle_groups: onboardingData.preferences.targetMuscleGroups,
           available_equipment: onboardingData.preferences.availableEquipment,
           time_constraints_minutes: onboardingData.preferences.timeConstraints,
-          preferred_workout_types: onboardingData.preferences.workoutTypes,
           preferred_workout_days: onboardingData.preferences.preferredDays,
           onboarding_completed: true,
         },
@@ -102,7 +96,6 @@ export default function CompleteScreen() {
         preferred_workout_days: onboardingData.preferences.preferredDays,
         fitness_goals: onboardingData.assessment.primaryGoals,
         activity_level: onboardingData.assessment.weeklyActivityLevel,
-        medical_conditions: onboardingData.assessment.medicalConditions,
         workout_experience_years: onboardingData.assessment.workoutExperience,
         age: onboardingData.assessment.age,
         onboarding_completed: true

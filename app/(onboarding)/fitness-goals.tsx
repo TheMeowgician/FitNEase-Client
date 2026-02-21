@@ -138,28 +138,6 @@ export default function FitnessGoalsScreen() {
     setIsLoading(true);
 
     try {
-      const completeData = {
-        assessment: {
-          currentFitnessLevel: fitnessLevel,
-          primaryGoals: selectedGoals,
-          workoutExperience: parseInt(fitnessExperience),
-          weeklyActivityLevel: activityLevel,
-          medicalConditions: '',
-          injuries: '',
-          weight: physicalStatsData?.weight || 70,
-          height: physicalStatsData?.height || 170,
-          age: physicalStatsData?.age || 25,
-          bmi: physicalStatsData?.bmi || 24.2,
-        },
-        preferences: preferencesData || {
-          targetMuscleGroups: [],
-          availableEquipment: [],
-          timeConstraints: 30,
-          workoutTypes: [],
-          preferredDays: [],
-        },
-      };
-
       router.push({
         pathname: '/(onboarding)/weekly-goal',
         params: {
