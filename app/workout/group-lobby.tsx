@@ -2484,7 +2484,16 @@ export default function GroupLobbyScreen() {
         throw new Error('Failed to start workout');
       }
 
-      // WorkoutStarted event will trigger navigation
+      // WorkoutStarted event will trigger navigation.
+      // Safety: if the event doesn't arrive within 10s (network hiccup),
+      // re-enable the button so the initiator can retry.
+      // The backend is idempotent — a second call re-broadcasts the event.
+      setTimeout(() => {
+        if (isMountedRef.current && !isWorkoutStartedRef.current) {
+          console.warn('[START WORKOUT] WorkoutStarted event not received after 10s — re-enabling button');
+          setIsStarting(false);
+        }
+      }, 10000);
     } catch (error) {
       console.error('❌ Error starting workout:', error);
       alert.error('Error', 'Failed to start workout. Please try again.');
