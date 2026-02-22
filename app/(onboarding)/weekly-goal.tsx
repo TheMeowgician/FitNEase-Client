@@ -20,13 +20,6 @@ interface DayOfWeek {
   short: string;
 }
 
-interface Duration {
-  id: string;
-  minutes: number;
-  label: string;
-  description: string;
-}
-
 export default function WeeklyGoalScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
@@ -39,8 +32,10 @@ export default function WeeklyGoalScreen() {
   const fitnessGoals = params.fitnessGoals ? JSON.parse(params.fitnessGoals as string) : [];
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [selectedDuration, setSelectedDuration] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // timeConstraints already set on workout-duration page, carried through preferencesData
+  const sessionDuration = preferencesData?.timeConstraints || 30;
 
   const daysOfWeek: DayOfWeek[] = [
     { id: 'sunday', label: 'Sunday', short: 'Sun' },
@@ -52,33 +47,6 @@ export default function WeeklyGoalScreen() {
     { id: 'saturday', label: 'Saturday', short: 'Sat' },
   ];
 
-  const durations: Duration[] = [
-    {
-      id: '15',
-      minutes: 15,
-      label: '15 min',
-      description: 'Quick Tabata session',
-    },
-    {
-      id: '30',
-      minutes: 30,
-      label: '30 min',
-      description: 'Standard workout',
-    },
-    {
-      id: '45',
-      minutes: 45,
-      label: '45 min',
-      description: 'Extended session',
-    },
-    {
-      id: '60',
-      minutes: 60,
-      label: '60 min',
-      description: 'Full workout',
-    },
-  ];
-
   const handleDayToggle = (dayId: string) => {
     const newDays = selectedDays.includes(dayId)
       ? selectedDays.filter((id) => id !== dayId)
@@ -86,17 +54,13 @@ export default function WeeklyGoalScreen() {
     setSelectedDays(newDays);
   };
 
-  const handleDurationSelect = (durationId: string) => {
-    setSelectedDuration(durationId);
-  };
-
   const getRecommendation = () => {
     if (fitnessLevel === 'beginner') {
-      return 'We recommend 3-4 Tabata workout days per week, 15-30 minutes each for beginners to build HIIT endurance safely.';
+      return 'We recommend 3-4 Tabata workout days per week for beginners to build HIIT endurance safely.';
     } else if (fitnessLevel === 'intermediate') {
-      return 'We recommend 4-5 workout days per week, 30-45 minutes each for intermediate level.';
+      return 'We recommend 4-5 workout days per week for intermediate level.';
     } else {
-      return 'We recommend 5-6 workout days per week, 45-60 minutes each for advanced level.';
+      return 'We recommend 5-6 workout days per week for advanced level.';
     }
   };
 
@@ -107,8 +71,8 @@ export default function WeeklyGoalScreen() {
   };
 
   const handleContinue = async () => {
-    if (!selectedDays.length || !selectedDuration) {
-      alert.warning('Selection Required', 'Please select your workout days and duration to continue.');
+    if (!selectedDays.length) {
+      alert.warning('Selection Required', 'Please select your workout days to continue.');
       return;
     }
 
@@ -129,12 +93,11 @@ export default function WeeklyGoalScreen() {
         preferences: {
           ...preferencesData,
           preferredDays: selectedDays,
-          timeConstraints: parseInt(selectedDuration),
         },
         weeklyGoal: {
           workoutDays: selectedDays,
-          sessionDuration: parseInt(selectedDuration),
-          totalWeeklyMinutes: selectedDays.length * parseInt(selectedDuration),
+          sessionDuration: sessionDuration,
+          totalWeeklyMinutes: selectedDays.length * sessionDuration,
         },
       };
 
@@ -154,7 +117,7 @@ export default function WeeklyGoalScreen() {
     router.back();
   };
 
-  const isValidSelection = selectedDays.length > 0 && selectedDuration;
+  const isValidSelection = selectedDays.length > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -259,54 +222,6 @@ export default function WeeklyGoalScreen() {
           </View>
         </View>
 
-        {/* Duration Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Session Duration</Text>
-          <Text style={styles.sectionSubtitle}>How long should each workout be?</Text>
-
-          <View style={styles.durationsContainer}>
-            {durations.map((duration) => {
-              const isSelected = selectedDuration === duration.id;
-              return (
-                <TouchableOpacity
-                  key={duration.id}
-                  onPress={() => handleDurationSelect(duration.id)}
-                  style={[
-                    styles.durationCard,
-                    {
-                      borderColor: isSelected ? COLORS.PRIMARY[500] : COLORS.NEUTRAL[200],
-                      backgroundColor: COLORS.NEUTRAL.WHITE,
-                      borderWidth: isSelected ? 3 : 2,
-                      shadowColor: isSelected ? COLORS.PRIMARY[500] : '#000',
-                      shadowOpacity: isSelected ? 0.15 : 0.05,
-                      shadowRadius: isSelected ? 8 : 4,
-                      elevation: isSelected ? 4 : 2,
-                    }
-                  ]}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.durationLabel,
-                      { color: isSelected ? COLORS.PRIMARY[500] : COLORS.SECONDARY[900] }
-                    ]}
-                  >
-                    {duration.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.durationDescription,
-                      { color: isSelected ? COLORS.PRIMARY[500] : COLORS.SECONDARY[600] }
-                    ]}
-                  >
-                    {duration.description}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
         {/* Weekly Summary */}
         {isValidSelection && (
           <View style={styles.summaryCard}>
@@ -323,15 +238,13 @@ export default function WeeklyGoalScreen() {
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Session Duration:</Text>
-                <Text style={styles.summaryValue}>
-                  {durations.find(d => d.id === selectedDuration)?.label}/day
-                </Text>
+                <Text style={styles.summaryValue}>~{sessionDuration} min/day</Text>
               </View>
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabelHighlight}>Total Weekly Time:</Text>
                 <Text style={styles.summaryValueHighlight}>
-                  {selectedDays.length * (durations.find(d => d.id === selectedDuration)?.minutes || 0)} minutes
+                  ~{selectedDays.length * sessionDuration} minutes
                 </Text>
               </View>
             </View>
@@ -470,29 +383,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[500],
-  },
-  durationsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  durationCard: {
-    flexBasis: '47%',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    minHeight: 80,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  durationLabel: {
-    fontSize: 18,
-    fontFamily: FONTS.BOLD,
-    marginBottom: 4,
-  },
-  durationDescription: {
-    fontSize: 12,
-    fontFamily: FONTS.REGULAR,
-    textAlign: 'center',
   },
   summaryCard: {
     backgroundColor: COLORS.PRIMARY[50],

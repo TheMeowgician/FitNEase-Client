@@ -24,12 +24,12 @@ export default function WorkoutDurationScreen() {
   const [selectedDuration, setSelectedDuration] = useState<number>(30);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Tabata-aligned durations matching beginner progressive overload (4→5→6 exercises)
+  // Formula: (300n - 60) / 60 minutes, where n = exercise count
   const durations = [
-    { value: 15, label: '15 min', description: 'Quick session', icon: 'flash-outline', color: '#10B981' },
-    { value: 30, label: '30 min', description: 'Standard workout', icon: 'fitness-outline', color: '#F59E0B' },
-    { value: 45, label: '45 min', description: 'Extended session', icon: 'barbell-outline', color: '#8B5CF6' },
-    { value: 60, label: '60 min', description: 'Full workout', icon: 'trophy-outline', color: '#EF4444' },
-    { value: 90, label: '90 min', description: 'Intensive training', icon: 'flame-outline', color: '#EC4899' },
+    { value: 20, label: '~20 min', description: '4 exercises per session', icon: 'flash-outline', color: '#10B981' },
+    { value: 25, label: '~25 min', description: '5 exercises per session', icon: 'fitness-outline', color: '#F59E0B' },
+    { value: 30, label: '~30 min', description: '6 exercises per session', icon: 'barbell-outline', color: '#8B5CF6' },
   ];
 
   const handleBack = () => {
@@ -110,7 +110,7 @@ export default function WorkoutDurationScreen() {
           </Text>
 
           <Text style={styles.subtitle}>
-            Choose your preferred Tabata workout duration. You can always adjust this later.
+            Each Tabata exercise takes ~4 minutes. Choose how many exercises per session. You can always adjust this later.
           </Text>
         </View>
 

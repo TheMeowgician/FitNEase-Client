@@ -25,12 +25,11 @@ export default function DurationSettingsScreen() {
   const [selectedDuration, setSelectedDuration] = useState<number>(30);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Tabata-aligned durations matching beginner progressive overload (4→5→6 exercises)
   const durations: DurationOption[] = [
-    { value: 15, label: '15 min', description: 'Quick session', icon: 'flash-outline', color: '#10B981' },
-    { value: 30, label: '30 min', description: 'Standard workout', icon: 'fitness-outline', color: '#F59E0B' },
-    { value: 45, label: '45 min', description: 'Extended session', icon: 'barbell-outline', color: '#8B5CF6' },
-    { value: 60, label: '60 min', description: 'Full workout', icon: 'trophy-outline', color: '#EF4444' },
-    { value: 90, label: '90 min', description: 'Intensive training', icon: 'flame-outline', color: '#EC4899' },
+    { value: 20, label: '~20 min', description: '4 exercises per session', icon: 'flash-outline', color: '#10B981' },
+    { value: 25, label: '~25 min', description: '5 exercises per session', icon: 'fitness-outline', color: '#F59E0B' },
+    { value: 30, label: '~30 min', description: '6 exercises per session', icon: 'barbell-outline', color: '#8B5CF6' },
   ];
 
   useEffect(() => {
@@ -148,7 +147,7 @@ export default function DurationSettingsScreen() {
             How much <Text style={styles.titleAccent}>time</Text> can you commit?
           </Text>
           <Text style={styles.subtitle}>
-            Choose your preferred workout duration for Tabata sessions.
+            Each Tabata exercise takes ~4 minutes. Choose how many exercises per session.
           </Text>
         </View>
 
