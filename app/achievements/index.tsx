@@ -245,12 +245,13 @@ export default function AchievementsScreen() {
               return (
                 <TouchableOpacity
                   key={achievement.achievement_id}
-                  activeOpacity={0.7}
+                  activeOpacity={achievement.isUnlocked ? 0.7 : 1}
                   style={[
                     styles.achievementCard,
                     !achievement.isUnlocked && styles.achievementCardLocked,
                   ]}
                   onPress={() => {
+                    if (!achievement.isUnlocked) return; // Locked — no modal
                     setSelectedAchievement({
                       achievement_id: achievement.achievement_id,
                       achievement_name: achievement.achievement_name,
