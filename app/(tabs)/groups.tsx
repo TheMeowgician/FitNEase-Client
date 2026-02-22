@@ -65,11 +65,12 @@ export default function GroupsScreen() {
     }, [])
   );
 
-  // Real-time: refresh groups when a join request is approved (user gets notified)
+  // Real-time: refresh groups when relevant group notifications arrive
   useEffect(() => {
     const unsubscribe = addNotificationListener((notification) => {
-      if (notification.notification_type === 'group_join_approved') {
-        console.log('🔔 [GROUPS] Join request approved — refreshing groups list');
+      const type = notification.notification_type;
+      if (type === 'group_join_approved' || type === 'group_member_kicked') {
+        console.log(`🔔 [GROUPS] ${type} — refreshing groups list`);
         loadGroups();
       }
     });

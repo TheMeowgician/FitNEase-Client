@@ -21,8 +21,16 @@ class ReverbService {
   public async connect(userId: number) {
     this.lastUserId = userId; // Store for manual reconnect
 
+    // Idempotent: if already connected for the same user, skip reconnection.
+    // Multiple contexts (ReverbProvider, NotificationContext, WebSocketContext)
+    // call connect() — only the first one should actually create the connection.
+    if (this.pusher && this.pusher.connection.state !== 'disconnected') {
+      console.log('✅ Reverb already connected, reusing existing connection');
+      return;
+    }
+
     if (this.pusher) {
-      console.log('⚠️ Reverb already connected, disconnecting first');
+      console.log('⚠️ Reverb exists but disconnected, cleaning up first');
       this.disconnect();
     }
 

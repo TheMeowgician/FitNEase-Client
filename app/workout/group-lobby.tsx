@@ -26,6 +26,7 @@ import { useConnectionStore, selectConnectionState } from '../../stores/connecti
 import { useAuth } from '../../contexts/AuthContext';
 import { useLobby } from '../../contexts/LobbyContext';
 import { useReverb } from '../../contexts/ReverbProvider';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
@@ -65,6 +66,7 @@ export default function GroupLobbyScreen() {
   const { user: currentUser } = useAuth();
   const alert = useAlert();
   const { saveLobbySession, clearActiveLobbyLocal } = useLobby();
+  const { addUserChannelListener } = useNotifications();
 
   // Safe area insets for modal
   const insets = useSafeAreaInsets();
@@ -1717,12 +1719,13 @@ export default function GroupLobbyScreen() {
 
       console.log('✅ Subscribed to presence channel');
 
-      // Subscribe to user's personal channel for kick notifications
+      // Listen for kick events via NotificationContext's user channel
+      // (avoids subscribing to private-user.{id} directly, which would destroy
+      // NotificationContext's handler via unbind_global)
       if (currentUser) {
-        console.log('🔌 Subscribing to user channel for user:', currentUser.id);
-        userChannelRef.current = reverbService.subscribeToUserChannel(currentUser.id, {
-          onMemberKicked: (data: any) => {
-            // Guard against updates during cleanup
+        console.log('🔌 Adding user channel listener for kick events');
+        userChannelRef.current = addUserChannelListener((eventName: string, data: any) => {
+          if (eventName === 'MemberKicked' || eventName === '.MemberKicked') {
             if (isCleaningUpRef.current || !isMountedRef.current) return;
             console.log('🚫 YOU HAVE BEEN KICKED from lobby:', data);
             alert.warning(
@@ -1733,9 +1736,9 @@ export default function GroupLobbyScreen() {
                 router.back();
               }
             );
-          },
+          }
         });
-        console.log('✅ Subscribed to user channel');
+        console.log('✅ Registered user channel listener for kick events');
       }
 
       console.log('✅ Subscribed to all lobby channels');
@@ -2611,10 +2614,10 @@ export default function GroupLobbyScreen() {
         console.log('🧹 [CLEANUP] Unsubscribed from group presence channel');
       }
 
-      if (userChannelRef.current && currentUser) {
-        reverbService.unsubscribe(`private-user.${currentUser.id}`);
+      if (userChannelRef.current) {
+        userChannelRef.current(); // Call the unsubscribe function
         userChannelRef.current = null;
-        console.log('🧹 [CLEANUP] Unsubscribed from user channel');
+        console.log('🧹 [CLEANUP] Removed user channel listener');
       }
 
       // STEP 2: Small delay to ensure unsubscribe messages are processed

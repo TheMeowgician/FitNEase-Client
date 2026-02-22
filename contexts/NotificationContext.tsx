@@ -21,6 +21,7 @@ interface Notification {
 }
 
 type NotificationEventListener = (notification: Notification) => void;
+type UserChannelEventListener = (eventName: string, data: any) => void;
 
 interface InvitationData {
   invitation_id: string;
@@ -39,6 +40,7 @@ interface NotificationContextType {
   markAsRead: (notificationId: number) => Promise<void>;
   setupRealtimeNotifications: () => Promise<void>;
   addNotificationListener: (listener: NotificationEventListener) => () => void;
+  addUserChannelListener: (listener: UserChannelEventListener) => () => void;
   registerPushToken: () => Promise<void>;
   // Invitation modal state
   showInvitationModal: boolean;
@@ -53,6 +55,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [unreadCount, setUnreadCount] = useState(0);
   const isSetupRef = useRef(false);
   const listenersRef = useRef<Set<NotificationEventListener>>(new Set());
+  const userChannelListenersRef = useRef<Set<UserChannelEventListener>>(new Set());
 
   // Invitation modal state (legacy - kept for backward compatibility)
   const [showInvitationModal, setShowInvitationModal] = useState(false);
@@ -64,11 +67,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Track if push token has been registered
   const pushTokenRegisteredRef = useRef(false);
 
+  // Track the user ID that has an active channel subscription
+  const subscribedUserIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (user) {
       refreshUnreadCount();
 
-      // Setup real-time notifications only once
+      // Setup real-time notifications when user ID changes or first login
+      const currentUserId = String(user.id);
+      if (subscribedUserIdRef.current !== currentUserId) {
+        // Clean up previous user's channel if switching users
+        if (subscribedUserIdRef.current) {
+          reverbService.unsubscribe(`private-user.${subscribedUserIdRef.current}`);
+        }
+        subscribedUserIdRef.current = currentUserId;
+        isSetupRef.current = false; // Allow re-setup for new user
+      }
+
       if (!isSetupRef.current) {
         setupRealtimeNotifications();
         isSetupRef.current = true;
@@ -79,14 +95,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         initializePushNotifications();
         pushTokenRegisteredRef.current = true;
       }
+    } else if (subscribedUserIdRef.current) {
+      // User logged out - clean up
+      reverbService.unsubscribe(`private-user.${subscribedUserIdRef.current}`);
+      subscribedUserIdRef.current = null;
+      isSetupRef.current = false;
     }
-
-    return () => {
-      // Clean up on unmount
-      if (user) {
-        reverbService.unsubscribe(`private-user.${user.id}`);
-      }
-    };
   }, [user]);
 
   /**
@@ -228,9 +242,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
             console.log('✅ [NOTIFICATION CONTEXT] Invitation added to store');
           }
-          else {
-            console.log(`⚠️ [NOTIFICATION CONTEXT] Event type "${eventName}" - ignoring`);
-          }
+          // Forward ALL events to user channel listeners (e.g. lobby kick detection)
+          userChannelListenersRef.current.forEach((listener) => {
+            try {
+              listener(eventName, data);
+            } catch (error) {
+              console.error('❌ [NOTIFICATION CONTEXT] Error in user channel listener:', error);
+            }
+          });
         },
       });
 
@@ -270,6 +289,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
+  const addUserChannelListener = useCallback((listener: UserChannelEventListener) => {
+    userChannelListenersRef.current.add(listener);
+    return () => {
+      userChannelListenersRef.current.delete(listener);
+    };
+  }, []);
+
   const handleAcceptInvitation = () => {
     if (!invitationData) return;
 
@@ -304,6 +330,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         markAsRead,
         setupRealtimeNotifications,
         addNotificationListener,
+        addUserChannelListener,
         registerPushToken,
         // Invitation modal state
         showInvitationModal,
