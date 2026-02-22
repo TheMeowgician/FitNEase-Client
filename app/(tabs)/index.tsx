@@ -258,6 +258,19 @@ export default function HomeScreen() {
     }
   };
 
+  const showAchievementUnlockModal = (achievementData: any) => {
+    setSelectedAchievement({
+      achievement_id: achievementData.achievement_id,
+      achievement_name: achievementData.achievement_name,
+      description: achievementData.description || 'Achievement unlocked!',
+      badge_icon: achievementData.badge_icon || 'trophy',
+      badge_color: achievementData.badge_color || COLORS.PRIMARY[600],
+      rarity_level: achievementData.rarity_level || 'common',
+      points_value: achievementData.points_value || 0,
+    });
+    setShowAchievementModal(true);
+  };
+
   /**
    * Check if user has their fitness level achievement unlocked.
    * If not, unlock it. This handles existing users who completed onboarding
@@ -291,11 +304,35 @@ export default function HomeScreen() {
       const result = await engagementService.unlockLevelAchievement(user.id, validLevel);
       if (result) {
         console.log(`✅ [DASHBOARD] Successfully unlocked ${levelAchievementName} achievement!`);
+        showAchievementUnlockModal(result);
+
+        // Refresh achievements list so the new one appears in the grid
+        const refreshed = await getUserAchievements(user.id).catch(() => []);
+        setAchievements(refreshed || []);
       } else {
         console.warn(`⚠️ [DASHBOARD] Could not unlock ${levelAchievementName} achievement`);
       }
     } else {
-      console.log(`✅ [DASHBOARD] User already has ${levelAchievementName} achievement`);
+      // Achievement exists — show modal if it was earned recently (e.g. during onboarding)
+      const match = userAchievements.find(
+        (ua: any) => ua.achievement?.achievement_name === levelAchievementName
+      );
+      if (match?.earned_at) {
+        const earnedAt = new Date(match.earned_at).getTime();
+        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+        if (earnedAt > twoMinutesAgo) {
+          console.log(`🏆 [DASHBOARD] ${levelAchievementName} was earned recently, showing modal`);
+          showAchievementUnlockModal({
+            achievement_id: match.achievement?.achievement_id,
+            achievement_name: match.achievement?.achievement_name,
+            description: match.achievement?.description,
+            badge_icon: match.achievement?.badge_icon,
+            badge_color: match.achievement?.badge_color,
+            rarity_level: match.achievement?.rarity_level,
+            points_value: match.points_earned,
+          });
+        }
+      }
     }
   };
 
