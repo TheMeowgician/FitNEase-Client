@@ -132,7 +132,8 @@ export class APIClient {
           '/api/auth/verify-code',
           '/api/auth/forgot-password',
           '/api/auth/reset-password',
-          '/api/auth/resend-verification'
+          '/api/auth/resend-verification',
+          '/api/auth/logout'
         ];
 
         const isAuthExcluded = authExcludedEndpoints.some(endpoint =>
@@ -451,10 +452,8 @@ export class APIClient {
                                    errorMessage.includes('could not be found');
 
       // Check if this is a logout request (which can fail gracefully)
+      // Any error during logout is non-critical — tokens are always cleared locally
       const isLogoutRequest = config.url?.includes('/logout') || config.url?.includes('/auth/logout');
-      const isLogoutError = (errorMessage.includes('currentAccessToken') ||
-                           (errorMessage.includes('null') && errorMessage.includes('token'))) &&
-                           isLogoutRequest;
 
       // Check if this is a "graceful" error that will be handled by the calling service
       // These errors are expected and don't indicate a real problem
@@ -470,9 +469,9 @@ export class APIClient {
       // For non-critical services (ML, tracking, engagement, planning), log as warning instead of error
       const isNonCriticalService = service === 'ml' || service === 'tracking' || service === 'engagement' || service === 'planning' || service === 'communications';
 
-      if (isLogoutError) {
-        // Logout errors are expected when session is already expired
-        console.log(`ℹ️ Logout request completed (session may have been already cleared)`, {
+      if (isLogoutRequest) {
+        // Logout errors are expected — session may already be expired or token invalid
+        console.log(`ℹ️ Logout request completed (server error ignored — tokens cleared locally)`, {
           url: config.url
         });
         // Return success response for logout even if backend failed
