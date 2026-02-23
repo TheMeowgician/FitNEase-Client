@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import NetInfo from '@react-native-community/netinfo';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { useReverb } from '../../contexts/ReverbProvider';
@@ -338,6 +339,29 @@ export default function WorkoutSessionScreen() {
     return () => removeListener();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabataSession]);
+
+  // Instant network detection via NetInfo for group workouts.
+  // NetInfo fires within 1-2 seconds of WiFi loss (vs 15-30s for WebSocket heartbeat).
+  // This gives the disconnected user immediate feedback AND notifies the server
+  // so other members get a fast disconnect toast.
+  useEffect(() => {
+    if (type !== 'group_tabata' || !tabataSession) return;
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (state.isConnected === false || state.isInternetReachable === false) {
+        console.log('📡 [SESSION/NetInfo] Network lost — showing disconnect banner immediately');
+        setSelfDisconnected(true);
+        setSelfReconnecting(true);
+      } else if (state.isConnected && state.isInternetReachable && selfDisconnected) {
+        // Network restored — WebSocket reconnect handler will clear the banner
+        // when it fires 'connected', but log it here for visibility
+        console.log('📡 [SESSION/NetInfo] Network restored — waiting for WebSocket reconnect');
+      }
+    });
+
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabataSession, selfDisconnected]);
 
   useEffect(() => {
     // ALL workouts (solo AND group) now use client-side prediction for smooth timer

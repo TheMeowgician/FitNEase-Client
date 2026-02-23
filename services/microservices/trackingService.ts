@@ -553,23 +553,38 @@ export class TrackingService {
       const sessions = paginatedData.data || [];
 
       // Transform snake_case to camelCase for frontend
-      const transformedSessions: WorkoutSession[] = sessions.map((session: any) => ({
-        id: session.session_id?.toString() || session.id?.toString(),
-        workoutId: session.workout_id?.toString(),
-        workoutName: 'Tabata Workout', // We don't have workout names yet
-        userId: session.user_id?.toString(),
-        sessionType: session.session_type as 'individual' | 'group' | undefined,
-        startTime: session.start_time,
-        endTime: session.end_time,
-        duration: session.actual_duration_minutes,
-        status: (session.is_completed ? 'completed' : 'in-progress') as 'in-progress' | 'completed' | 'paused' | 'cancelled',
-        exercises: [],
-        notes: session.user_notes,
-        actualCaloriesBurned: session.calories_burned ? parseFloat(session.calories_burned) : 0,
-        completionPercentage: session.completion_percentage ? parseFloat(session.completion_percentage) : 0,
-        createdAt: session.created_at,
-        updatedAt: session.updated_at,
-      }));
+      const transformedSessions: WorkoutSession[] = sessions.map((session: any) => {
+        // Map exercise history from backend (user_exercise_history relation)
+        const exerciseHistory = session.user_exercise_history || [];
+        const exercises: SessionExercise[] = exerciseHistory.map((ex: any) => ({
+          exerciseId: ex.exercise_id?.toString() || '',
+          exerciseName: ex.exercise_name || `Exercise ${ex.exercise_id}`,
+          plannedSets: [],
+          completedSets: [],
+          skipped: false,
+          actualDuration: ex.completed_duration_seconds || undefined,
+          perceivedExertion: ex.difficulty_perceived ? undefined : undefined,
+          formQuality: ex.form_rating ? parseFloat(ex.form_rating) : undefined,
+        }));
+
+        return {
+          id: session.session_id?.toString() || session.id?.toString(),
+          workoutId: session.workout_id?.toString(),
+          workoutName: 'Tabata Workout',
+          userId: session.user_id?.toString(),
+          sessionType: session.session_type as 'individual' | 'group' | undefined,
+          startTime: session.start_time,
+          endTime: session.end_time,
+          duration: session.actual_duration_minutes,
+          status: (session.is_completed ? 'completed' : 'in-progress') as 'in-progress' | 'completed' | 'paused' | 'cancelled',
+          exercises,
+          notes: session.user_notes,
+          actualCaloriesBurned: session.calories_burned ? parseFloat(session.calories_burned) : 0,
+          completionPercentage: session.completion_percentage ? parseFloat(session.completion_percentage) : 0,
+          createdAt: session.created_at,
+          updatedAt: session.updated_at,
+        };
+      });
 
       return {
         sessions: transformedSessions,

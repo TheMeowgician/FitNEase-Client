@@ -75,6 +75,14 @@ class ReverbService {
           'Accept': 'application/json',
         },
       },
+      // Faster disconnect detection for group workouts:
+      // activityTimeout: how long (ms) without activity before CLIENT sends a ping
+      // pongTimeout: how long (ms) to wait for a pong reply before declaring dead
+      // Server-side Reverb: ping_interval=10s, activity_timeout=10s (~20s for OTHER users)
+      // Client-side: 30s+10s = ~40s safety net (server pings keep connection alive normally)
+      // NetInfo in session.tsx handles INSTANT detection for the disconnected user themselves
+      activityTimeout: 30000,
+      pongTimeout: 10000,
     });
 
     this.pusher.connection.bind('connected', () => {

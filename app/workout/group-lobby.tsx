@@ -1503,8 +1503,11 @@ export default function GroupLobbyScreen() {
       },
       // Ready Check Event Handlers
       onReadyCheckStarted: (data: any) => {
-        // Guard against updates during cleanup
-        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        // Guard against cleanup only — NOT isMountedRef.
+        // When user minimizes the lobby, the component unmounts but the private-lobby
+        // channel stays alive. Ready check events must still reach the Zustand store
+        // so ReadyCheckModal (rendered in _layout.tsx) can show the modal globally.
+        if (isCleaningUpRef.current) return;
         console.log('🔔 [REAL-TIME] Ready check started:', data);
 
         // Start ready check in store - this will show the modal globally
@@ -1523,8 +1526,8 @@ export default function GroupLobbyScreen() {
         });
       },
       onReadyCheckResponse: (data: any) => {
-        // Guard against updates during cleanup
-        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        // Guard against cleanup only — NOT isMountedRef (see onReadyCheckStarted comment)
+        if (isCleaningUpRef.current) return;
         console.log('📝 [REAL-TIME] Ready check response:', data);
 
         // Update response in store
@@ -1554,8 +1557,8 @@ export default function GroupLobbyScreen() {
         }
       },
       onReadyCheckComplete: (data: any) => {
-        // Guard against updates during cleanup
-        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        // Guard against cleanup only — NOT isMountedRef (see onReadyCheckStarted comment)
+        if (isCleaningUpRef.current) return;
         console.log('🏁 [REAL-TIME] Ready check complete:', data);
 
         // Set result in store — exercise generation is handled by the
@@ -1586,8 +1589,8 @@ export default function GroupLobbyScreen() {
         }
       },
       onReadyCheckCancelled: (data: any) => {
-        // Guard against updates during cleanup
-        if (isCleaningUpRef.current || !isMountedRef.current) return;
+        // Guard against cleanup only — NOT isMountedRef (see onReadyCheckStarted comment)
+        if (isCleaningUpRef.current) return;
         console.log('❌ [REAL-TIME] Ready check cancelled:', data);
 
         // Clear ready check store and reset local ready state.
