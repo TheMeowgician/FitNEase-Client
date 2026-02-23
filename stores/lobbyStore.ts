@@ -91,10 +91,19 @@ export const useLobbyStore = create<LobbyStore>((set, get) => ({
       return; // Don't set invalid lobby state
     }
 
+    // CRITICAL: If we just left this lobby, reject stale WebSocket events.
+    // Without this, a LobbyStateChanged event arriving after cleanup() would
+    // clear leftSessionId and allow ghost re-initialization.
+    const currentState = get();
+    if (currentState.leftSessionId && currentState.leftSessionId === lobbyState.session_id) {
+      console.log('⚠️ [LOBBY STORE] Rejecting state for just-left lobby:', lobbyState.session_id);
+      return;
+    }
+
     set({
       currentLobby: lobbyState,
       lastUpdated: Date.now(), // Force re-render by updating timestamp
-      // Clear leftSessionId when entering a lobby (prevents blocking future joins)
+      // Clear leftSessionId only when entering a DIFFERENT lobby (prevents blocking future joins)
       leftSessionId: null,
       leftAt: null,
     });
