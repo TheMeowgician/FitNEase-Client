@@ -143,6 +143,7 @@ export default function GroupLobbyScreen() {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [selectedExerciseForSwap, setSelectedExerciseForSwap] = useState<{ index: number; exercise: any } | null>(null);
   const [isSwappingExercise, setIsSwappingExercise] = useState(false);
+  const isReorderingRef = useRef(false); // Lock to prevent concurrent reorder API calls
 
   // Vote bottom sheet animation (matches WorkoutSetModal pattern)
   const [voteSheetVisible, setVoteSheetVisible] = useState(false);
@@ -2476,22 +2477,31 @@ export default function GroupLobbyScreen() {
   const handleExerciseReorder = async (fromIndex: number, toIndex: number) => {
     if (!isCustomizer || !sessionId || isSwappingExercise) return;
 
+    // Lock: prevent concurrent reorder calls (rapid dragging sends multiple events
+    // before the first API call finishes, causing stale index calculations)
+    if (isReorderingRef.current) {
+      console.log('[CUSTOMIZATION] Reorder already in progress, skipping');
+      return;
+    }
+    isReorderingRef.current = true;
+
     // Save previous order for rollback on failure
     const previousOrder = [...exerciseDetails];
 
-    // Optimistic local reorder
+    // Build new_order by tracking original indices (not exercise_id, which can have duplicates).
+    // e.g., moving index 2 to index 0 in a 4-item list:
+    // original indices: [0, 1, 2, 3]
+    // after move:       [2, 0, 1, 3] → new_order = [2, 0, 1, 3]
+    const indices = previousOrder.map((_, i) => i);
+    const [movedIdx] = indices.splice(fromIndex, 1);
+    indices.splice(toIndex, 0, movedIdx);
+    const newOrder = indices;
+
+    // Optimistic local reorder (mirrors the same splice logic)
     const reordered = [...exerciseDetails];
     const [moved] = reordered.splice(fromIndex, 1);
     reordered.splice(toIndex, 0, moved);
     setExerciseDetails(reordered);
-
-    // Build new_order array: maps new positions to old indices
-    // e.g., if we moved index 2 to index 0 in a 4-item list:
-    // original: [A, B, C, D] (indices 0,1,2,3)
-    // result:   [C, A, B, D] → new_order = [2, 0, 1, 3]
-    const newOrder: number[] = reordered.map((exercise) => {
-      return previousOrder.findIndex((prev) => prev.exercise_id === exercise.exercise_id);
-    });
 
     try {
       const response = await socialService.reorderExercises(sessionId, newOrder);
@@ -2506,6 +2516,8 @@ export default function GroupLobbyScreen() {
       // Revert to previous order
       setExerciseDetails(previousOrder);
       alert.error('Error', 'Failed to reorder exercises. Please try again.');
+    } finally {
+      isReorderingRef.current = false;
     }
   };
 
