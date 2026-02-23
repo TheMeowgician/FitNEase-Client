@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
+import { trackingService } from '../../services/microservices/trackingService';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
@@ -22,6 +23,7 @@ import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 interface TrainingGroup extends Group {
   members: GroupMember[];
   loadingMembers: boolean;
+  totalSessions: number;
 }
 
 export default function MentorDashboardScreen() {
@@ -52,9 +54,9 @@ export default function MentorDashboardScreen() {
 
       console.log('🎓 [MENTOR] Groups response:', response);
 
-      // Filter to only groups owned by this mentor
+      // Filter to only groups owned by this mentor (safe type comparison)
       const mentorGroups = response.groups.filter(
-        (group) => group.createdBy === user?.id?.toString()
+        (group) => String(group.createdBy) === String(user?.id)
       );
 
       console.log('🎓 [MENTOR] Filtered mentor groups:', mentorGroups.length);
@@ -64,31 +66,68 @@ export default function MentorDashboardScreen() {
         ...group,
         members: [],
         loadingMembers: true,
+        totalSessions: 0,
       }));
 
       setTrainingGroups(groupsWithMembers);
 
-      // Load members for each group
-      for (const group of mentorGroups) {
-        try {
-          const membersResponse = await socialService.getGroupMembers(group.id);
-          console.log(`🎓 [MENTOR] Members for group ${group.name}:`, membersResponse.members.length);
+      // Load members for all groups in parallel
+      const memberResults = await Promise.allSettled(
+        mentorGroups.map((group) => socialService.getGroupMembers(group.id))
+      );
 
-          setTrainingGroups((prev) =>
-            prev.map((g) =>
-              g.id === group.id
-                ? { ...g, members: membersResponse.members, loadingMembers: false }
-                : g
-            )
-          );
-        } catch (error) {
-          console.error(`Error loading members for group ${group.id}:`, error);
-          setTrainingGroups((prev) =>
-            prev.map((g) =>
-              g.id === group.id ? { ...g, loadingMembers: false } : g
-            )
-          );
-        }
+      // Collect all members per group
+      const groupMembers: GroupMember[][] = memberResults.map((result) =>
+        result.status === 'fulfilled' ? result.value.members : []
+      );
+
+      // Update all groups with their member results at once
+      setTrainingGroups((prev) =>
+        prev.map((g, index) => {
+          const result = memberResults[index];
+          if (result?.status === 'fulfilled') {
+            console.log(`🎓 [MENTOR] Members for group ${g.name}:`, result.value.members.length);
+            return { ...g, members: result.value.members, loadingMembers: false };
+          } else {
+            console.error(`Error loading members for group ${g.id}:`, result?.status === 'rejected' ? result.reason : 'unknown');
+            return { ...g, loadingMembers: false };
+          }
+        })
+      );
+
+      // Fetch session stats for all unique members across all groups (for total sessions count)
+      const allMemberIds = new Set<string>();
+      groupMembers.forEach((members) => {
+        members.forEach((m) => {
+          if (m.userId) allMemberIds.add(String(m.userId));
+        });
+      });
+
+      if (allMemberIds.size > 0) {
+        const statsResults = await Promise.allSettled(
+          Array.from(allMemberIds).map((uid) => trackingService.getMemberSessionStats(uid))
+        );
+
+        // Build userId -> completedSessions map
+        const memberStatsMap = new Map<string, number>();
+        const memberIdArr = Array.from(allMemberIds);
+        statsResults.forEach((result, idx) => {
+          if (result.status === 'fulfilled') {
+            memberStatsMap.set(memberIdArr[idx], result.value.completedSessions || 0);
+          }
+        });
+
+        // Sum sessions per group
+        setTrainingGroups((prev) =>
+          prev.map((g, index) => {
+            const members = groupMembers[index] || [];
+            const groupTotalSessions = members.reduce(
+              (sum, m) => sum + (memberStatsMap.get(String(m.userId)) || 0),
+              0
+            );
+            return { ...g, totalSessions: groupTotalSessions };
+          })
+        );
       }
     } catch (error) {
       console.error('Error loading training groups:', error);
@@ -311,7 +350,7 @@ export default function MentorDashboardScreen() {
           <View style={styles.statCard}>
             <Ionicons name="fitness" size={24} color={COLORS.WARNING[500]} />
             <Text style={styles.statValue}>
-              {trainingGroups.reduce((sum, g) => sum + (g.stats?.totalWorkouts || 0), 0)}
+              {trainingGroups.reduce((sum, g) => sum + (g.totalSessions || 0), 0)}
             </Text>
             <Text style={styles.statLabel}>Sessions</Text>
           </View>

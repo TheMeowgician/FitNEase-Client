@@ -79,8 +79,8 @@ export default function MemberDetailScreen() {
       setIsLoading(true);
       console.log('Loading member data for ID:', id);
 
-      // Load all data in parallel
-      const [memberProfile, memberStats, memberWeekly, memberAssessments, memberSessions] = await Promise.all([
+      // Load all data in parallel with individual error handling
+      const results = await Promise.allSettled([
         authService.getMemberProfile(id),
         trackingService.getMemberSessionStats(id),
         trackingService.getMemberWeeklySummary(id),
@@ -88,28 +88,46 @@ export default function MemberDetailScreen() {
         trackingService.getSessions({ userId: id, limit: 50 }),
       ]);
 
-      console.log('Member profile:', memberProfile);
-      console.log('Member stats:', memberStats);
-      console.log('Member weekly:', memberWeekly);
-      console.log('Member assessments:', memberAssessments);
-      console.log('Member sessions:', memberSessions);
+      // Profile
+      if (results[0].status === 'fulfilled' && results[0].value) {
+        console.log('Member profile:', results[0].value);
+        setMember(results[0].value);
+      } else {
+        console.error('Failed to load member profile:', results[0].status === 'rejected' ? results[0].reason : 'null response');
+      }
 
-      setMember(memberProfile);
-      setStats(memberStats);
-      setWeeklySummary(memberWeekly);
-      setAssessments(memberAssessments || []);
+      // Stats
+      if (results[1].status === 'fulfilled' && results[1].value) {
+        console.log('Member stats:', results[1].value);
+        setStats(results[1].value);
+      }
 
-      // Transform sessions to SessionHistory format
-      const transformedSessions: SessionHistory[] = (memberSessions?.sessions || []).map((s: any) => ({
-        id: s.id,
-        workoutName: s.workoutName || 'Tabata Workout',
-        duration: s.duration || 0,
-        caloriesBurned: s.actualCaloriesBurned || 0,
-        completionPercentage: s.completionPercentage || 0,
-        status: s.status || 'completed',
-        date: s.createdAt || s.startTime,
-      }));
-      setSessions(transformedSessions);
+      // Weekly summary
+      if (results[2].status === 'fulfilled' && results[2].value) {
+        console.log('Member weekly:', results[2].value);
+        setWeeklySummary(results[2].value);
+      }
+
+      // Assessments
+      if (results[3].status === 'fulfilled') {
+        console.log('Member assessments:', results[3].value);
+        setAssessments(results[3].value || []);
+      }
+
+      // Sessions
+      if (results[4].status === 'fulfilled' && results[4].value) {
+        console.log('Member sessions:', results[4].value);
+        const transformedSessions: SessionHistory[] = (results[4].value?.sessions || []).map((s: any) => ({
+          id: s.id,
+          workoutName: s.workoutName || 'Tabata Workout',
+          duration: s.duration || 0,
+          caloriesBurned: s.actualCaloriesBurned || 0,
+          completionPercentage: s.completionPercentage || 0,
+          status: s.status || 'completed',
+          date: s.createdAt || s.startTime,
+        }));
+        setSessions(transformedSessions);
+      }
     } catch (error) {
       console.error('Error loading member data:', error);
     } finally {

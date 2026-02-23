@@ -222,6 +222,7 @@ export default function WorkoutLayout() {
           headerShown: false,
           presentation: 'modal',
           animation: 'slide_from_bottom',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -229,6 +230,13 @@ export default function WorkoutLayout() {
         options={{
           headerShown: false, // Hide header for seamless rating experience
           gestureEnabled: false, // Prevent swiping back to workout
+        }}
+      />
+      <Stack.Screen
+        name="workout-detail"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right',
         }}
       />
     </Stack>

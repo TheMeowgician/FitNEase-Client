@@ -32,6 +32,7 @@ import { agoraService } from '../../services/agoraService';
 import { TabataWorkoutSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useLobbyStore } from '../../stores/lobbyStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 import AgoraVideoCall from '../../components/video/AgoraVideoCall';
@@ -144,6 +145,11 @@ export default function WorkoutSessionScreen() {
   const disconnectedMembersRef = useRef<Map<number, string>>(new Map()); // userId → userName
   const memberNamesRef = useRef<Map<number, string>>(new Map()); // Cached userId → userName at subscription time
   const presenceGraceUntilRef = useRef<number>(0); // Ignore presence events until this timestamp
+
+  // Self-disconnect detection state (current user's own connection)
+  const [selfDisconnected, setSelfDisconnected] = useState(false);
+  const [selfReconnecting, setSelfReconnecting] = useState(false);
+  const isDisconnectNavigatingRef = useRef(false); // Guard against double navigation
 
   // Draggable video position
   const pan = useRef(new Animated.ValueXY({ x: Dimensions.get('window').width - 170, y: Dimensions.get('window').height - 320 })).current;
@@ -305,10 +311,9 @@ export default function WorkoutSessionScreen() {
     }
   }, [tabataSession]);
 
-  // Re-subscribe to session channels after WebSocket reconnect.
-  // When the network drops, reverbService clears all channels and reconnects.
-  // Without this, all pause/resume/member events are silently missed for the
-  // rest of the session — the main cause of intermittent "missed toast" bugs.
+  // Monitor WebSocket connection state for group workouts.
+  // Handles: re-subscribing after reconnect, showing disconnect banner,
+  // and navigating home when connection is permanently lost.
   useEffect(() => {
     if (type !== 'group_tabata' || !tabataSession) return;
 
@@ -316,6 +321,17 @@ export default function WorkoutSessionScreen() {
       if (state === 'connected') {
         console.log('🔄 [SESSION] WebSocket reconnected — re-subscribing session channels');
         setupSessionSubscription();
+        setSelfDisconnected(false);
+        setSelfReconnecting(false);
+      } else if (state === 'disconnected' || state === 'reconnecting') {
+        console.log('⚠️ [SESSION] Connection lost — showing reconnecting banner');
+        setSelfDisconnected(true);
+        setSelfReconnecting(true);
+      } else if (state === 'max_retries_reached') {
+        console.log('❌ [SESSION] Max retries reached — navigating to home');
+        setSelfDisconnected(true);
+        setSelfReconnecting(false);
+        handleConnectionLost();
       }
     });
 
@@ -723,9 +739,75 @@ export default function WorkoutSessionScreen() {
 
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-      // App came to foreground - resume if needed
+      // App came to foreground — check if connection was lost while backgrounded
+      if (type === 'group_tabata') {
+        const connState = useConnectionStore.getState();
+        if (!connState.isConnected) {
+          console.log('⚠️ [SESSION] App resumed but WebSocket is disconnected');
+          setSelfDisconnected(true);
+          setSelfReconnecting(connState.connectionState === 'reconnecting');
+        }
+      }
     }
     appState.current = nextAppState;
+  };
+
+  /**
+   * Handle permanent connection loss during group workout.
+   * Saves partial progress (best effort), then navigates home.
+   * Does NOT clear activeSession from AsyncStorage — this allows
+   * GlobalLobbyIndicator to show "Rejoin Workout" when connection returns.
+   */
+  const handleConnectionLost = async () => {
+    if (isDisconnectNavigatingRef.current) return;
+    isDisconnectNavigatingRef.current = true;
+
+    console.log('🔌 [SESSION] Handling permanent connection loss...');
+
+    // Stop local timer
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+
+    // Best-effort save of partial progress (may fail if no network)
+    try {
+      if (sessionStartTime && user) {
+        const sessionId = tabataSession ? tabataSession.session_id : (workoutId as string);
+        const actualDurationSeconds = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
+        const actualDurationMinutes = Math.max(1, Math.round(actualDurationSeconds / 60));
+        const estimatedTotalCalories = tabataSession?.estimated_calories || workout?.estimated_calories_burned || 300;
+        const totalWorkoutMinutes = tabataSession?.total_duration_minutes || workout?.total_duration_minutes || 32;
+        const totalWorkoutSeconds = totalWorkoutMinutes * 60;
+        const calculatedCalories = (actualDurationSeconds / totalWorkoutSeconds) * estimatedTotalCalories;
+        const accurateCaloriesBurned = Math.max(1, Math.ceil(calculatedCalories));
+
+        const totalExercises = tabataSession ? tabataSession.exercises.length : (workout?.rounds.length || 1);
+        const totalSets = totalExercises * 8;
+        const completedSets = sessionState.currentExercise * 8 + sessionState.currentSet;
+        const actualCompletionPercentage = Math.round((completedSets / totalSets) * 100);
+
+        if (completedSets > 0) {
+          await trackingService.createWorkoutSession({
+            workoutId: sessionId,
+            userId: Number(user.id),
+            sessionType: type === 'group_tabata' ? 'group' : 'individual',
+            groupId: groupId ? Number(groupId) : null,
+            startTime: sessionStartTime,
+            endTime: new Date(),
+            duration: actualDurationMinutes,
+            caloriesBurned: accurateCaloriesBurned,
+            completionPercentage: actualCompletionPercentage,
+            completed: false,
+          });
+          console.log('💾 [SESSION] Saved partial progress before disconnect navigation');
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [SESSION] Could not save partial progress (no network):', err);
+    }
+
+    // Navigate to home — GlobalLobbyIndicator will show "Rejoin" when connection returns
+    router.replace('/(tabs)');
   };
 
   const handleBackPress = () => {
@@ -2173,6 +2255,23 @@ export default function WorkoutSessionScreen() {
         </Animated.View>
       )}
 
+      {/* Self-Disconnect Banner (current user's own connection lost) */}
+      {type === 'group_tabata' && selfDisconnected && (
+        <View style={styles.connectionLostBanner}>
+          {selfReconnecting ? (
+            <>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.connectionLostText}>Reconnecting...</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="cloud-offline" size={20} color="#FFFFFF" />
+              <Text style={styles.connectionLostText}>Connection lost — returning to home...</Text>
+            </>
+          )}
+        </View>
+      )}
+
       {/* Member Left Toast */}
       <MemberLeftToast
         memberName={memberLeftName || ''}
@@ -2200,6 +2299,31 @@ export default function WorkoutSessionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  connectionLostBanner: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.95)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 10,
+    zIndex: 2000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  connectionLostText: {
+    fontSize: 14,
+    fontFamily: FONTS.BOLD,
+    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,

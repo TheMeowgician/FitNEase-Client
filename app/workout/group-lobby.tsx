@@ -12,6 +12,7 @@ import {
   Animated,
   Easing,
   Dimensions,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -207,6 +208,15 @@ export default function GroupLobbyScreen() {
   const userChannelRef = useRef<any>(null);
   // Track pending exercise swap for WebSocket confirmation (handles HTTP timeout but WebSocket success)
   const pendingSwapRef = useRef<{ slotIndex: number; exerciseId: number; confirmed: boolean } | null>(null);
+
+  // Block Android hardware back button — route through handleLeaveLobby confirmation
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleLeaveLobby();
+      return true; // consume event
+    });
+    return () => backHandler.remove();
+  }, []);
 
   // Check if current user is initiator
   // IMPORTANT: This syncs with currentLobby.initiator_id (which updates via WebSocket)
@@ -862,7 +872,10 @@ export default function GroupLobbyScreen() {
       return '';
     }
     const ids = currentLobby.workout_data.exercises.map((ex: any) => ex.exercise_id || ex.id);
-    return ids.sort((a: number, b: number) => a - b).join(','); // Sort for stability
+    // Deduplicate for fetching (to avoid redundant API calls) but preserve original order
+    // The actual order is maintained by fetching in workout slot order
+    const uniqueIds = [...new Set(ids)];
+    return uniqueIds.sort((a: number, b: number) => a - b).join(','); // Sort for stable dependency
   }, [currentLobby?.workout_data?.exercises]);
 
   useEffect(() => {
@@ -875,22 +888,39 @@ export default function GroupLobbyScreen() {
 
       setIsLoadingExercises(true);
       try {
-        const exerciseIds = exerciseIdsString.split(',').map(Number);
-        console.log('📥 [FETCH EXERCISES] Fetching details for', exerciseIds.length, 'exercises:', exerciseIds);
+        // Fetch unique exercise IDs (deduplicated in exerciseIdsString)
+        const uniqueIds = exerciseIdsString.split(',').map(Number);
+        console.log('📥 [FETCH EXERCISES] Fetching details for', uniqueIds.length, 'unique exercises:', uniqueIds);
 
-        const detailsPromises = exerciseIds.map((id: number) => contentService.getExercise(String(id)));
+        const detailsPromises = uniqueIds.map((id: number) => contentService.getExercise(String(id)));
         // allSettled so a single slow/failed exercise doesn't wipe out the rest
         const results = await Promise.allSettled(detailsPromises);
-        const validDetails = results
-          .filter((r): r is PromiseFulfilledResult<Exercise> => r.status === 'fulfilled' && r.value !== null)
-          .map(r => r.value);
-        setExerciseDetails(validDetails);
 
-        const failCount = results.length - validDetails.length;
-        if (failCount > 0) {
-          console.warn(`⚠️ [FETCH EXERCISES] ${failCount}/${results.length} exercise detail(s) failed to load`);
+        // Build a map of exercise_id -> exercise details for fast lookup
+        const exerciseMap = new Map<number, Exercise>();
+        results.forEach((r, idx) => {
+          if (r.status === 'fulfilled' && r.value !== null) {
+            exerciseMap.set(uniqueIds[idx], r.value);
+          }
+        });
+
+        // Rebuild exercise details in original slot order from workout_data
+        const workoutExercises = currentLobby?.workout_data?.exercises || [];
+        const orderedDetails: Exercise[] = [];
+        for (const ex of workoutExercises) {
+          const exId = ex.exercise_id || ex.id;
+          const detail = exerciseMap.get(exId);
+          if (detail) {
+            orderedDetails.push({ ...detail });
+          }
         }
-        console.log('✅ [FETCH EXERCISES] Loaded', validDetails.length, 'exercise details');
+        setExerciseDetails(orderedDetails);
+
+        const failCount = uniqueIds.length - exerciseMap.size;
+        if (failCount > 0) {
+          console.warn(`⚠️ [FETCH EXERCISES] ${failCount}/${uniqueIds.length} exercise detail(s) failed to load`);
+        }
+        console.log('✅ [FETCH EXERCISES] Loaded', orderedDetails.length, 'exercise details');
       } catch (error) {
         console.error('❌ [FETCH EXERCISES] Error fetching exercise details:', error);
         setExerciseDetails([]);
@@ -3052,7 +3082,7 @@ export default function GroupLobbyScreen() {
                 <View style={styles.customizationExerciseList}>
                   <DragList
                     data={exerciseDetails}
-                    keyExtractor={(item: Exercise) => String(item.exercise_id)}
+                    keyExtractor={(item: Exercise, index: number) => `exercise-${item.exercise_id}-${index}`}
                     onReordered={handleExerciseReorder}
                     renderItem={(info: DragListRenderItemInfo<Exercise>) => {
                       const { item, onDragStart, onDragEnd, isActive } = info;
@@ -3118,7 +3148,7 @@ export default function GroupLobbyScreen() {
               ) : (
                 <ScrollView style={styles.customizationExerciseList} showsVerticalScrollIndicator={false}>
                   {exerciseDetails.map((exercise, index) => (
-                    <View key={exercise.exercise_id || index} style={styles.customizationExerciseCard}>
+                    <View key={`exercise-${exercise.exercise_id}-${index}`} style={styles.customizationExerciseCard}>
                       <View style={styles.customizationExerciseInfo}>
                         <Text style={styles.customizationExerciseIndex}>{index + 1}</Text>
                         <View style={styles.customizationExerciseDetails}>

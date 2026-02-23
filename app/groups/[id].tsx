@@ -12,6 +12,8 @@ import {
   Modal,
   TextInput,
   Animated,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +32,8 @@ import { Avatar } from '../../components/ui/Avatar';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import reverbService from '../../services/reverbService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { mediaService } from '../../services/microservices/mediaService';
 
 export default function GroupDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -69,6 +73,15 @@ export default function GroupDetailsScreen() {
   const [editNameValue, setEditNameValue] = useState('');
   const [editDescValue, setEditDescValue] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Race condition guard for destructive actions (kick, leave, delete)
+  const isProcessingAction = useRef(false);
+
+  // Group image upload state
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // Remove members modal state
+  const [showRemoveMembersModal, setShowRemoveMembersModal] = useState(false);
 
   // Join requests modal state
   const [showJoinRequestsModal, setShowJoinRequestsModal] = useState(false);
@@ -272,17 +285,21 @@ export default function GroupDetailsScreen() {
   };
 
   const handleLeaveGroup = () => {
-    if (!group) return;
+    if (!group || isProcessingAction.current) return;
 
     alert.confirm(
       'Leave Group',
       `Are you sure you want to leave "${group.name}"?`,
       async () => {
+        if (isProcessingAction.current) return;
+        isProcessingAction.current = true;
         try {
           await socialService.leaveGroup(group.id);
           alert.success('Success', 'You have left the group.', () => router.push('/(tabs)/groups'));
         } catch (error: any) {
           alert.error('Error', error.message || 'Failed to leave group.');
+        } finally {
+          isProcessingAction.current = false;
         }
       },
       undefined,
@@ -292,17 +309,21 @@ export default function GroupDetailsScreen() {
   };
 
   const handleDeleteGroup = () => {
-    if (!group) return;
+    if (!group || isProcessingAction.current) return;
 
     alert.confirm(
       'Delete Group',
       `Are you sure you want to permanently delete "${group.name}"? This action cannot be undone.`,
       async () => {
+        if (isProcessingAction.current) return;
+        isProcessingAction.current = true;
         try {
           await socialService.deleteGroup(group.id);
           alert.success('Success', 'Group deleted successfully.', () => router.push('/(tabs)/groups'));
         } catch (error: any) {
           alert.error('Error', error.message || 'Failed to delete group.');
+        } finally {
+          isProcessingAction.current = false;
         }
       },
       undefined,
@@ -313,6 +334,66 @@ export default function GroupDetailsScreen() {
 
   const handleManageGroup = () => {
     setShowSettingsModal(true);
+  };
+
+  const handleGroupImagePress = () => {
+    if (userRole !== 'owner' || isUploadingImage) return;
+
+    const options: { text: string; onPress?: () => void; style?: 'destructive' | 'cancel' | 'default' }[] = [
+      { text: 'Take Photo', onPress: () => pickGroupImage('camera') },
+      { text: 'Choose from Gallery', onPress: () => pickGroupImage('gallery') },
+    ];
+
+    if (group?.groupImage) {
+      options.push({ text: 'Remove Image', onPress: handleRemoveGroupImage, style: 'destructive' });
+    }
+
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Group Image', 'Choose an option', options);
+  };
+
+  const pickGroupImage = async (source: 'camera' | 'gallery') => {
+    const permission = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permission Required', `Please allow ${source === 'camera' ? 'camera' : 'photo library'} access.`);
+      return;
+    }
+
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+
+    if (result.canceled) return;
+
+    setIsUploadingImage(true);
+    try {
+      const uploadResponse = await mediaService.uploadGroupImage(result.assets[0].uri);
+      await socialService.updateGroup(group!.id, { group_image: uploadResponse.data.url });
+      await loadGroupDetails();
+      alert.success('Success', 'Group image updated!');
+    } catch (error) {
+      console.error('Group image upload error:', error);
+      alert.error('Error', 'Failed to upload group image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleRemoveGroupImage = async () => {
+    if (!group) return;
+    setIsUploadingImage(true);
+    try {
+      await socialService.updateGroup(group.id, { group_image: '' });
+      await loadGroupDetails();
+      alert.success('Success', 'Group image removed.');
+    } catch (error) {
+      alert.error('Error', 'Failed to remove group image.');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleEditGroupName = () => {
@@ -411,23 +492,26 @@ export default function GroupDetailsScreen() {
   };
 
   const handleKickMember = (member: GroupMember) => {
-    if (!group || member.userId === user?.id) return;
+    if (!group || member.userId === user?.id || isProcessingAction.current) return;
 
     alert.confirm(
-      'Kick Member',
-      `Are you sure you want to kick ${member.username} from the group?`,
+      'Remove Member',
+      `Are you sure you want to remove ${member.username} from the group?`,
       async () => {
+        if (isProcessingAction.current) return;
+        isProcessingAction.current = true;
         try {
           await socialService.removeGroupMember(id as string, member.userId);
-          alert.success('Success', `${member.username} has been kicked from the group.`);
-          // Refresh members list
+          alert.success('Success', `${member.username} has been removed from the group.`);
           await loadGroupDetails();
         } catch (error: any) {
-          alert.error('Error', error.message || 'Failed to kick member.');
+          alert.error('Error', error.message || 'Failed to remove member.');
+        } finally {
+          isProcessingAction.current = false;
         }
       },
       undefined,
-      'Kick',
+      'Remove',
       'Cancel'
     );
   };
@@ -645,9 +729,28 @@ export default function GroupDetailsScreen() {
       >
         {/* Group Info Card */}
         <View style={styles.groupInfoCard}>
-          <View style={[styles.groupAvatarLarge, { backgroundColor: COLORS.PRIMARY[600] }]}>
-            <Ionicons name="people" size={48} color="white" />
-          </View>
+          <TouchableOpacity
+            style={[styles.groupAvatarLarge, { backgroundColor: COLORS.PRIMARY[600] }]}
+            onPress={handleGroupImagePress}
+            activeOpacity={userRole === 'owner' ? 0.7 : 1}
+            disabled={userRole !== 'owner' || isUploadingImage}
+          >
+            {isUploadingImage ? (
+              <ActivityIndicator size="large" color="white" />
+            ) : group.groupImage ? (
+              <Image
+                source={{ uri: mediaService.getFullMediaUrl(group.groupImage) }}
+                style={{ width: '100%', height: '100%', borderRadius: 50 }}
+              />
+            ) : (
+              <Ionicons name="people" size={48} color="white" />
+            )}
+            {userRole === 'owner' && !isUploadingImage && (
+              <View style={styles.groupAvatarEditBadge}>
+                <Ionicons name="camera" size={14} color="white" />
+              </View>
+            )}
+          </TouchableOpacity>
 
           <Text style={styles.groupNameLarge}>{group.name}</Text>
 
@@ -848,18 +951,6 @@ export default function GroupDetailsScreen() {
                       </Text>
                     </View>
                   </View>
-                  {/* Kick button for owner */}
-                  {userRole === 'owner' && member.userId !== user?.id && (
-                    <TouchableOpacity
-                      style={styles.kickButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleKickMember(member);
-                      }}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#EF4444" />
-                    </TouchableOpacity>
-                  )}
                 </TouchableOpacity>
               );
             })}
@@ -1071,7 +1162,7 @@ export default function GroupDetailsScreen() {
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
-                  alert.info('Info', 'You can kick members by tapping the X icon next to their name in the members list.');
+                  setShowRemoveMembersModal(true);
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="remove-circle-outline" size={22} color="#EF4444" />
@@ -1293,6 +1384,57 @@ export default function GroupDetailsScreen() {
         } : null}
         context="group"
       />
+
+      {/* Remove Members Modal */}
+      <Modal
+        visible={showRemoveMembersModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRemoveMembersModal(false)}
+      >
+        <View style={styles.removeMembersOverlay}>
+          <View style={styles.removeMembersContainer}>
+            <View style={styles.removeMembersHeader}>
+              <Text style={styles.removeMembersTitle}>Remove Members</Text>
+              <TouchableOpacity onPress={() => setShowRemoveMembersModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[600]} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.removeMembersList}>
+              {members.filter(m => m.userId !== user?.id && m.role !== 'owner').length === 0 ? (
+                <View style={{ padding: 32, alignItems: 'center' }}>
+                  <Ionicons name="people-outline" size={48} color={COLORS.SECONDARY[300]} />
+                  <Text style={{ color: COLORS.SECONDARY[500], marginTop: 12, fontSize: 14 }}>No removable members</Text>
+                </View>
+              ) : (
+                members.filter(m => m.userId !== user?.id && m.role !== 'owner').map((member) => (
+                  <View key={member.userId} style={styles.removeMemberRow}>
+                    <Avatar
+                      name={member.username}
+                      size="sm"
+                      profilePicture={member.profilePicture}
+                    />
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={{ fontSize: 15, fontFamily: FONTS.SEMIBOLD, color: COLORS.SECONDARY[900] }}>{member.username}</Text>
+                      <Text style={{ fontSize: 12, color: COLORS.SECONDARY[500] }}>{member.role}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.removeMemberButton}
+                      onPress={() => {
+                        setShowRemoveMembersModal(false);
+                        handleKickMember(member);
+                      }}
+                    >
+                      <Ionicons name="person-remove" size={16} color="#EF4444" />
+                      <Text style={{ color: '#EF4444', fontSize: 13, fontFamily: FONTS.SEMIBOLD, marginLeft: 4 }}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1408,6 +1550,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  groupAvatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.SECONDARY[700],
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
   },
   groupNameLarge: {
     fontSize: 24,
@@ -2028,5 +2184,51 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SUCCESS[600],
     marginTop: 2,
+  },
+  removeMembersOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  removeMembersContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 32,
+  },
+  removeMembersHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[200],
+  },
+  removeMembersTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  removeMembersList: {
+    paddingHorizontal: 20,
+  },
+  removeMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[100],
+  },
+  removeMemberButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
   },
 });

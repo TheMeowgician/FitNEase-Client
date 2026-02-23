@@ -40,6 +40,7 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [respondedInvites, setRespondedInvites] = useState<Set<number>>(new Set());
 
   // Mark all notifications as read when the page opens (clears the badge counter)
   useFocusEffect(
@@ -145,10 +146,12 @@ export default function NotificationsScreen() {
         );
       }
 
+      setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
       alert.success('Success', `You've joined ${notification.action_data.group_name}!`, () => router.push(`/groups/${notification.action_data.group_id}`));
     } catch (error: any) {
       console.error('Error accepting invitation:', error);
-      alert.error('Error', error.message || 'Failed to join group');
+      const msg = error.message || 'Failed to join group';
+      alert.error('Error', msg.includes('already') ? 'You are already a member of this group.' : msg);
     }
   };
 
@@ -170,6 +173,7 @@ export default function NotificationsScreen() {
             );
           }
 
+          setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
           alert.info('Declined', 'Invitation declined');
         } catch (error) {
           console.error('Error declining invitation:', error);
@@ -594,7 +598,7 @@ export default function NotificationsScreen() {
             <Text style={styles.notificationTime}>{formatTimeAgo(notification.created_at)}</Text>
 
             {/* Group Invitation Action Buttons */}
-            {isGroupInvitation && !notification.is_read && (
+            {isGroupInvitation && !respondedInvites.has(notification.notification_id) && (
               <View style={styles.actionButtons}>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.acceptButton]}

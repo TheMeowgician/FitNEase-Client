@@ -58,6 +58,37 @@ export class MediaService {
 
     return response.data;
   }
+
+  /**
+   * Upload a group image to the media service.
+   * Reuses the profile-picture endpoint (same upload logic, different filename).
+   */
+  public async uploadGroupImage(imageUri: string): Promise<MediaUploadResponse> {
+    const formData = new FormData();
+
+    const uriParts = imageUri.split('.');
+    const fileType = uriParts[uriParts.length - 1] || 'jpg';
+
+    formData.append('file', {
+      uri: imageUri,
+      name: `group_${Date.now()}.${fileType}`,
+      type: `image/${fileType === 'jpg' ? 'jpeg' : fileType}`,
+    } as any);
+
+    const response = await apiClient.post<MediaUploadResponse>(
+      'media',
+      '/api/media/profile-picture',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000,
+      }
+    );
+
+    return response.data;
+  }
 }
 
 export const mediaService = new MediaService();

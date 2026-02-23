@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Avatar } from '../ui/Avatar';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
@@ -214,6 +215,22 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
               </View>
             )}
           </View>
+
+          {/* View Full Profile Button */}
+          <TouchableOpacity
+            style={styles.viewProfileButton}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose();
+              router.push({
+                pathname: '/profile/public-profile',
+                params: { userId: String(user.userId), username: user.username },
+              });
+            }}
+          >
+            <Text style={styles.viewProfileButtonText}>View Full Profile</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.PRIMARY[600]} />
+          </TouchableOpacity>
         </Animated.View>
       </TouchableOpacity>
     </Modal>
@@ -370,6 +387,21 @@ const styles = StyleSheet.create({
   fitnessLevelText: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.SEMIBOLD,
+  },
+  viewProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.SECONDARY[200],
+    gap: 6,
+  },
+  viewProfileButtonText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
   },
 });
 

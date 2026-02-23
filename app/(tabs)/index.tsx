@@ -1136,26 +1136,42 @@ export default function HomeScreen() {
           <View style={styles.activityCard}>
             {recentWorkouts && recentWorkouts.length > 0 ? (
               <>
-                {recentWorkouts.slice(0, 3).map((workout: any, index: number) => (
-                  <View
-                    key={workout.sessionId || workout.id || index}
-                    style={[
-                      styles.activityItem,
-                      index === recentWorkouts.length - 1 && { borderBottomWidth: 0 }
-                    ]}
-                  >
-                    <View style={styles.activityIcon}>
-                      <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                    </View>
-                    <View style={styles.activityContent}>
-                      <Text style={styles.activityTitle}>Completed Tabata Workout</Text>
-                      <Text style={styles.activityTime}>{formatTimeAgo(workout.createdAt)}</Text>
-                    </View>
-                    <Text style={styles.activityCalories}>
-                      {workout.actualDuration || workout.duration || 0}min
-                    </Text>
-                  </View>
-                ))}
+                {recentWorkouts.slice(0, 3).map((workout: any, index: number) => {
+                  const isGroup = workout.sessionType === 'group';
+                  return (
+                    <TouchableOpacity
+                      key={workout.sessionId || workout.id || index}
+                      style={[
+                        styles.activityItem,
+                        index === Math.min(recentWorkouts.length, 3) - 1 && { borderBottomWidth: 0 }
+                      ]}
+                      activeOpacity={0.7}
+                      onPress={() => router.push({ pathname: '/workout/workout-detail', params: { sessionData: JSON.stringify(workout) } })}
+                    >
+                      <View style={[styles.activityIcon, { backgroundColor: isGroup ? COLORS.PRIMARY[50] : '#ECFDF5' }]}>
+                        <Ionicons
+                          name={isGroup ? 'people' : 'fitness'}
+                          size={18}
+                          color={isGroup ? COLORS.PRIMARY[600] : '#10B981'}
+                        />
+                      </View>
+                      <View style={styles.activityContent}>
+                        <Text style={styles.activityTitle}>
+                          {isGroup ? 'Group Tabata Workout' : 'Tabata Workout'}
+                        </Text>
+                        <Text style={styles.activityTime}>
+                          {formatTimeAgo(workout.createdAt)} · {workout.exercises?.length || 0} exercises
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.activityCalories}>
+                          {workout.actualDuration || workout.duration || 0}min
+                        </Text>
+                        <Ionicons name="chevron-forward" size={16} color={COLORS.SECONDARY[400]} />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </>
             ) : (
               <View style={styles.emptyActivity}>

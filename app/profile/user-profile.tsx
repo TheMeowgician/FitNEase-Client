@@ -42,6 +42,7 @@ export default function UserProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [availableAchievements, setAvailableAchievements] = useState<Achievement[]>([]);
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
 
   useEffect(() => {
     loadUserData();
@@ -117,6 +118,18 @@ export default function UserProfileScreen() {
           currentStreak: 0, // TODO: Calculate streak
           longestStreak: 0, // TODO: Calculate longest streak
         });
+      }
+
+      // Load recent workout sessions (with full exercise data)
+      try {
+        const sessionsResponse = await trackingService.getSessions({
+          userId: user.id,
+          status: 'completed',
+          limit: 5,
+        });
+        setRecentWorkouts(sessionsResponse.sessions || []);
+      } catch (sessError) {
+        console.warn('Failed to load recent sessions:', sessError);
       }
 
       // Load achievements from engagement service
@@ -473,6 +486,54 @@ export default function UserProfileScreen() {
           </View>
         </View>
 
+        {/* Recent Activity */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="time" size={20} color={COLORS.PRIMARY[600]} />
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+          </View>
+
+          <View style={styles.preferencesCard}>
+            {recentWorkouts.length > 0 ? (
+              recentWorkouts.slice(0, 5).map((workout: any, index: number) => {
+                const isGroup = workout.sessionType === 'group';
+                return (
+                  <TouchableOpacity
+                    key={workout.id || workout.sessionId || index}
+                    style={[
+                      styles.recentActivityItem,
+                      index < Math.min(recentWorkouts.length, 5) - 1 && styles.recentActivityBorder,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() => router.push({ pathname: '/workout/workout-detail', params: { sessionData: JSON.stringify(workout) } })}
+                  >
+                    <View style={[styles.recentActivityIcon, { backgroundColor: isGroup ? COLORS.PRIMARY[50] : '#ECFDF5' }]}>
+                      <Ionicons
+                        name={isGroup ? 'people' : 'fitness'}
+                        size={18}
+                        color={isGroup ? COLORS.PRIMARY[600] : '#10B981'}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.recentActivityTitle}>
+                        {isGroup ? 'Group Tabata' : 'Tabata Workout'}
+                      </Text>
+                      <Text style={styles.recentActivitySub}>
+                        {workout.actualDuration || workout.duration || 0}min · {workout.exercises?.length || 0} exercises
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={COLORS.SECONDARY[400]} />
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ color: COLORS.SECONDARY[400], fontSize: 14 }}>No workouts yet</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
@@ -794,5 +855,33 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.NEUTRAL[200],
     marginVertical: 12,
+  },
+  recentActivityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  recentActivityBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.NEUTRAL[200],
+  },
+  recentActivityIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  recentActivityTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  recentActivitySub: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    marginTop: 2,
   },
 });
