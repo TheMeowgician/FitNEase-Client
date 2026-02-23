@@ -874,8 +874,8 @@ export default function GroupLobbyScreen() {
     const ids = currentLobby.workout_data.exercises.map((ex: any) => ex.exercise_id || ex.id);
     // Deduplicate for fetching (to avoid redundant API calls) but preserve original order
     // The actual order is maintained by fetching in workout slot order
-    const uniqueIds = [...new Set(ids)];
-    return uniqueIds.sort((a: number, b: number) => a - b).join(','); // Sort for stable dependency
+    const uniqueIds = [...new Set(ids)] as number[];
+    return uniqueIds.sort((a, b) => a - b).join(','); // Sort for stable dependency
   }, [currentLobby?.workout_data?.exercises]);
 
   useEffect(() => {
