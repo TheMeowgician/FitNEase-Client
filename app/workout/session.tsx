@@ -139,14 +139,48 @@ export default function WorkoutSessionScreen() {
   const [isVideoFullScreen, setIsVideoFullScreen] = useState(false);
 
   // Member left / disconnected / reconnected toast state
-  const [memberLeftName, setMemberLeftName] = useState<string | null>(null);
+  // Each uses { name, key } so React always sees a new object (key increments), forcing re-render.
+  // Queues batch rapid events (e.g. 5 members disconnect within 2s) into a single toast.
+  const [memberLeft, setMemberLeft] = useState<{ name: string; key: number } | null>(null);
   const [memberDisconnected, setMemberDisconnected] = useState<{ name: string; key: number } | null>(null);
-  const [memberReconnectedName, setMemberReconnectedName] = useState<string | null>(null);
-  const disconnectToastKeyRef = useRef(0); // Incrementing key to force toast re-render on repeated disconnects
+  const [memberReconnected, setMemberReconnected] = useState<{ name: string; key: number } | null>(null);
+  const toastKeyRef = useRef(0);
+  const leftQueueRef = useRef<string[]>([]);
+  const leftBatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disconnectQueueRef = useRef<string[]>([]);
+  const disconnectBatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectQueueRef = useRef<string[]>([]);
+  const reconnectBatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentlyLeftMembersRef = useRef<Set<number>>(new Set());
   const disconnectedMembersRef = useRef<Map<number, string>>(new Map()); // userId → userName
   const memberNamesRef = useRef<Map<number, string>>(new Map()); // Cached userId → userName at subscription time
   const presenceGraceUntilRef = useRef<number>(0); // Ignore presence events until this timestamp
+
+  // Helper: batch names into readable string ("John", "John and Jane", "John, Jane, and 3 others")
+  const formatNames = (names: string[]) => {
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} and ${names[1]}`;
+    return `${names[0]}, ${names[1]}, and ${names.length - 2} other${names.length - 2 > 1 ? 's' : ''}`;
+  };
+
+  // Helper: queue a name and flush after a batch window, showing a combined toast
+  const queueToast = (
+    name: string,
+    queueRef: React.MutableRefObject<string[]>,
+    timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+    setter: (val: { name: string; key: number }) => void,
+  ) => {
+    queueRef.current.push(name);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      const names = [...queueRef.current];
+      queueRef.current = [];
+      timerRef.current = null;
+      if (names.length === 0) return;
+      toastKeyRef.current += 1;
+      setter({ name: formatNames(names), key: toastKeyRef.current });
+    }, 2000); // 2s batch window — collects rapid events into one toast
+  };
 
   // Self-disconnect detection state (current user's own connection)
   const [selfDisconnected, setSelfDisconnected] = useState(false);
@@ -636,7 +670,7 @@ export default function WorkoutSessionScreen() {
           if (data.user_name) {
             memberNamesRef.current.set(leftMemberId, data.user_name);
           }
-          setMemberLeftName(data.user_name);
+          queueToast(data.user_name, leftQueueRef, leftBatchTimerRef, setMemberLeft);
         }
 
         // Handle initiator role transfer during active workout
@@ -731,8 +765,7 @@ export default function WorkoutSessionScreen() {
           disconnectedMembersRef.current.set(memberId, resolvedName);
 
           console.log(`📡 [SESSION] Member disconnected: ${resolvedName} (${memberId})`);
-          disconnectToastKeyRef.current += 1;
-          setMemberDisconnected({ name: resolvedName, key: disconnectToastKeyRef.current });
+          queueToast(resolvedName, disconnectQueueRef, disconnectBatchTimerRef, setMemberDisconnected);
         }, 400);
       },
       onJoining: (member: any) => {
@@ -747,7 +780,7 @@ export default function WorkoutSessionScreen() {
         if (previousName) {
           disconnectedMembersRef.current.delete(memberId);
           console.log(`📡 [SESSION] Member reconnected: ${previousName} (${memberId})`);
-          setMemberReconnectedName(previousName);
+          queueToast(previousName, reconnectQueueRef, reconnectBatchTimerRef, setMemberReconnected);
         }
       },
     });
@@ -2298,26 +2331,28 @@ export default function WorkoutSessionScreen() {
         </View>
       )}
 
-      {/* Member Left Toast */}
+      {/* Member Left Toast — key forces remount on repeated/batched events */}
       <MemberLeftToast
-        memberName={memberLeftName || ''}
-        visible={!!memberLeftName}
-        onDismiss={() => setMemberLeftName(null)}
+        key={`left-${memberLeft?.key || 0}`}
+        memberName={memberLeft?.name || ''}
+        visible={!!memberLeft}
+        onDismiss={() => setMemberLeft(null)}
       />
 
-      {/* Member Disconnected Toast — key forces remount on repeated disconnects */}
+      {/* Member Disconnected Toast — key forces remount on repeated/batched events */}
       <MemberDisconnectedToast
-        key={memberDisconnected?.key || 0}
+        key={`disc-${memberDisconnected?.key || 0}`}
         memberName={memberDisconnected?.name || ''}
         visible={!!memberDisconnected}
         onDismiss={() => setMemberDisconnected(null)}
       />
 
-      {/* Member Reconnected Toast */}
+      {/* Member Reconnected Toast — key forces remount on repeated/batched events */}
       <MemberReconnectedToast
-        memberName={memberReconnectedName || ''}
-        visible={!!memberReconnectedName}
-        onDismiss={() => setMemberReconnectedName(null)}
+        key={`recon-${memberReconnected?.key || 0}`}
+        memberName={memberReconnected?.name || ''}
+        visible={!!memberReconnected}
+        onDismiss={() => setMemberReconnected(null)}
       />
     </SafeAreaView>
   );
