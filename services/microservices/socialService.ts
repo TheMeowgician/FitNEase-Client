@@ -1051,6 +1051,32 @@ export class SocialService {
 
 
   // Workout Session Control (Server-Authoritative)
+
+  /**
+   * Fetch current workout session state from server.
+   * Used to sync client after reconnecting from a network disruption.
+   */
+  public async getSessionState(sessionId: string): Promise<{
+    session_id: string;
+    status: string;
+    time_remaining: number;
+    phase: string;
+    current_exercise: number;
+    current_set: number;
+    current_round: number;
+    calories_burned: number;
+  }> {
+    try {
+      const response = await apiClient.get(
+        'social',
+        `/api/session/${sessionId}/state`
+      );
+      return response.data.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to get session state');
+    }
+  }
+
   public async pauseWorkout(sessionId: string): Promise<{
     session_id: string;
     paused_at: number;

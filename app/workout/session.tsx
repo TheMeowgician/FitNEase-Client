@@ -359,9 +359,21 @@ export default function WorkoutSessionScreen() {
     const removeListener = reverbService.onConnectionStateChange((state) => {
       if (state === 'connected') {
         console.log('🔄 [SESSION] WebSocket reconnected — re-subscribing session channels');
+
+        // CRITICAL ORDER: Refresh tick ref FIRST to prevent auto-complete race condition.
+        // Without this, the interval timer could see selfDisconnectedRef=false (cleared below)
+        // + stale lastServerTickRef (minutes old) and falsely trigger auto-complete
+        // in the brief window before syncSessionFromServer() completes.
+        lastServerTickRef.current = Date.now();
+
         setupSessionSubscription();
         setSelfDisconnected(false);
         setSelfReconnecting(false);
+
+        // Actively fetch current session state from server to sync.
+        // Without this, the client stays stuck with stale data from before disconnect
+        // (wrong timer, wrong phase, wrong set) and waits passively for the next server tick.
+        syncSessionFromServer();
       } else if (state === 'disconnected' || state === 'reconnecting') {
         console.log('⚠️ [SESSION] Connection lost — showing reconnecting banner');
         setSelfDisconnected(true);
@@ -808,10 +820,77 @@ export default function WorkoutSessionScreen() {
           console.log('⚠️ [SESSION] App resumed but WebSocket is disconnected');
           setSelfDisconnected(true);
           setSelfReconnecting(connState.connectionState === 'reconnecting');
+        } else {
+          // WebSocket is connected but we may have missed ticks while backgrounded.
+          // Sync from server to catch up on phase/set/round/timer changes.
+          console.log('🔄 [SESSION] App resumed with WebSocket connected — syncing from server');
+          lastServerTickRef.current = Date.now(); // Prevent stale auto-complete
+          syncSessionFromServer();
         }
       }
     }
     appState.current = nextAppState;
+  };
+
+  /**
+   * Fetch current workout state from the server and sync all local state.
+   * Called on WebSocket reconnect to catch up after a network disruption.
+   * Updates serverStateRef, lastServerTimeRef, lastServerTickRef, and sessionState
+   * so the timer, phase, set, and round all match the server immediately.
+   */
+  const syncSessionFromServer = async () => {
+    if (!tabataSession) return;
+
+    try {
+      console.log('🔄 [SESSION] Fetching current session state from server...');
+      const serverState = await socialService.getSessionState(tabataSession.session_id);
+      console.log('🔄 [SESSION] Server state received:', serverState);
+
+      // If server says workout is completed/stopped, transition to complete
+      if (serverState.status === 'completed' || serverState.status === 'stopped') {
+        console.log('🔄 [SESSION] Server says workout is finished — transitioning to complete');
+        transitionToCompleted();
+        return;
+      }
+
+      // Update all server refs so the interval timer reads fresh data
+      const now = Date.now();
+      lastServerTickRef.current = now;
+      lastServerTimeRef.current = serverState.time_remaining;
+      serverStateRef.current = {
+        phase: serverState.phase as SessionPhase,
+        exercise: serverState.current_exercise,
+        set: serverState.current_set,
+        round: serverState.current_round,
+        status: serverState.status as SessionStatus,
+        calories: serverState.calories_burned || 0,
+      };
+
+      // Force-update React state immediately (don't wait for next interval tick)
+      // This clears the stale "0 timer / COMPLETE button" instantly
+      setSessionState(prev => ({
+        ...prev,
+        timeRemaining: serverState.time_remaining,
+        phase: serverState.phase as SessionPhase,
+        currentExercise: serverState.current_exercise,
+        currentSet: serverState.current_set,
+        currentRound: serverState.current_round,
+        status: serverState.status as SessionStatus,
+        caloriesBurned: serverState.calories_burned || prev.caloriesBurned,
+      }));
+
+      console.log('✅ [SESSION] Synced to server state:', {
+        phase: serverState.phase,
+        time_remaining: serverState.time_remaining,
+        set: serverState.current_set,
+        round: serverState.current_round,
+        exercise: serverState.current_exercise,
+        status: serverState.status,
+      });
+    } catch (err) {
+      console.warn('⚠️ [SESSION] Failed to fetch session state from server:', err);
+      // Not critical — next server tick will sync us anyway
+    }
   };
 
   /**
