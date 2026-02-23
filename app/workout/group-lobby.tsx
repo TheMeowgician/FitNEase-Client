@@ -257,7 +257,7 @@ export default function GroupLobbyScreen() {
    */
   useEffect(() => {
     if (readyCheckResult !== 'success' || !isInitiator || hasExercises || isGenerating) return;
-    if (isCleaningUpRef.current || !isMountedRef.current) return;
+    if (isCleaningUpRef.current) return;
 
     // Read fresh state directly from stores (avoids stale closure values)
     const freshMembers = useLobbyStore.getState().currentLobby?.members ?? [];
@@ -1511,13 +1511,15 @@ export default function GroupLobbyScreen() {
         console.log('🔔 [REAL-TIME] Ready check started:', data);
 
         // Start ready check in store - this will show the modal globally
+        // Use getState() for fresh member list (closure may be stale if component unmounted/minimized)
+        const freshLobbyMembers = useLobbyStore.getState().currentLobby?.members ?? [];
         startReadyCheck({
           sessionId: data.session_id || sessionId,
           groupId: groupId,
           groupName: currentLobby?.group_id ? `Group ${currentLobby.group_id}` : 'Workout Lobby',
           initiatorId: data.initiator_id,
           initiatorName: data.initiator_name || 'Host',
-          members: data.members || lobbyMembers.map((m) => ({
+          members: data.members || freshLobbyMembers.map((m) => ({
             user_id: m.user_id,
             user_name: m.user_name,
           })),
@@ -1568,7 +1570,9 @@ export default function GroupLobbyScreen() {
 
         if (data.success) {
           // Update all members' lobby status to 'ready' so the UI reflects it
-          lobbyMembers.forEach(member => {
+          // Use getState() for fresh member list (closure may be stale if minimized)
+          const currentMembers = useLobbyStore.getState().currentLobby?.members ?? [];
+          currentMembers.forEach(member => {
             updateMemberStatus(member.user_id, 'ready');
           });
           setIsReady(true);
@@ -2261,8 +2265,8 @@ export default function GroupLobbyScreen() {
         }
 
         // Check if user is still in lobby before updating (race condition prevention)
-        if (isLeaving || !isMountedRef.current || isCleaningUpRef.current) {
-          console.log('⚠️ User left lobby or component unmounted, skipping workout data update');
+        if (isLeaving || isCleaningUpRef.current) {
+          console.log('⚠️ User left lobby or cleanup in progress, skipping workout data update');
           return;
         }
 
