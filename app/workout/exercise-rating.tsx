@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,6 +89,12 @@ export default function ExerciseRatingScreen() {
   const [showAchievementModal, setShowAchievementModal] = useState(false);
   const [unlockedAchievements, setUnlockedAchievements] = useState<UnlockedAchievement[]>([]);
   const [achievementIdsToMark, setAchievementIdsToMark] = useState<number[]>([]);
+
+  // Block Android hardware back button — user must complete or skip ratings
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => backHandler.remove();
+  }, []);
 
   // Current exercise being rated
   const currentExercise = exercises[currentIndex];

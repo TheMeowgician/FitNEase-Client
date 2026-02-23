@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar, BackHandler, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,23 @@ import { COLORS } from '../../constants/colors';
 
 export default function RegisterScreen() {
   const { selectedRole } = useLocalSearchParams<{ selectedRole?: string }>();
+
+  // Android hardware back button — confirm before losing registration data
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      Alert.alert(
+        'Leave Registration?',
+        'Are you sure? Your registration data will be lost.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+        ]
+      );
+      return true;
+    });
+    return () => backHandler.remove();
+  }, []);
+
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
     // Navigate directly to disclaimer screen - the RegisterForm already showed a success alert
     router.push({

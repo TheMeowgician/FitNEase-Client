@@ -10,7 +10,8 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Keyboard,
-  Dimensions
+  Dimensions,
+  BackHandler,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -66,6 +67,12 @@ export default function VerifyEmailScreen() {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
+  }, []);
+
+  // Block Android hardware back button — user must verify email
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => backHandler.remove();
   }, []);
 
   // Countdown timer for resend button
