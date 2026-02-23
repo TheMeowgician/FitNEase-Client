@@ -185,6 +185,9 @@ export default function WorkoutSessionScreen() {
   // Self-disconnect detection state (current user's own connection)
   const [selfDisconnected, setSelfDisconnected] = useState(false);
   const [selfReconnecting, setSelfReconnecting] = useState(false);
+  const selfDisconnectedRef = useRef(false); // Mirror of selfDisconnected for use in timer interval
+  // Keep ref in sync with state (ref is readable inside setInterval without stale closures)
+  useEffect(() => { selfDisconnectedRef.current = selfDisconnected; }, [selfDisconnected]);
   const isDisconnectNavigatingRef = useRef(false); // Guard against double navigation
 
   // Draggable video position
@@ -987,8 +990,10 @@ export default function WorkoutSessionScreen() {
           // Detect stale server: no ticks for 5+ seconds while timer at 0
           // This handles the case where host clicks "Finish for All" but
           // WorkoutCompleted event doesn't reach non-host clients
+          // CRITICAL: Skip if user is disconnected — stale ticks during WiFi loss
+          // would falsely trigger auto-complete. The workout is still running on server.
           const timeSinceLastTick = now - lastServerTickRef.current;
-          if (newTimeRemaining === 0 && timeSinceLastTick > 5000 && prev.status === 'running') {
+          if (newTimeRemaining === 0 && timeSinceLastTick > 5000 && prev.status === 'running' && !selfDisconnectedRef.current) {
             console.log('🔄 [SESSION] Server stopped ticking with time at 0 - auto-completing workout');
             playSound('complete');
             return {
