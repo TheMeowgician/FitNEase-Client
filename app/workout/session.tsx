@@ -189,6 +189,7 @@ export default function WorkoutSessionScreen() {
   // Keep ref in sync with state (ref is readable inside setInterval without stale closures)
   useEffect(() => { selfDisconnectedRef.current = selfDisconnected; }, [selfDisconnected]);
   const isDisconnectNavigatingRef = useRef(false); // Guard against double navigation
+  const syncSequenceRef = useRef(0); // Monotonic counter to discard stale sync responses
 
   // Draggable video position
   const pan = useRef(new Animated.ValueXY({ x: Dimensions.get('window').width - 170, y: Dimensions.get('window').height - 320 })).current;
@@ -706,11 +707,18 @@ export default function WorkoutSessionScreen() {
     // Pusher fires member_removed automatically — no API call needed.
     // When they reconnect, Pusher fires member_added.
     //
-    // GRACE PERIOD: When the workout starts, all members transition from group-lobby
-    // to session screen. During this transition each member briefly leaves and rejoins
-    // the presence channel (group-lobby unmounts → unsubscribe, session mounts → subscribe).
+    // GRACE PERIOD: Only on initial subscription (workout start), not on reconnects.
+    // When the workout starts, all members transition from group-lobby to session screen.
+    // During this transition each member briefly leaves and rejoins the presence channel
+    // (group-lobby unmounts → unsubscribe, session mounts → subscribe).
     // Without a grace period, these transitions would trigger false disconnect/reconnect toasts.
-    presenceGraceUntilRef.current = Date.now() + 8000; // 8s grace for everyone to settle
+    //
+    // On reconnect (setupSessionSubscription called again), we do NOT reset the grace period.
+    // If we did, rapid WiFi flickers would keep extending the grace window and suppress
+    // all real disconnect/reconnect toasts indefinitely.
+    if (presenceGraceUntilRef.current === 0) {
+      presenceGraceUntilRef.current = Date.now() + 8000; // 8s grace for everyone to settle
+    }
 
     // Helper: cache a member name with Number() key to avoid string/number mismatch in Map
     const cacheMemberName = (id: any, name: string) => {
@@ -841,9 +849,20 @@ export default function WorkoutSessionScreen() {
   const syncSessionFromServer = async () => {
     if (!tabataSession) return;
 
+    // Increment sequence so we can detect stale responses from earlier calls.
+    // If WiFi flickers, multiple syncs fire — only the latest should apply.
+    const mySequence = ++syncSequenceRef.current;
+
     try {
-      console.log('🔄 [SESSION] Fetching current session state from server...');
+      console.log('🔄 [SESSION] Fetching current session state from server... (seq:', mySequence, ')');
       const serverState = await socialService.getSessionState(tabataSession.session_id);
+
+      // Discard if a newer sync was started while we were waiting for this response
+      if (mySequence !== syncSequenceRef.current) {
+        console.log('⚠️ [SESSION] Stale sync response (seq:', mySequence, 'current:', syncSequenceRef.current, ') — discarding');
+        return;
+      }
+
       console.log('🔄 [SESSION] Server state received:', serverState);
 
       // If server says workout is completed/stopped, transition to complete
