@@ -140,8 +140,9 @@ export default function WorkoutSessionScreen() {
 
   // Member left / disconnected / reconnected toast state
   const [memberLeftName, setMemberLeftName] = useState<string | null>(null);
-  const [memberDisconnectedName, setMemberDisconnectedName] = useState<string | null>(null);
+  const [memberDisconnected, setMemberDisconnected] = useState<{ name: string; key: number } | null>(null);
   const [memberReconnectedName, setMemberReconnectedName] = useState<string | null>(null);
+  const disconnectToastKeyRef = useRef(0); // Incrementing key to force toast re-render on repeated disconnects
   const recentlyLeftMembersRef = useRef<Set<number>>(new Set());
   const disconnectedMembersRef = useRef<Map<number, string>>(new Map()); // userId → userName
   const memberNamesRef = useRef<Map<number, string>>(new Map()); // Cached userId → userName at subscription time
@@ -730,7 +731,8 @@ export default function WorkoutSessionScreen() {
           disconnectedMembersRef.current.set(memberId, resolvedName);
 
           console.log(`📡 [SESSION] Member disconnected: ${resolvedName} (${memberId})`);
-          setMemberDisconnectedName(resolvedName);
+          disconnectToastKeyRef.current += 1;
+          setMemberDisconnected({ name: resolvedName, key: disconnectToastKeyRef.current });
         }, 400);
       },
       onJoining: (member: any) => {
@@ -2303,11 +2305,12 @@ export default function WorkoutSessionScreen() {
         onDismiss={() => setMemberLeftName(null)}
       />
 
-      {/* Member Disconnected Toast */}
+      {/* Member Disconnected Toast — key forces remount on repeated disconnects */}
       <MemberDisconnectedToast
-        memberName={memberDisconnectedName || ''}
-        visible={!!memberDisconnectedName}
-        onDismiss={() => setMemberDisconnectedName(null)}
+        key={memberDisconnected?.key || 0}
+        memberName={memberDisconnected?.name || ''}
+        visible={!!memberDisconnected}
+        onDismiss={() => setMemberDisconnected(null)}
       />
 
       {/* Member Reconnected Toast */}
