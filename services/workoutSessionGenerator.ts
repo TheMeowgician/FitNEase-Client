@@ -111,10 +111,9 @@ export function generateTabataSession(
   userId: string,
   sessionCount: number = 0
 ): TabataWorkoutSession {
-  const exerciseCount = getExerciseCountForLevel(fitnessLevel, sessionCount);
-
-  // Select the top N exercises based on fitness level
-  const selectedExercises = recommendations.slice(0, exerciseCount);
+  // Use all exercises passed in — backend already determined the correct count
+  // (progressive overload + time floor + fitness level cap)
+  const selectedExercises = recommendations;
 
   // Map to TabataExercise format
   const exercises: TabataExercise[] = selectedExercises.map(rec => ({

@@ -24,7 +24,7 @@ import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
 import { engagementService } from '../../services/microservices/engagementService';
-import { generateTabataSession, hasEnoughExercises, getSessionSummary, getExerciseCountForLevel } from '../../services/workoutSessionGenerator';
+import { generateTabataSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 import { getAlgorithmDisplayName } from '../../utils/mlUtils';
@@ -405,16 +405,6 @@ export default function HomeScreen() {
       console.log(`📊 [DASHBOARD] Using ${recommendations?.length || 0} recommendations from store`);
       console.log('📊 [DASHBOARD] Weekly stats from store:', weeklyStats);
 
-      // 🐛 DEBUG: Log exercises from store to compare with other pages
-      if (recommendations && recommendations.length > 0) {
-        const fitnessLvl = user.fitnessLevel || 'beginner';
-        const count = fitnessLvl === 'beginner' ? 4 : fitnessLvl === 'intermediate' ? 5 : 6;
-        const firstExercises = recommendations.slice(0, count);
-        console.log(`🐛 [DASHBOARD DEBUG] Fitness Level: ${fitnessLvl}, Count: ${count}`);
-        console.log(`🐛 [DASHBOARD DEBUG] First exercise: ${firstExercises[0]?.exercise_name} (ID: ${firstExercises[0]?.exercise_id})`);
-        console.log(`🐛 [DASHBOARD DEBUG] All ${count} exercises:`, firstExercises.map((e: any) => `${e.exercise_name} (${e.exercise_id})`));
-      }
-
       setAchievements(achievementsResponse || []);
       setEngagementStats(engagementResponse);
 
@@ -514,9 +504,9 @@ export default function HomeScreen() {
       return;
     }
 
-    // Exercise count uses progressive overload based on completed session count
-    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
-    const exercises = recommendations.slice(0, Math.min(exerciseCount, recommendations.length));
+    // Use backend-provided exercises directly — backend already applies
+    // progressive overload + time floor + fitness level cap
+    const exercises = recommendations;
 
     // Calculate total duration and calories
     const totalDuration = exercises.length * 4; // 4 minutes per exercise (Tabata protocol)
@@ -540,11 +530,6 @@ export default function HomeScreen() {
     try {
       if (recommendations.length === 0) {
         alert.info('No Recommendations', 'Please wait while we load your personalized workout recommendations.');
-        return;
-      }
-
-      if (!hasEnoughExercises(recommendations, fitnessLevel, completedSessionCount)) {
-        alert.warning('Insufficient Exercises', `You need more exercise recommendations for a proper ${fitnessLevel} level workout session. Please try again later.`);
         return;
       }
 
@@ -933,9 +918,8 @@ export default function HomeScreen() {
                   <View style={styles.workoutCardTitleContainer}>
                     <Text style={styles.workoutCardTitle}>Tabata Workout</Text>
                     <Text style={styles.workoutCardSubtitle}>
-                      {getExerciseCountForLevel(fitnessLevel, completedSessionCount)} exercises • {(() => {
-                        const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
-                        const workoutExercises = recommendations?.slice(0, exerciseCount) || [];
+                      {recommendations.length} exercises • {(() => {
+                        const workoutExercises = recommendations || [];
                         const muscleGroups = new Set<string>();
                         workoutExercises.forEach(ex => {
                           if (ex.target_muscle_group) {
@@ -958,8 +942,6 @@ export default function HomeScreen() {
                 {/* Exercise Preview - Consistent with Workouts page */}
                 <View style={styles.exercisePreview}>
                   {(() => {
-                    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
-
                     return (
                       <>
                         {recommendations?.slice(0, 4).map((ex, idx) => (
@@ -972,9 +954,9 @@ export default function HomeScreen() {
                             </Text>
                           </View>
                         ))}
-                        {exerciseCount > 4 && (
+                        {recommendations.length > 4 && (
                           <Text style={styles.moreExercisesText}>
-                            +{exerciseCount - 4} more
+                            +{recommendations.length - 4} more
                           </Text>
                         )}
                       </>
@@ -986,19 +968,19 @@ export default function HomeScreen() {
                 <View style={styles.workoutStatsRow}>
                   <View style={styles.workoutStatItem}>
                     <Ionicons name="time-outline" size={18} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.workoutStatValue}>{getExerciseCountForLevel(fitnessLevel, completedSessionCount) * 4} min</Text>
+                    <Text style={styles.workoutStatValue}>{recommendations.length * 4} min</Text>
                   </View>
                   <View style={styles.workoutStatDivider} />
                   <View style={styles.workoutStatItem}>
                     <Ionicons name="flame-outline" size={18} color={COLORS.WARNING[500]} />
                     <Text style={styles.workoutStatValue}>
-                      ~{recommendations?.slice(0, getExerciseCountForLevel(fitnessLevel, completedSessionCount)).reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0)} cal
+                      ~{recommendations?.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0)} cal
                     </Text>
                   </View>
                   <View style={styles.workoutStatDivider} />
                   <View style={styles.workoutStatItem}>
                     <Ionicons name="fitness-outline" size={18} color={COLORS.SUCCESS[500]} />
-                    <Text style={styles.workoutStatValue}>{getExerciseCountForLevel(fitnessLevel, completedSessionCount)} sets</Text>
+                    <Text style={styles.workoutStatValue}>{recommendations.length} sets</Text>
                   </View>
                 </View>
 

@@ -17,7 +17,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { trackingService } from '../../services/microservices/trackingService';
-import { getExerciseCountForLevel } from '../../services/workoutSessionGenerator';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { COLORS, FONTS } from '../../constants/colors';
 
@@ -175,9 +174,9 @@ export default function WorkoutsScreen() {
     setIsViewingWorkoutSet(true);
     try {
       const fitnessLevel = user?.fitnessLevel || 'beginner';
-      // Exercise count uses progressive overload based on completed session count
-      const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
-      const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
+      // Use backend-provided exercises directly — backend already applies
+      // progressive overload + time floor + fitness level cap
+      const workoutExercises = exercises;
 
       const totalDuration = workoutExercises.length * 4;
       const totalCalories = workoutExercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0);
@@ -287,9 +286,9 @@ export default function WorkoutsScreen() {
   };
 
   const getWorkoutStats = () => {
-    const fitnessLevel = user?.fitnessLevel || 'beginner';
-    const exerciseCount = getExerciseCountForLevel(fitnessLevel, completedSessionCount);
-    const workoutExercises = exercises.slice(0, Math.min(exerciseCount, exercises.length));
+    // Use backend-provided exercises directly — backend already applies
+    // progressive overload + time floor + fitness level cap
+    const workoutExercises = exercises;
 
     const totalDuration = workoutExercises.length * 4;
     const totalCalories = workoutExercises.reduce((sum, ex) => sum + (ex.estimated_calories_burned || 28), 0);
@@ -402,7 +401,7 @@ export default function WorkoutsScreen() {
                   ))}
                   {exercises.length > 4 && (
                     <Text style={styles.moreExercisesText}>
-                      +{Math.min(exercises.length, stats.exerciseCount) - 4} more
+                      +{exercises.length - 4} more
                     </Text>
                   )}
                 </View>
