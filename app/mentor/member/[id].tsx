@@ -25,6 +25,11 @@ interface MemberStats {
   currentStreak: number;
   longestStreak: number;
   lastSessionDate: string | null;
+  // Additional fields from backend getSessionStats
+  groupSessionsCount?: number;
+  individualSessionsCount?: number;
+  thisWeekSessions?: number;
+  thisMonthSessions?: number;
 }
 
 interface WeeklySummary {
@@ -45,11 +50,15 @@ interface Assessment {
 interface SessionHistory {
   id: string;
   workoutName: string;
+  sessionType?: 'individual' | 'group';
   duration: number;
   caloriesBurned: number;
   completionPercentage: number;
   status: 'completed' | 'in-progress' | 'paused' | 'cancelled';
   date: string;
+  exercises: any[];
+  // Keep full session data for navigation to workout-detail
+  _raw?: any;
 }
 
 export default function MemberDetailScreen() {
@@ -120,11 +129,14 @@ export default function MemberDetailScreen() {
         const transformedSessions: SessionHistory[] = (results[4].value?.sessions || []).map((s: any) => ({
           id: s.id,
           workoutName: s.workoutName || 'Tabata Workout',
+          sessionType: s.sessionType,
           duration: s.duration || 0,
           caloriesBurned: s.actualCaloriesBurned || 0,
           completionPercentage: s.completionPercentage || 0,
           status: s.status || 'completed',
           date: s.createdAt || s.startTime,
+          exercises: s.exercises || [],
+          _raw: s,
         }));
         setSessions(transformedSessions);
       }
@@ -175,12 +187,15 @@ export default function MemberDetailScreen() {
     switch (type) {
       case 'initial':
         return 'Initial Assessment';
+      case 'initial_onboarding':
+        return 'Initial Onboarding';
       case 'weekly':
         return 'Weekly Check-In';
       case 'progress':
         return 'Progress Assessment';
       default:
-        return type;
+        // Format any unknown type: replace underscores with spaces, capitalize words
+        return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
   };
 
@@ -251,8 +266,8 @@ export default function MemberDetailScreen() {
         <Text style={styles.sectionTitle}>Overall Progress</Text>
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Total Sessions</Text>
-            <Text style={styles.infoValue}>{stats?.totalSessions || 0}</Text>
+            <Text style={styles.infoLabel}>Completed Sessions</Text>
+            <Text style={styles.infoValue}>{stats?.completedSessions || 0}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Total Time</Text>
@@ -263,18 +278,20 @@ export default function MemberDetailScreen() {
             <Text style={styles.infoValue}>{Math.round(stats?.totalCalories || 0)} kcal</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Current Streak</Text>
-            <Text style={styles.infoValue}>{stats?.currentStreak || 0} days</Text>
+            <Text style={styles.infoLabel}>Group Sessions</Text>
+            <Text style={styles.infoValue}>{stats?.groupSessionsCount || 0}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Longest Streak</Text>
-            <Text style={styles.infoValue}>{stats?.longestStreak || 0} days</Text>
+            <Text style={styles.infoLabel}>Individual Sessions</Text>
+            <Text style={styles.infoValue}>{stats?.individualSessionsCount || 0}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Last Workout</Text>
-            <Text style={styles.infoValue}>
-              {stats?.lastSessionDate ? formatDate(stats.lastSessionDate) : 'Never'}
-            </Text>
+            <Text style={styles.infoLabel}>This Week</Text>
+            <Text style={styles.infoValue}>{stats?.thisWeekSessions || 0} sessions</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>This Month</Text>
+            <Text style={styles.infoValue}>{stats?.thisMonthSessions || 0} sessions</Text>
           </View>
         </View>
       </View>
@@ -359,21 +376,6 @@ export default function MemberDetailScreen() {
     </View>
   );
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return COLORS.SUCCESS[500];
-      case 'in-progress':
-        return COLORS.WARNING[500];
-      case 'paused':
-        return COLORS.SECONDARY[400];
-      case 'cancelled':
-        return COLORS.ERROR[500];
-      default:
-        return COLORS.SECONDARY[400];
-    }
-  };
-
   const renderSessionsTab = () => (
     <View style={styles.tabContent}>
       {sessions.length === 0 ? (
@@ -386,38 +388,44 @@ export default function MemberDetailScreen() {
         </View>
       ) : (
         <View style={styles.sessionsList}>
-          {sessions.map((session) => (
-            <View key={session.id} style={styles.sessionCard}>
-              <View style={styles.sessionHeader}>
-                <View style={styles.sessionInfo}>
-                  <Ionicons name="fitness" size={20} color={COLORS.PRIMARY[600]} />
-                  <Text style={styles.sessionName}>{session.workoutName}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(session.status) + '20' }]}>
-                  <Text style={[styles.statusText, { color: getStatusColor(session.status) }]}>
-                    {session.status.charAt(0).toUpperCase() + session.status.slice(1).replace('-', ' ')}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.sessionBody}>
-                <View style={styles.sessionMetrics}>
-                  <View style={styles.sessionMetric}>
-                    <Ionicons name="time-outline" size={16} color={COLORS.SECONDARY[500]} />
-                    <Text style={styles.metricValue}>{session.duration} min</Text>
+          {sessions.map((session) => {
+            const isGroup = session.sessionType === 'group';
+            return (
+              <TouchableOpacity
+                key={session.id}
+                style={styles.sessionCard}
+                activeOpacity={0.7}
+                onPress={() => router.push({
+                  pathname: '/workout/workout-detail',
+                  params: { sessionData: JSON.stringify(session._raw || session) },
+                })}
+              >
+                <View style={styles.sessionHeader}>
+                  <View style={styles.sessionInfo}>
+                    <View style={[styles.sessionIcon, { backgroundColor: isGroup ? COLORS.PRIMARY[50] : '#ECFDF5' }]}>
+                      <Ionicons
+                        name={isGroup ? 'people' : 'fitness'}
+                        size={18}
+                        color={isGroup ? COLORS.PRIMARY[600] : '#10B981'}
+                      />
+                    </View>
+                    <View>
+                      <Text style={styles.sessionName}>
+                        {isGroup ? 'Group Tabata Workout' : 'Tabata Workout'}
+                      </Text>
+                      <Text style={styles.sessionDateSmall}>
+                        {formatDate(session.date)} · {session.exercises.length} exercises
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.sessionMetric}>
-                    <Ionicons name="flame-outline" size={16} color={COLORS.WARNING[500]} />
-                    <Text style={styles.metricValue}>{Math.round(session.caloriesBurned)} kcal</Text>
-                  </View>
-                  <View style={styles.sessionMetric}>
-                    <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.SUCCESS[500]} />
-                    <Text style={styles.metricValue}>{Math.round(session.completionPercentage)}%</Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.sessionDurationText}>{session.duration}min</Text>
+                    <Text style={styles.sessionCaloriesText}>{Math.round(session.caloriesBurned)} kcal</Text>
                   </View>
                 </View>
-                <Text style={styles.sessionDate}>{formatDate(session.date)}</Text>
-              </View>
-            </View>
-          ))}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
     </View>
@@ -817,47 +825,39 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.NEUTRAL[200],
   },
+  sessionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sessionInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    flex: 1,
   },
   sessionName: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.SEMIBOLD,
-  },
-  sessionBody: {
-    padding: 14,
-  },
-  sessionMetrics: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  sessionMetric: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metricValue: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[700],
-  },
-  sessionDate: {
+  sessionDateSmall: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
-    textAlign: 'right',
+    marginTop: 2,
+  },
+  sessionDurationText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  sessionCaloriesText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    marginTop: 2,
   },
 });

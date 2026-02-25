@@ -9,28 +9,28 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
-  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressionCard from '../../components/ProgressionCard';
-import AchievementUnlockModal, { UnlockedAchievement } from '../../components/achievements/AchievementUnlockModal';
 import { progressionService } from '../../services/microservices/progressionService';
 import { trackingService } from '../../services/microservices/trackingService';
+import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
+import { getAchievementIcon } from '../../constants/achievementIcons';
 
-// Achievement icons for milestones
-const MILESTONE_ICONS = {
-  first_workout: require('../../assets/images/achievements/first_workout.png'),
-  getting_started: require('../../assets/images/achievements/getting_started.png'),
-  week_warrior: require('../../assets/images/achievements/week_warrior.png'),
-  dedicated: require('../../assets/images/achievements/dedicated.png'),
-};
+interface AchievementPreview {
+  icon: string;
+  title: string;
+  earned: boolean;
+  color: string;
+  customImage: any;
+}
 
 // Fitness level icons
 const FITNESS_LEVEL_ICONS = {
@@ -55,8 +55,9 @@ export default function ProgressScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [engagementStreak, setEngagementStreak] = useState(0);
-  const [showAchievementModal, setShowAchievementModal] = useState(false);
-  const [selectedAchievement, setSelectedAchievement] = useState<UnlockedAchievement | null>(null);
+  const [achievementPreviews, setAchievementPreviews] = useState<AchievementPreview[]>([]);
+  const [earnedCount, setEarnedCount] = useState(0);
+  const [totalAchievements, setTotalAchievements] = useState(0);
 
   useEffect(() => {
     loadProgressData();
@@ -78,12 +79,55 @@ export default function ProgressScreen() {
     try {
       console.log('📊 [PROGRESS] Loading progress data from store');
 
-      // Fetch from centralized store
-      await fetchAllProgressData(user.id);
+      // Fetch from centralized store + achievements in parallel
+      const [, engagementStats, availableAchievements, userAchievements] = await Promise.all([
+        fetchAllProgressData(user.id),
+        getUserStats(user.id).catch(() => null),
+        engagementService.getAvailableAchievements().catch(() => []),
+        engagementService.getUserAchievements(String(user.id)).catch(() => []),
+      ]);
 
-      // Get engagement streak separately
-      const engagementStats = await getUserStats(user.id).catch(() => null);
       setEngagementStreak(engagementStats?.current_streak_days || 0);
+
+      // Build achievement previews (same pattern as user-profile page)
+      const unlockedIds = new Set(
+        userAchievements.filter(ua => ua.is_completed).map(ua => ua.achievement_id)
+      );
+
+      // Sort: unlocked first, then by ID
+      const sortedAchievements = [...availableAchievements].sort((a, b) => {
+        const aUnlocked = unlockedIds.has(a.achievement_id);
+        const bUnlocked = unlockedIds.has(b.achievement_id);
+        if (aUnlocked !== bUnlocked) return aUnlocked ? -1 : 1;
+        return a.achievement_id - b.achievement_id;
+      });
+
+      const iconMap: Record<string, string> = {
+        workout_count: 'fitness',
+        streak: 'flame',
+        calories: 'flash',
+        time: 'time',
+        social: 'people',
+      };
+
+      const colorMap: Record<string, string> = {
+        common: '#6B7280',
+        rare: '#3B82F6',
+        epic: '#8B5CF6',
+        legendary: '#F59E0B',
+      };
+
+      const previews = sortedAchievements.slice(0, 4).map(ach => ({
+        icon: iconMap[ach.achievement_type] || 'trophy',
+        title: ach.achievement_name,
+        earned: unlockedIds.has(ach.achievement_id),
+        color: colorMap[ach.rarity_level] || '#6B7280',
+        customImage: getAchievementIcon(ach.achievement_name),
+      }));
+
+      setAchievementPreviews(previews);
+      setEarnedCount(userAchievements.filter(a => a.is_completed).length);
+      setTotalAchievements(availableAchievements.length);
 
       console.log('✅ [PROGRESS] Progress data loaded from store');
     } catch (error) {
@@ -264,141 +308,83 @@ export default function ProgressScreen() {
           </View>
         </View>
 
-        {/* Milestone Cards */}
+        {/* Achievements */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="flag" size={20} color={COLORS.PRIMARY[600]} />
-            <Text style={styles.sectionTitle}>Milestones</Text>
+            <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[600]} />
+            <Text style={styles.sectionTitle}>Achievements</Text>
+            <TouchableOpacity
+              style={styles.viewAllButton}
+              onPress={() => router.push('/achievements')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={14} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.milestonesContainer}>
-            {/* First Workout */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 1 && styles.milestoneCardCompleted]}
-              onPress={() => {
-                setSelectedAchievement({
-                  achievement_id: 1,
-                  achievement_name: 'First Workout',
-                  description: 'Complete your very first workout session. Every journey begins with a single step!',
-                  badge_icon: 'fitness',
-                  badge_color: COLORS.PRIMARY[600],
-                  rarity_level: 'common',
-                  points_value: 50,
-                });
-                setShowAchievementModal(true);
-              }}
-            >
-              <View style={styles.milestoneLeft}>
-                <View style={[
-                  styles.milestoneIconContainer,
-                  (overallStats?.totalWorkouts || 0) >= 1 ? styles.milestoneIconCompleted : styles.milestoneIconPending
-                ]}>
-                  <Image source={MILESTONE_ICONS.first_workout} style={styles.milestoneIconImage} />
+          <View style={styles.achievementPreviewCard}>
+            {achievementPreviews.length > 0 ? (
+              <>
+                <View style={styles.achievementPreviewRow}>
+                  {achievementPreviews.map((achievement, index) => (
+                    <View key={index} style={styles.achievementPreviewItem}>
+                      {achievement.earned && achievement.customImage ? (
+                        <Image
+                          source={achievement.customImage}
+                          style={styles.achievementPreviewImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.achievementPreviewIcon,
+                            achievement.earned
+                              ? { backgroundColor: achievement.color }
+                              : styles.achievementPreviewIconLocked,
+                          ]}
+                        >
+                          {achievement.earned ? (
+                            <Ionicons name={achievement.icon as any} size={20} color="white" />
+                          ) : (
+                            <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
+                          )}
+                        </View>
+                      )}
+                      <Text
+                        style={[
+                          styles.achievementPreviewLabel,
+                          !achievement.earned && styles.achievementPreviewLabelLocked,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {achievement.title}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.milestoneText}>
-                  <Text style={styles.milestoneTitle}>First Workout</Text>
-                  <Text style={styles.milestoneDescription}>Complete 1 workout</Text>
-                </View>
-              </View>
-              {(overallStats?.totalWorkouts || 0) >= 1 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </TouchableOpacity>
 
-            {/* 10 Workouts */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={[styles.milestoneCard, (overallStats?.totalWorkouts || 0) >= 10 && styles.milestoneCardCompleted]}
-              onPress={() => {
-                setSelectedAchievement({
-                  achievement_id: 2,
-                  achievement_name: 'Getting Started',
-                  description: 'Complete 10 workout sessions. You\'re building a solid foundation!',
-                  badge_icon: 'rocket',
-                  badge_color: COLORS.WARNING[600],
-                  rarity_level: 'rare',
-                  points_value: 100,
-                });
-                setShowAchievementModal(true);
-              }}
-            >
-              <View style={styles.milestoneLeft}>
-                <View style={[
-                  styles.milestoneIconContainer,
-                  (overallStats?.totalWorkouts || 0) >= 10 ? styles.milestoneIconCompleted : styles.milestoneIconPending
-                ]}>
-                  <Image source={MILESTONE_ICONS.getting_started} style={styles.milestoneIconImage} />
+                {/* Progress Bar */}
+                <View style={styles.achievementProgressSection}>
+                  <View style={styles.achievementProgressBar}>
+                    <View
+                      style={[
+                        styles.achievementProgressFill,
+                        { width: `${totalAchievements > 0 ? (earnedCount / totalAchievements) * 100 : 0}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.achievementProgressText}>
+                    {earnedCount} of {totalAchievements} unlocked
+                  </Text>
                 </View>
-                <View style={styles.milestoneText}>
-                  <Text style={styles.milestoneTitle}>Getting Started</Text>
-                  <Text style={styles.milestoneDescription}>Complete 10 workouts</Text>
-                </View>
+              </>
+            ) : (
+              <View style={styles.achievementEmptyState}>
+                <Ionicons name="trophy-outline" size={32} color={COLORS.SECONDARY[300]} />
+                <Text style={styles.achievementEmptyText}>Loading achievements...</Text>
               </View>
-              {(overallStats?.totalWorkouts || 0) >= 10 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </TouchableOpacity>
-
-            {/* 7 Day Streak */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={[styles.milestoneCard, engagementStreak >= 7 && styles.milestoneCardCompleted]}
-              onPress={() => {
-                setSelectedAchievement({
-                  achievement_id: 3,
-                  achievement_name: 'On Fire',
-                  description: 'Maintain a 7-day workout streak. Consistency is the key to progress!',
-                  badge_icon: 'flame',
-                  badge_color: COLORS.ERROR[500],
-                  rarity_level: 'epic',
-                  points_value: 200,
-                });
-                setShowAchievementModal(true);
-              }}
-            >
-              <View style={styles.milestoneLeft}>
-                <View style={[
-                  styles.milestoneIconContainer,
-                  engagementStreak >= 7 ? styles.milestoneIconCompleted : styles.milestoneIconPending
-                ]}>
-                  <Image source={MILESTONE_ICONS.week_warrior} style={styles.milestoneIconImage} />
-                </View>
-                <View style={styles.milestoneText}>
-                  <Text style={styles.milestoneTitle}>On Fire</Text>
-                  <Text style={styles.milestoneDescription}>Maintain 7-day streak</Text>
-                </View>
-              </View>
-              {engagementStreak >= 7 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </TouchableOpacity>
-
-            {/* 28 Active Days */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={[styles.milestoneCard, (overallStats?.activeDays || 0) >= 28 && styles.milestoneCardCompleted]}
-              onPress={() => {
-                setSelectedAchievement({
-                  achievement_id: 4,
-                  achievement_name: 'Dedicated',
-                  description: 'Stay active for 28 days. You\'re proving your dedication to fitness!',
-                  badge_icon: 'medal',
-                  badge_color: COLORS.SUCCESS[600],
-                  rarity_level: 'legendary',
-                  points_value: 500,
-                });
-                setShowAchievementModal(true);
-              }}
-            >
-              <View style={styles.milestoneLeft}>
-                <View style={[
-                  styles.milestoneIconContainer,
-                  (overallStats?.activeDays || 0) >= 28 ? styles.milestoneIconCompleted : styles.milestoneIconPending
-                ]}>
-                  <Image source={MILESTONE_ICONS.dedicated} style={styles.milestoneIconImage} />
-                </View>
-                <View style={styles.milestoneText}>
-                  <Text style={styles.milestoneTitle}>Dedicated</Text>
-                  <Text style={styles.milestoneDescription}>Active for 28 days</Text>
-                </View>
-              </View>
-              {(overallStats?.activeDays || 0) >= 28 && <Ionicons name="checkmark-circle" size={24} color={COLORS.SUCCESS[500]} />}
-            </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -414,15 +400,6 @@ export default function ProgressScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Achievement Detail Modal */}
-      <AchievementUnlockModal
-        visible={showAchievementModal}
-        achievements={selectedAchievement ? [selectedAchievement] : []}
-        onClose={() => {
-          setShowAchievementModal(false);
-          setSelectedAchievement(null);
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -558,6 +535,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.LG,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
+    flex: 1,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  viewAllText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
   },
   statsGrid: {
     flexDirection: 'row',
@@ -596,64 +584,80 @@ const styles = StyleSheet.create({
     color: COLORS.SECONDARY[600],
     textAlign: 'center',
   },
-  milestonesContainer: {
-    gap: 12,
-  },
-  milestoneCard: {
-    backgroundColor: COLORS.NEUTRAL.WHITE,
+  achievementPreviewCard: {
+    backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  milestoneCardCompleted: {
-    borderWidth: 2,
-    borderColor: COLORS.SUCCESS[500],
-  },
-  milestoneLeft: {
+  achievementPreviewRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  achievementPreviewItem: {
     alignItems: 'center',
     flex: 1,
   },
-  milestoneIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  achievementPreviewIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginBottom: 6,
+  },
+  achievementPreviewImage: {
+    width: 48,
+    height: 48,
+    marginBottom: 6,
+  },
+  achievementPreviewIconLocked: {
+    backgroundColor: COLORS.NEUTRAL[200],
+  },
+  achievementPreviewLabel: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[700],
+    textAlign: 'center',
+  },
+  achievementPreviewLabelLocked: {
+    color: COLORS.SECONDARY[400],
+  },
+  achievementProgressSection: {
+    alignItems: 'center',
+  },
+  achievementProgressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: COLORS.NEUTRAL[200],
+    borderRadius: 3,
     overflow: 'hidden',
+    marginBottom: 8,
   },
-  milestoneIconImage: {
-    width: 36,
-    height: 36,
-    resizeMode: 'contain',
+  achievementProgressFill: {
+    height: '100%',
+    backgroundColor: COLORS.PRIMARY[500],
+    borderRadius: 3,
   },
-  milestoneIconCompleted: {
-    opacity: 1,
-  },
-  milestoneIconPending: {
-    opacity: 0.5,
-  },
-  milestoneText: {
-    flex: 1,
-  },
-  milestoneTitle: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
-    marginBottom: 2,
-  },
-  milestoneDescription: {
+  achievementProgressText: {
     fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
+    fontFamily: FONTS.MEDIUM,
     color: COLORS.SECONDARY[600],
+  },
+  achievementEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  achievementEmptyText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginTop: 8,
   },
   quoteCard: {
     backgroundColor: COLORS.WARNING[50],

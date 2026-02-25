@@ -1044,6 +1044,10 @@ export class TrackingService {
     currentStreak: number;
     longestStreak: number;
     lastSessionDate: string | null;
+    groupSessionsCount: number;
+    individualSessionsCount: number;
+    thisWeekSessions: number;
+    thisMonthSessions: number;
   }> {
     try {
       const response = await apiClient.get('tracking', `/api/session-stats/${userId}`);
@@ -1060,6 +1064,10 @@ export class TrackingService {
         currentStreak: stats.current_streak || 0,
         longestStreak: stats.longest_streak || 0,
         lastSessionDate: stats.last_session_date || null,
+        groupSessionsCount: stats.group_sessions_count || 0,
+        individualSessionsCount: stats.individual_sessions_count || 0,
+        thisWeekSessions: stats.this_week_sessions || 0,
+        thisMonthSessions: stats.this_month_sessions || 0,
       };
     } catch (error) {
       console.error('❌ getMemberSessionStats failed:', error);
@@ -1073,6 +1081,10 @@ export class TrackingService {
         currentStreak: 0,
         longestStreak: 0,
         lastSessionDate: null,
+        groupSessionsCount: 0,
+        individualSessionsCount: 0,
+        thisWeekSessions: 0,
+        thisMonthSessions: 0,
       };
     }
   }
@@ -1089,13 +1101,21 @@ export class TrackingService {
       const response = await apiClient.get('tracking', `/api/weekly-summary/${userId}`);
       console.log('📊 getMemberWeeklySummary response:', response.data);
 
-      const summary = response.data?.data || response.data || {};
+      // Backend returns paginated WeeklySummary records — get the latest one
+      const rawData = response.data?.data || response.data || {};
+      const summaries = rawData.data || rawData; // handle paginated vs direct
+      const latest = Array.isArray(summaries) ? summaries[0] : summaries;
+
+      if (!latest) {
+        return { workoutsThisWeek: 0, minutesThisWeek: 0, caloriesThisWeek: 0, weeklyGoalProgress: 0, daysActive: 0 };
+      }
+
       return {
-        workoutsThisWeek: summary.workouts_this_week || 0,
-        minutesThisWeek: summary.minutes_this_week || 0,
-        caloriesThisWeek: summary.calories_this_week || 0,
-        weeklyGoalProgress: summary.weekly_goal_progress || 0,
-        daysActive: summary.days_active || 0,
+        workoutsThisWeek: latest.total_workouts || 0,
+        minutesThisWeek: latest.total_exercise_time_minutes || 0,
+        caloriesThisWeek: Math.round(latest.total_calories_burned || 0),
+        weeklyGoalProgress: latest.improvement_percentage || 0,
+        daysActive: latest.total_workouts || 0, // approximate from workout count
       };
     } catch (error) {
       console.error('❌ getMemberWeeklySummary failed:', error);
