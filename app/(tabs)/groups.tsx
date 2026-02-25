@@ -22,17 +22,20 @@ import { useAlert } from '../../contexts/AlertContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { socialService, Group } from '../../services/microservices/socialService';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
+import { useReverb } from '../../contexts/ReverbProvider';
 
 export default function GroupsScreen() {
   const { user } = useAuth();
   const alert = useAlert();
   const { addNotificationListener } = useNotifications();
+  const { refreshGroupSubscriptions } = useReverb();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [myGroups, setMyGroups] = useState<Group[]>([]);
   const [publicGroups, setPublicGroups] = useState<Group[]>([]);
   const [pendingRequestGroupIds, setPendingRequestGroupIds] = useState<Set<string>>(new Set());
   const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null); // Debounce: tracks which group button is in-flight
+  const loadingRef = useRef(false); // Guard against concurrent loadGroups calls
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -78,6 +81,12 @@ export default function GroupsScreen() {
   }, [addNotificationListener]);
 
   const loadGroups = async () => {
+    if (loadingRef.current) {
+      console.log('⚠️ [GROUPS] loadGroups already in-flight, skipping');
+      return;
+    }
+    loadingRef.current = true;
+
     try {
       setIsLoading(true);
 
@@ -157,6 +166,7 @@ export default function GroupsScreen() {
       alert.error('Error', 'Failed to load groups. Please try again.');
     } finally {
       setIsLoading(false);
+      loadingRef.current = false;
     }
   };
 
@@ -505,7 +515,10 @@ export default function GroupsScreen() {
       <CreateGroupModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onSuccess={loadGroups}
+        onSuccess={() => {
+          loadGroups();
+          refreshGroupSubscriptions();
+        }}
       />
     </SafeAreaView>
   );
