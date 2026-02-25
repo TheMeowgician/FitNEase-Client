@@ -95,40 +95,20 @@ export default function MentorDashboardScreen() {
         })
       );
 
-      // Fetch session stats for all unique members across all groups (for total sessions count)
-      const allMemberIds = new Set<string>();
-      groupMembers.forEach((members) => {
-        members.forEach((m) => {
-          if (m.userId) allMemberIds.add(String(m.userId));
-        });
-      });
+      // Fetch session stats per group using group-specific endpoint
+      const groupStatsResults = await Promise.allSettled(
+        mentorGroups.map((group) => trackingService.getGroupStats(group.id))
+      );
 
-      if (allMemberIds.size > 0) {
-        const statsResults = await Promise.allSettled(
-          Array.from(allMemberIds).map((uid) => trackingService.getMemberSessionStats(uid))
-        );
-
-        // Build userId -> completedSessions map
-        const memberStatsMap = new Map<string, number>();
-        const memberIdArr = Array.from(allMemberIds);
-        statsResults.forEach((result, idx) => {
-          if (result.status === 'fulfilled') {
-            memberStatsMap.set(memberIdArr[idx], result.value.completedSessions || 0);
+      setTrainingGroups((prev) =>
+        prev.map((g, index) => {
+          const result = groupStatsResults[index];
+          if (result?.status === 'fulfilled') {
+            return { ...g, totalSessions: result.value.totalWorkouts };
           }
-        });
-
-        // Sum sessions per group
-        setTrainingGroups((prev) =>
-          prev.map((g, index) => {
-            const members = groupMembers[index] || [];
-            const groupTotalSessions = members.reduce(
-              (sum, m) => sum + (memberStatsMap.get(String(m.userId)) || 0),
-              0
-            );
-            return { ...g, totalSessions: groupTotalSessions };
-          })
-        );
-      }
+          return g;
+        })
+      );
     } catch (error) {
       console.error('Error loading training groups:', error);
       alert.error('Error', 'Failed to load training groups. Please try again.');

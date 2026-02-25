@@ -35,6 +35,7 @@ export default function AgoraVideoCall({
 }: AgoraVideoCallProps) {
   const agoraEngineRef = useRef<IRtcEngine | null>(null);
   const [isJoined, setIsJoined] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [remoteUids, setRemoteUids] = useState<number[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -121,9 +122,19 @@ export default function AgoraVideoCall({
       engine.initialize({ appId });
       agoraEngineRef.current = engine;
 
-      // Enable video and start local camera preview
+      // Enable video and audio explicitly
       engine.enableVideo();
+      engine.enableAudio();
+
+      // Set channel profile and role BEFORE preview/join
+      engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
+      engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+
+      // Start local camera preview — this renders locally even before joining
       engine.startPreview();
+
+      // Mark initializing done — camera preview is now rendering
+      setIsInitializing(false);
 
       // Register event handlers
       engine.registerEventHandler({
@@ -143,10 +154,6 @@ export default function AgoraVideoCall({
           console.error('❌ Agora error:', err);
         },
       });
-
-      // Set channel profile
-      engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
-      engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
 
       // Join channel
       engine.joinChannel(token, channelName, userId, {});
@@ -218,14 +225,14 @@ export default function AgoraVideoCall({
             canvas={{ uid: remoteUids[0] }}
             style={styles.compactVideo}
           />
-        ) : isJoined && !isVideoOff ? (
+        ) : !isVideoOff && !isInitializing ? (
           <RtcSurfaceView
             canvas={{ uid: 0 }}
             style={styles.compactVideo}
           />
         ) : (
           <View style={styles.compactPlaceholder}>
-            <Ionicons name="people-outline" size={32} color="#666" />
+            <Ionicons name={isInitializing ? 'videocam-outline' : 'people-outline'} size={32} color="#666" />
           </View>
         )}
 
@@ -284,15 +291,15 @@ export default function AgoraVideoCall({
     <View style={styles.container}>
       {/* Local video (yourself) */}
       <View style={styles.localVideoContainer}>
-        {isJoined && !isVideoOff ? (
+        {!isVideoOff && !isInitializing ? (
           <RtcSurfaceView
             canvas={{ uid: 0 }}
             style={styles.localVideo}
           />
         ) : (
           <View style={styles.videoPlaceholder}>
-            <Ionicons name="videocam-off" size={48} color="#fff" />
-            <Text style={styles.placeholderText}>Camera Off</Text>
+            <Ionicons name={isInitializing ? 'videocam-outline' : 'videocam-off'} size={48} color="#fff" />
+            <Text style={styles.placeholderText}>{isInitializing ? 'Connecting...' : 'Camera Off'}</Text>
           </View>
         )}
       </View>

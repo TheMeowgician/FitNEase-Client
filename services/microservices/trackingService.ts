@@ -394,6 +394,7 @@ export class TrackingService {
     completed: boolean;
     completionPercentage?: number; // Actual completion percentage based on exercises/sets completed
     notes?: string;
+    exercises?: Array<{ exercise_id: number; exercise_name: string; target_muscle_group?: string }>;
   }): Promise<WorkoutSession> {
     try {
       // Backend expects specific field names
@@ -414,6 +415,15 @@ export class TrackingService {
       // Include group_id if this is a group workout
       if (sessionData.groupId) {
         payload.group_id = sessionData.groupId;
+      }
+
+      // Include exercises data so backend can save to user_exercise_history
+      if (sessionData.exercises && sessionData.exercises.length > 0) {
+        payload.exercises = sessionData.exercises.map(ex => ({
+          exercise_id: ex.exercise_id,
+          exercise_name: ex.exercise_name,
+          target_muscle_group: ex.target_muscle_group || null,
+        }));
       }
 
       const response = await apiClient.post<{ success: boolean; data: WorkoutSession }>('tracking', '/api/workout-session', payload);
@@ -990,6 +1000,39 @@ export class TrackingService {
     }
   }
 
+  // Get group workout stats (for mentor dashboard - counts only sessions in that group)
+  public async getGroupStats(groupId: string): Promise<{
+    totalWorkouts: number;
+    totalMinutes: number;
+    totalCalories: number;
+    weeklyAverage: number;
+    thisWeekSessions: number;
+    uniqueParticipants: number;
+  }> {
+    try {
+      const response = await apiClient.get('tracking', `/api/group-stats/${groupId}`);
+      const stats = response.data?.data || response.data || {};
+      return {
+        totalWorkouts: stats.total_workouts || 0,
+        totalMinutes: stats.total_minutes || 0,
+        totalCalories: stats.total_calories || 0,
+        weeklyAverage: stats.weekly_average || 0,
+        thisWeekSessions: stats.this_week_sessions || 0,
+        uniqueParticipants: stats.unique_participants || 0,
+      };
+    } catch (error) {
+      console.error('❌ getGroupStats failed:', error);
+      return {
+        totalWorkouts: 0,
+        totalMinutes: 0,
+        totalCalories: 0,
+        weeklyAverage: 0,
+        thisWeekSessions: 0,
+        uniqueParticipants: 0,
+      };
+    }
+  }
+
   // Get member session stats (for mentor dashboard)
   public async getMemberSessionStats(userId: string): Promise<{
     totalSessions: number;
@@ -1010,8 +1053,8 @@ export class TrackingService {
       return {
         totalSessions: stats.total_sessions || 0,
         completedSessions: stats.completed_sessions || 0,
-        totalMinutes: stats.total_minutes || 0,
-        totalCalories: stats.total_calories || 0,
+        totalMinutes: stats.total_exercise_time || stats.total_minutes || 0,
+        totalCalories: stats.total_calories_burned || stats.total_calories || 0,
         averageSessionDuration: stats.average_session_duration || 0,
         averageCaloriesPerSession: stats.average_calories_per_session || 0,
         currentStreak: stats.current_streak || 0,

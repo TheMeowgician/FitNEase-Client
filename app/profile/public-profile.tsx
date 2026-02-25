@@ -48,13 +48,13 @@ export default function PublicProfileScreen() {
         setFitnessLevel(p.fitness_level || p.fitnessLevel || 'beginner');
       }
 
-      // Stats
+      // Stats — getMemberSessionStats returns camelCase keys
       if (results[1].status === 'fulfilled' && results[1].value) {
         const s = results[1].value;
         setStats({
-          totalWorkouts: s.total_sessions || s.completed_sessions || 0,
-          totalMinutes: s.total_exercise_time || 0,
-          totalCalories: Math.round(s.total_calories_burned || 0),
+          totalWorkouts: s.completedSessions || s.totalSessions || 0,
+          totalMinutes: s.totalMinutes || 0,
+          totalCalories: Math.round(s.totalCalories || 0),
         });
       }
 
@@ -202,7 +202,7 @@ export default function PublicProfileScreen() {
                         {isGroup ? 'Group Tabata' : 'Tabata Workout'}
                       </Text>
                       <Text style={styles.activitySub}>
-                        {workout.actualDuration || workout.duration || 0}min · {workout.exercises?.length || 0} exercises
+                        {workout.duration || 0}min · {workout.exercises?.length || 0} exercises
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={COLORS.SECONDARY[400]} />

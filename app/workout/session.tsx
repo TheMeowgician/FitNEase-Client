@@ -1802,7 +1802,13 @@ export default function WorkoutSessionScreen() {
         completionPercentage: 100, // Fully completed workout
         notes: tabataSession
           ? `Completed ${tabataSession.exercises.length}-exercise Tabata workout (${tabataSession.difficulty_level} level) - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`
-          : `Tabata workout completed - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`
+          : `Tabata workout completed - ${finalDurationMinutes}min${wasAutoFinished.current ? ' [AUTO FINISH]' : ''}`,
+        // Include exercises so backend saves them to user_exercise_history
+        exercises: tabataSession?.exercises?.map((ex: any) => ({
+          exercise_id: ex.exercise_id,
+          exercise_name: ex.exercise_name,
+          target_muscle_group: ex.target_muscle_group,
+        })) || [],
       });
 
       // CRITICAL: Capture the database session_id for rating submissions

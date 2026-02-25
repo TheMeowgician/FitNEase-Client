@@ -1147,7 +1147,7 @@ export default function HomeScreen() {
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={styles.activityCalories}>
-                          {workout.actualDuration || workout.duration || 0}min
+                          {workout.duration || 0}min
                         </Text>
                         <Ionicons name="chevron-forward" size={16} color={COLORS.SECONDARY[400]} />
                       </View>
