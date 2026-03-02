@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/contexts/AlertContext';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { planningService, WeeklyWorkoutPlan, Exercise } from '@/services/microservices/planningService';
 import { trackingService } from '@/services/microservices/trackingService';
 import { format, startOfWeek, addDays, isSameDay, isToday as isDateToday } from 'date-fns';
@@ -35,6 +35,7 @@ interface DayData {
 export default function WeeklyPlanScreen() {
   const { user } = useAuth();
   const alert = useAlert();
+  const params = useLocalSearchParams<{ selectedDate?: string }>();
 
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyWorkoutPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +47,13 @@ export default function WeeklyPlanScreen() {
   const [currentWeekStart, setCurrentWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 }) // Monday
   );
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => {
+    if (params.selectedDate) {
+      const parsed = new Date(params.selectedDate + 'T00:00:00');
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
+  });
 
   // Prevent useFocusEffect from firing loadData on the very first mount
   // (useEffect already handles initial load — running both causes a race condition)
@@ -89,6 +96,21 @@ export default function WeeklyPlanScreen() {
   const userWorkoutDays = user?.workoutDays || [];
   const hasWorkoutDays = userWorkoutDays.length > 0;
 
+
+  // React to navigation param changes (when user taps different days from dashboard calendar)
+  useEffect(() => {
+    if (params.selectedDate) {
+      const parsed = new Date(params.selectedDate + 'T00:00:00');
+      if (!isNaN(parsed.getTime())) {
+        setSelectedDate(parsed);
+        // Also update week if the selected date is in a different week
+        const newWeekStart = startOfWeek(parsed, { weekStartsOn: 1 });
+        if (!isSameDay(newWeekStart, currentWeekStart)) {
+          setCurrentWeekStart(newWeekStart);
+        }
+      }
+    }
+  }, [params.selectedDate]);
 
   useEffect(() => {
     hasLoadedOnce.current = false; // Reset on dependency change so focus also reloads

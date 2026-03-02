@@ -763,6 +763,12 @@ export default function HomeScreen() {
               showProgress={true}
               showNavigation={false}
               compact={true}
+              onSelectDate={(date: Date) => {
+                router.push({
+                  pathname: '/(tabs)/weekly-plan',
+                  params: { selectedDate: format(date, 'yyyy-MM-dd') },
+                });
+              }}
             />
           </View>
         )}
@@ -1241,7 +1247,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 16,
-    paddingBottom: 0,
+    paddingBottom: 100,
   },
   weekCalendarContainer: {
     marginBottom: 16,

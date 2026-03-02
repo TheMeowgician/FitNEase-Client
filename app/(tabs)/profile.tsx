@@ -108,88 +108,14 @@ export default function ProfileScreen() {
       ],
     },
     {
-      section: 'Tabata Training',
+      section: 'App',
       items: [
         {
-          icon: 'flash-outline',
-          title: 'Exercise Library',
-          subtitle: 'Browse Tabata exercises',
+          icon: 'cog-outline',
+          title: 'Settings',
+          subtitle: 'App settings, library & support',
           onPress: () => {
-            router.push('/exercises/library');
-          },
-        },
-        {
-          icon: 'timer-outline',
-          title: 'Custom Workouts',
-          subtitle: 'Create your own routines',
-          onPress: () => {
-            alert.info('Coming Soon', 'Custom workouts will be available soon!');
-          },
-        },
-        {
-          icon: 'people-outline',
-          title: 'Find Instructors',
-          subtitle: 'Connect with trainers',
-          onPress: () => {
-            alert.info('Coming Soon', 'Instructor finder will be available soon!');
-          },
-        },
-      ],
-    },
-    {
-      section: 'App Settings',
-      items: [
-        {
-          icon: 'notifications-outline',
-          title: 'Notifications',
-          subtitle: 'Manage your reminders',
-          onPress: () => {
-            router.push('/settings/notifications');
-          },
-        },
-        {
-          icon: 'language-outline',
-          title: 'Language',
-          subtitle: 'Change app language',
-          onPress: () => {
-            alert.info('Coming Soon', 'Language settings will be available soon!');
-          },
-        },
-        {
-          icon: 'moon-outline',
-          title: 'Dark Mode',
-          subtitle: 'Toggle theme',
-          onPress: () => {
-            alert.info('Coming Soon', 'Dark mode will be available soon!');
-          },
-        },
-      ],
-    },
-    {
-      section: 'Support',
-      items: [
-        {
-          icon: 'help-circle-outline',
-          title: 'Help & FAQ',
-          subtitle: 'Get assistance',
-          onPress: () => {
-            alert.info('Coming Soon', 'Help section will be available soon!');
-          },
-        },
-        {
-          icon: 'mail-outline',
-          title: 'Contact Support',
-          subtitle: 'Reach out to us',
-          onPress: () => {
-            alert.info('Coming Soon', 'Support contact will be available soon!');
-          },
-        },
-        {
-          icon: 'star-outline',
-          title: 'Rate App',
-          subtitle: 'Share your feedback',
-          onPress: () => {
-            alert.info('Coming Soon', 'App rating will be available soon!');
+            router.push('/settings');
           },
         },
       ],
@@ -406,7 +332,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 100,
   },
   profileSection: {
     marginHorizontal: 24,

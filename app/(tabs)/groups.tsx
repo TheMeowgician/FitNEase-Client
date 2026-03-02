@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: 100,
   },
   quickActionsContainer: {
     flexDirection: 'row',
