@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/colors';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
 import { NetworkBanner } from '../../components/ui/NetworkBanner';
+import { WorkoutActionModal } from '../../components/workout/WorkoutActionModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -38,7 +39,8 @@ function CustomTabBar({
   navigation,
   isMentor,
   unreadCount,
-}: BottomTabBarProps & { isMentor: boolean; unreadCount: number }) {
+  onCenterPress,
+}: BottomTabBarProps & { isMentor: boolean; unreadCount: number; onCenterPress: () => void }) {
   const insets = useSafeAreaInsets();
 
   // Filter to only visible routes (exclude hidden tabs by name)
@@ -90,6 +92,73 @@ function CustomTabBar({
     });
   };
 
+  const renderTab = (route: typeof visibleRoutes[number], index: number) => {
+    const { options } = descriptors[route.key];
+    const isFocused = activeVisibleIndex === index;
+    const routeName = route.name;
+
+    let iconActive = TAB_ICONS[routeName]?.active || 'ellipse';
+    let iconInactive = TAB_ICONS[routeName]?.inactive || 'ellipse-outline';
+
+    if (routeName === 'index' && isMentor) {
+      iconActive = 'school';
+      iconInactive = 'school-outline';
+    }
+
+    const onPress = () => {
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: route.key,
+        canPreventDefault: true,
+      });
+      if (!isFocused && !event.defaultPrevented) {
+        navigation.navigate(route.name, route.params);
+      }
+    };
+
+    const onLongPress = () => {
+      navigation.emit({
+        type: 'tabLongPress',
+        target: route.key,
+      });
+    };
+
+    return (
+      <TouchableOpacity
+        key={route.key}
+        accessibilityRole="button"
+        accessibilityState={isFocused ? { selected: true } : {}}
+        accessibilityLabel={options.tabBarAccessibilityLabel}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        activeOpacity={0.7}
+        style={barStyles.tab}
+        onLayout={(e) => handleTabLayout(index, e)}
+      >
+        <Animated.View
+          style={[
+            barStyles.iconWrap,
+            { transform: [{ scale: scaleAnims[index] }] },
+          ]}
+        >
+          <Ionicons
+            name={(isFocused ? iconActive : iconInactive) as any}
+            size={24}
+            color={isFocused ? TAB_BLUE : TAB_INACTIVE}
+          />
+          {routeName === 'index' && unreadCount > 0 && (
+            <View style={barStyles.badge}>
+              <Text style={barStyles.badgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </Animated.View>
+        {isFocused && <View style={barStyles.activeDot} />}
+      </TouchableOpacity>
+    );
+  };
+
   const bottomOffset = Platform.OS === 'ios'
     ? Math.max(20, insets.bottom)
     : Math.max(16, insets.bottom + 8);
@@ -106,77 +175,20 @@ function CustomTabBar({
         />
       )}
 
-      {visibleRoutes.map((route, index) => {
-        const { options } = descriptors[route.key];
-        const isFocused = activeVisibleIndex === index;
-        const routeName = route.name;
+      {/* Left tabs (Home, Groups) */}
+      {visibleRoutes.slice(0, 2).map((route, index) => renderTab(route, index))}
 
-        // Get icon names
-        let iconActive = TAB_ICONS[routeName]?.active || 'ellipse';
-        let iconInactive = TAB_ICONS[routeName]?.inactive || 'ellipse-outline';
+      {/* Center action button */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onCenterPress}
+        style={barStyles.centerButton}
+      >
+        <Ionicons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
 
-        // Mentor override for home tab
-        if (routeName === 'index' && isMentor) {
-          iconActive = 'school';
-          iconInactive = 'school-outline';
-        }
-
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
-          }
-        };
-
-        const onLongPress = () => {
-          navigation.emit({
-            type: 'tabLongPress',
-            target: route.key,
-          });
-        };
-
-        return (
-          <TouchableOpacity
-            key={route.key}
-            accessibilityRole="button"
-            accessibilityState={isFocused ? { selected: true } : {}}
-            accessibilityLabel={options.tabBarAccessibilityLabel}
-            onPress={onPress}
-            onLongPress={onLongPress}
-            activeOpacity={0.7}
-            style={barStyles.tab}
-            onLayout={(e) => handleTabLayout(index, e)}
-          >
-            <Animated.View
-              style={[
-                barStyles.iconWrap,
-                { transform: [{ scale: scaleAnims[index] }] },
-              ]}
-            >
-              <Ionicons
-                name={(isFocused ? iconActive : iconInactive) as any}
-                size={24}
-                color={isFocused ? TAB_BLUE : TAB_INACTIVE}
-              />
-              {/* Notification badge on Home tab */}
-              {routeName === 'index' && unreadCount > 0 && (
-                <View style={barStyles.badge}>
-                  <Text style={barStyles.badgeText}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </Animated.View>
-            {/* Active dot */}
-            {isFocused && <View style={barStyles.activeDot} />}
-          </TouchableOpacity>
-        );
-      })}
+      {/* Right tabs (Progress, Profile) */}
+      {visibleRoutes.slice(2).map((route, index) => renderTab(route, index + 2))}
     </View>
   );
 }
@@ -244,18 +256,40 @@ const barStyles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
   },
+  centerButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: TAB_BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -12,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: TAB_BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
 });
 
 export default function TabLayout() {
   const { user } = useAuth();
   const { unreadCount } = useNotifications();
   const isMentor = user?.role === 'mentor';
+  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
 
   return (
     <View style={{ flex: 1 }}>
       <Tabs
         tabBar={(props) => (
-          <CustomTabBar {...props} isMentor={isMentor} unreadCount={unreadCount} />
+          <CustomTabBar
+            {...props}
+            isMentor={isMentor}
+            unreadCount={unreadCount}
+            onCenterPress={() => setShowWorkoutModal(true)}
+          />
         )}
         screenOptions={{
           headerShown: false,
@@ -302,6 +336,10 @@ export default function TabLayout() {
       </Tabs>
       <GlobalLobbyIndicator />
       <NetworkBanner />
+      <WorkoutActionModal
+        visible={showWorkoutModal}
+        onClose={() => setShowWorkoutModal(false)}
+      />
     </View>
   );
 }
