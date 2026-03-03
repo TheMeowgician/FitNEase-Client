@@ -134,6 +134,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   };
 
   const handleRegister = async () => {
+    if (isLoading) return; // Prevent double-submit
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -175,10 +176,19 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     } catch (error: any) {
       console.error('Registration error:', error);
 
-      // Handle specific error cases
+      // Detect network/timeout errors vs server errors
+      const isNetworkError = !error.response && (
+        error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error' || error.message?.includes('timeout')
+      );
+
+      let errorTitle = 'Registration Failed';
       let errorMessage = 'An error occurred during registration. Please try again.';
 
-      if (error.message) {
+      if (isNetworkError) {
+        errorTitle = 'Connection Problem';
+        errorMessage = 'Please check your internet connection and try again. Your form data is saved — just tap Submit again.';
+      } else if (error.message) {
         if (error.message.includes('email')) {
           errorMessage = 'This email address is already registered. Please use a different email or try logging in.';
         } else if (error.message.includes('username')) {
@@ -190,7 +200,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         }
       }
 
-      alert.error('Registration Failed', errorMessage);
+      alert.error(errorTitle, errorMessage);
     } finally {
       setIsLoading(false);
     }

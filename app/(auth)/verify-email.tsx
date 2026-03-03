@@ -133,7 +133,15 @@ export default function VerifyEmailScreen() {
       );
 
     } catch (error: any) {
-      setCodeError(error.message || 'Invalid verification code');
+      const isNetworkError = !error.response && (
+        error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error' || error.message?.includes('timeout')
+      );
+      if (isNetworkError) {
+        setCodeError('Connection problem. Please check your internet and try again.');
+      } else {
+        setCodeError(error.message || 'Invalid verification code. Please try again.');
+      }
     } finally {
       setIsVerifying(false);
     }
@@ -157,7 +165,15 @@ export default function VerifyEmailScreen() {
       setCountdown(60);
       setCanResend(false);
     } catch (error: any) {
-      alert.error('Resend Failed', error.message || 'Failed to resend email. Please try again.');
+      const isNetworkError = !error.response && (
+        error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error' || error.message?.includes('timeout')
+      );
+      if (isNetworkError) {
+        alert.error('Connection Problem', 'Please check your internet connection and try again.');
+      } else {
+        alert.error('Resend Failed', error.message || 'Failed to resend email. Please try again.');
+      }
     } finally {
       setIsResending(false);
     }

@@ -43,9 +43,14 @@ export default function CompleteScreen() {
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const onboardingData: OnboardingData | null = params.onboardingData
-    ? JSON.parse(params.onboardingData as string)
-    : null;
+  const onboardingData: OnboardingData | null = (() => {
+    if (!params.onboardingData) return null;
+    try {
+      return JSON.parse(params.onboardingData as string);
+    } catch {
+      return null;
+    }
+  })();
 
   useEffect(() => {
     if (onboardingData) {
@@ -56,71 +61,85 @@ export default function CompleteScreen() {
     }
   }, []);
 
+  const processingRef = React.useRef(false);
+  // Track which steps completed so "Try Again" skips them (prevents duplicate data)
+  const completedStepsRef = React.useRef<Set<string>>(new Set());
+
   const processOnboarding = async () => {
+    if (processingRef.current) return; // Prevent duplicate calls from rapid "Try Again" taps
+    processingRef.current = true;
+    const done = completedStepsRef.current;
+
     try {
       if (!onboardingData) return;
 
       console.log('🎯 Processing onboarding data:', onboardingData);
 
       // 1. Save fitness assessment with workout preferences
-      const assessmentPayload = {
-        assessment_type: 'initial_onboarding',
-        assessment_data: {
-          // Assessment data
-          fitness_level: onboardingData.assessment.currentFitnessLevel,
-          goals: onboardingData.assessment.primaryGoals,
-          experience_years: onboardingData.assessment.workoutExperience,
-          activity_level: onboardingData.assessment.weeklyActivityLevel,
-          weight: onboardingData.assessment.weight,
-          height: onboardingData.assessment.height,
-          age: onboardingData.assessment.age,
-          bmi: onboardingData.assessment.bmi,
-          // Workout preferences for ML model
+      if (!done.has('assessment')) {
+        const assessmentPayload = {
+          assessment_type: 'initial_onboarding',
+          assessment_data: {
+            fitness_level: onboardingData.assessment.currentFitnessLevel,
+            goals: onboardingData.assessment.primaryGoals,
+            experience_years: onboardingData.assessment.workoutExperience,
+            activity_level: onboardingData.assessment.weeklyActivityLevel,
+            weight: onboardingData.assessment.weight,
+            height: onboardingData.assessment.height,
+            age: onboardingData.assessment.age,
+            bmi: onboardingData.assessment.bmi,
+            target_muscle_groups: onboardingData.preferences.targetMuscleGroups,
+            available_equipment: onboardingData.preferences.availableEquipment,
+            time_constraints_minutes: onboardingData.preferences.timeConstraints,
+            preferred_workout_days: onboardingData.preferences.preferredDays,
+            onboarding_completed: true,
+          },
+          score: calculateFitnessScore(onboardingData.assessment)
+        };
+
+        console.log('💾 Saving fitness assessment:', assessmentPayload);
+        await authService.saveFitnessAssessment(assessmentPayload);
+        done.add('assessment');
+      }
+
+      // 2. Update user profile with personalization data and onboarding completed status
+      if (!done.has('profile')) {
+        console.log('📝 Updating user profile with personalization data...');
+        await authService.updateUserProfile({
           target_muscle_groups: onboardingData.preferences.targetMuscleGroups,
           available_equipment: onboardingData.preferences.availableEquipment,
           time_constraints_minutes: onboardingData.preferences.timeConstraints,
           preferred_workout_days: onboardingData.preferences.preferredDays,
-          onboarding_completed: true,
-        },
-        score: calculateFitnessScore(onboardingData.assessment)
-      };
+          fitness_goals: onboardingData.assessment.primaryGoals,
+          activity_level: onboardingData.assessment.weeklyActivityLevel,
+          workout_experience_years: onboardingData.assessment.workoutExperience,
+          age: onboardingData.assessment.age,
+          onboarding_completed: true
+        });
+        console.log('✅ User profile and fitness assessment saved successfully');
+        done.add('profile');
+      }
 
-      console.log('💾 Saving fitness assessment:', assessmentPayload);
-      await authService.saveFitnessAssessment(assessmentPayload);
+      // 3. Refresh user data to get updated onboarding_completed status
+      if (!done.has('refresh')) {
+        await refreshUser();
+        done.add('refresh');
+      }
 
-      // 2. Update user profile with personalization data and onboarding completed status
-      console.log('📝 Updating user profile with personalization data...');
-      await authService.updateUserProfile({
-        target_muscle_groups: onboardingData.preferences.targetMuscleGroups,
-        available_equipment: onboardingData.preferences.availableEquipment,
-        time_constraints_minutes: onboardingData.preferences.timeConstraints,
-        preferred_workout_days: onboardingData.preferences.preferredDays,
-        fitness_goals: onboardingData.assessment.primaryGoals,
-        activity_level: onboardingData.assessment.weeklyActivityLevel,
-        workout_experience_years: onboardingData.assessment.workoutExperience,
-        age: onboardingData.assessment.age,
-        onboarding_completed: true
-      });
-      console.log('✅ User profile and fitness assessment saved successfully with all onboarding data');
-
-      // 4. Refresh user data first to get updated onboarding_completed status
-      await refreshUser();
-
-      // 5. Unlock fitness level achievement (beginner/intermediate/advanced)
+      // 4. Unlock fitness level achievement (fire-and-forget, safe to re-run)
       const fitnessLevel = onboardingData.assessment.currentFitnessLevel as 'beginner' | 'intermediate' | 'advanced';
       console.log('🏆 Unlocking fitness level achievement:', fitnessLevel);
       engagementService.unlockLevelAchievement(user?.id || 0, fitnessLevel).catch((err) => {
         console.warn('⚠️ Could not unlock fitness level achievement (non-critical):', err);
       });
 
-      // 6. Initialize ML profile (non-blocking - errors are logged but don't fail onboarding)
+      // 5. Initialize ML profile (fire-and-forget, safe to re-run)
       console.log('🤖 Initializing ML profile...');
       authService.initializeMLProfile().catch((mlError) => {
         console.warn('⚠️ ML profile initialization failed (non-critical):', mlError);
-        // Silently fail - this is a non-critical operation that shouldn't block onboarding
       });
 
-      // 7. Generate initial weekly workout plan so dashboard has exercises immediately
+      // 6. Generate initial weekly workout plan so dashboard has exercises immediately
       if (user?.id) {
         try {
           console.log('📋 Generating initial weekly workout plan...');
@@ -140,10 +159,20 @@ export default function CompleteScreen() {
       setIsProcessing(false);
 
       console.log('✅ Onboarding completed successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Onboarding failed:', error);
-      setError(error instanceof Error ? error.message : 'Failed to complete onboarding');
+      const isNetworkError = !error.response && (
+        error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error' || error.message?.includes('timeout')
+      );
+      setError(
+        isNetworkError
+          ? 'Connection problem. Please check your internet and try again.'
+          : (error instanceof Error ? error.message : 'Failed to complete onboarding')
+      );
       setIsProcessing(false);
+    } finally {
+      processingRef.current = false;
     }
   };
 
@@ -259,7 +288,10 @@ export default function CompleteScreen() {
     return formatted + (muscleGroups.length > 3 ? ` +${muscleGroups.length - 3} more` : '');
   };
 
+  const navigatingRef = React.useRef(false);
   const handleGetStarted = () => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
     router.push('/(onboarding)/permissions');
   };
 

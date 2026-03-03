@@ -12,7 +12,6 @@ import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { WeekCalendarStrip } from '../../components/calendar/WeekCalendarStrip';
 import ProgressionCard from '../../components/ProgressionCard';
 import { ExerciseCard } from '../../components/exercise/ExerciseCard';
-import AchievementUnlockModal, { UnlockedAchievement } from '../../components/achievements/AchievementUnlockModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { useMLService } from '../../hooks/api/useMLService';
@@ -23,8 +22,8 @@ import { useProgressStore } from '../../stores/progressStore';
 import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
-import { engagementService } from '../../services/microservices/engagementService';
 import { generateTabataSession } from '../../services/workoutSessionGenerator';
+import { useAchievementStore } from '../../stores/achievementStore';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 import { getAlgorithmDisplayName } from '../../utils/mlUtils';
@@ -116,11 +115,7 @@ export default function HomeScreen() {
     this_week_assessment: { id: number; submitted_at: string; score: number } | null;
   }>({ completed_this_week: false, this_week_assessment: null }); // Track weekly assessment status
   const loadingRef = React.useRef(false); // Prevent duplicate concurrent loads
-  const fitnessLevelAchievementCheckedRef = React.useRef(false); // Track if we've checked for fitness level achievement
-
-  // Achievement detail modal state
-  const [showAchievementModal, setShowAchievementModal] = useState(false);
-  const [selectedAchievement, setSelectedAchievement] = useState<UnlockedAchievement | null>(null);
+  const achievementCheckRef = React.useRef(false); // Only reset achievement fetch once per session
 
   // Week calendar state
   const [currentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -258,84 +253,6 @@ export default function HomeScreen() {
     }
   };
 
-  const showAchievementUnlockModal = (achievementData: any) => {
-    setSelectedAchievement({
-      achievement_id: achievementData.achievement_id,
-      achievement_name: achievementData.achievement_name,
-      description: achievementData.description || 'Achievement unlocked!',
-      badge_icon: achievementData.badge_icon || 'trophy',
-      badge_color: achievementData.badge_color || COLORS.PRIMARY[600],
-      rarity_level: achievementData.rarity_level || 'common',
-      points_value: achievementData.points_value || 0,
-    });
-    setShowAchievementModal(true);
-  };
-
-  /**
-   * Check if user has their fitness level achievement unlocked.
-   * If not, unlock it. This handles existing users who completed onboarding
-   * before the achievement unlock was implemented.
-   */
-  const checkAndUnlockFitnessLevelAchievement = async (
-    userAchievements: any[],
-    userFitnessLevel: string
-  ) => {
-    // Only check once per session
-    if (fitnessLevelAchievementCheckedRef.current) {
-      return;
-    }
-    fitnessLevelAchievementCheckedRef.current = true;
-
-    if (!user || !userFitnessLevel) {
-      return;
-    }
-
-    // Map fitness level to achievement name (capitalized)
-    const levelAchievementName = userFitnessLevel.charAt(0).toUpperCase() + userFitnessLevel.slice(1);
-
-    // Check if user already has this achievement
-    const hasAchievement = userAchievements.some(
-      (ua: any) => ua.achievement?.achievement_name === levelAchievementName
-    );
-
-    if (!hasAchievement) {
-      console.log(`🏆 [DASHBOARD] User missing ${levelAchievementName} achievement, unlocking...`);
-      const validLevel = userFitnessLevel as 'beginner' | 'intermediate' | 'advanced';
-      const result = await engagementService.unlockLevelAchievement(user.id, validLevel);
-      if (result) {
-        console.log(`✅ [DASHBOARD] Successfully unlocked ${levelAchievementName} achievement!`);
-        showAchievementUnlockModal(result);
-
-        // Refresh achievements list so the new one appears in the grid
-        const refreshed = await getUserAchievements(user.id).catch(() => []);
-        setAchievements(refreshed || []);
-      } else {
-        console.warn(`⚠️ [DASHBOARD] Could not unlock ${levelAchievementName} achievement`);
-      }
-    } else {
-      // Achievement exists — show modal if it was earned recently (e.g. during onboarding)
-      const match = userAchievements.find(
-        (ua: any) => ua.achievement?.achievement_name === levelAchievementName
-      );
-      if (match?.earned_at) {
-        const earnedAt = new Date(match.earned_at).getTime();
-        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        if (earnedAt > twoMinutesAgo) {
-          console.log(`🏆 [DASHBOARD] ${levelAchievementName} was earned recently, showing modal`);
-          showAchievementUnlockModal({
-            achievement_id: match.achievement?.achievement_id,
-            achievement_name: match.achievement?.achievement_name,
-            description: match.achievement?.description,
-            badge_icon: match.achievement?.badge_icon,
-            badge_color: match.achievement?.badge_color,
-            rarity_level: match.achievement?.rarity_level,
-            points_value: match.points_earned,
-          });
-        }
-      }
-    }
-  };
-
   const loadDashboardData = async () => {
     if (!user) {
       console.warn('📊 [DASHBOARD] No user found, skipping data load');
@@ -346,6 +263,13 @@ export default function HomeScreen() {
     if (loadingRef.current) {
       console.log('📊 [DASHBOARD] Already loading, skipping duplicate call');
       return;
+    }
+
+    // On first dashboard load, tell AchievementHandler to re-check for
+    // unseen achievements (e.g. fitness level badge earned during onboarding)
+    if (!achievementCheckRef.current) {
+      achievementCheckRef.current = true;
+      useAchievementStore.getState().resetFetchFlag();
     }
 
     try {
@@ -439,9 +363,6 @@ export default function HomeScreen() {
       }
 
       setFitnessLevel(determinedFitnessLevel);
-
-      // Check and unlock fitness level achievement if missing (for existing users)
-      checkAndUnlockFitnessLevelAchievement(achievementsResponse || [], determinedFitnessLevel);
 
       // If still no recommendations, log warning but don't block UI
       if (!recommendations || recommendations.length === 0) {
@@ -1030,24 +951,9 @@ export default function HomeScreen() {
                 const achievementName = userAchievement.achievement?.achievement_name || 'Achievement';
                 const achievementIcon = getAchievementIcon(achievementName);
                 return (
-                  <TouchableOpacity
+                  <View
                     key={index}
                     style={styles.achievementCard}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      // Convert to UnlockedAchievement format for modal
-                      const achievementData: UnlockedAchievement = {
-                        achievement_id: userAchievement.achievement?.achievement_id || index,
-                        achievement_name: achievementName,
-                        description: userAchievement.achievement?.description || 'You earned this achievement!',
-                        badge_icon: userAchievement.achievement?.badge_icon || 'trophy',
-                        badge_color: userAchievement.achievement?.badge_color || COLORS.PRIMARY[600],
-                        rarity_level: userAchievement.achievement?.rarity_level || 'common',
-                        points_value: userAchievement.points_earned || 0,
-                      };
-                      setSelectedAchievement(achievementData);
-                      setShowAchievementModal(true);
-                    }}
                   >
                     <View style={[styles.achievementBadge, { backgroundColor: achievementIcon ? 'transparent' : (userAchievement.achievement?.badge_color || COLORS.PRIMARY[600]) }]}>
                       {achievementIcon ? (
@@ -1066,7 +972,7 @@ export default function HomeScreen() {
                     <Text style={styles.achievementPoints}>
                       {userAchievement.points_earned || 0} pts
                     </Text>
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
@@ -1179,15 +1085,6 @@ export default function HomeScreen() {
         onStartWorkout={handleStartWorkout}
       />
 
-      {/* Achievement Detail Modal */}
-      <AchievementUnlockModal
-        visible={showAchievementModal}
-        achievements={selectedAchievement ? [selectedAchievement] : []}
-        onClose={() => {
-          setShowAchievementModal(false);
-          setSelectedAchievement(null);
-        }}
-      />
     </SafeAreaView>
   );
 }

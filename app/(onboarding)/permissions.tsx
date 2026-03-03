@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -133,6 +134,7 @@ export default function PermissionsScreen() {
   }, []);
 
   const handleAllowAll = async () => {
+    if (isRequesting) return; // Prevent re-entry on rapid taps
     setIsRequesting(true);
     try {
       // Request permissions sequentially to avoid dialog overlap
@@ -161,8 +163,20 @@ export default function PermissionsScreen() {
     }
   };
 
+  const navigatingRef = useRef(false);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
   const handleContinue = () => {
-    router.replace('/(tabs)');
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+    // Smooth fade-out before navigating to dashboard
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      router.replace('/(tabs)');
+    });
   };
 
   const allGranted = Object.values(permissions).every((s) => s === 'granted');
@@ -194,6 +208,7 @@ export default function PermissionsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -301,6 +316,7 @@ export default function PermissionsScreen() {
           />
         </TouchableOpacity>
       </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }

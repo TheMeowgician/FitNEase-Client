@@ -10,7 +10,10 @@ import { FONTS } from '../../constants/fonts';
 const { width } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
+  const navigatingRef = React.useRef(false);
   const handleContinue = () => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
     router.push('/(onboarding)/fitness-assessment');
   };
 

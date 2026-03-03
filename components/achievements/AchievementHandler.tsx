@@ -31,13 +31,22 @@ export function AchievementHandler() {
 
   const appState = useRef(AppState.currentState);
   const lastFetchTime = useRef<number>(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasRetriedRef = useRef(false);
   const MIN_FETCH_INTERVAL = 30000; // 30 seconds between fetches
 
   /**
    * Fetch unseen achievements from the backend
    */
   const fetchUnseenAchievements = useCallback(async () => {
-    if (!isAuthenticated || !user?.user_id) {
+    if (!isAuthenticated || !user?.id) {
+      return;
+    }
+
+    // Don't show achievements during onboarding — wait until user reaches dashboard
+    if (!user.onboardingCompleted) {
+      console.log('🏆 [ACHIEVEMENT HANDLER] Skipping - onboarding not complete');
+      setHasFetchedUnseen(true);
       return;
     }
 
@@ -52,7 +61,7 @@ export function AchievementHandler() {
       console.log('🏆 [ACHIEVEMENT HANDLER] Fetching unseen achievements...');
       lastFetchTime.current = now;
 
-      const unseen = await engagementService.getUnseenAchievements(user.user_id);
+      const unseen = await engagementService.getUnseenAchievements(user.id);
 
       if (unseen && unseen.length > 0) {
         console.log('🏆 [ACHIEVEMENT HANDLER] Found unseen achievements:', unseen.length);
@@ -63,13 +72,24 @@ export function AchievementHandler() {
         }, 500);
       } else {
         console.log('🏆 [ACHIEVEMENT HANDLER] No unseen achievements');
+        // If first fetch found nothing, schedule one retry after 5s.
+        // This handles the race condition where achievements are still
+        // being written to DB (e.g. after onboarding completes).
+        if (!hasRetriedRef.current) {
+          hasRetriedRef.current = true;
+          console.log('🏆 [ACHIEVEMENT HANDLER] Scheduling one retry in 5s...');
+          retryTimerRef.current = setTimeout(() => {
+            lastFetchTime.current = 0; // Reset throttle for retry
+            fetchUnseenAchievements();
+          }, 5000);
+        }
       }
 
       setHasFetchedUnseen(true);
     } catch (error) {
       console.warn('🏆 [ACHIEVEMENT HANDLER] Error fetching unseen achievements:', error);
     }
-  }, [isAuthenticated, user?.user_id, addUnlockedAchievements, showModal, setHasFetchedUnseen]);
+  }, [isAuthenticated, user?.id, user?.onboardingCompleted, addUnlockedAchievements, showModal, setHasFetchedUnseen]);
 
   /**
    * Handle modal close - mark achievements as seen
@@ -82,32 +102,42 @@ export function AchievementHandler() {
     hideModal();
 
     // Mark achievements as seen in the backend
-    if (idsToMark.length > 0 && user?.user_id) {
+    if (idsToMark.length > 0 && user?.id) {
       console.log('🏆 [ACHIEVEMENT HANDLER] Marking as seen:', idsToMark);
-      await engagementService.markAchievementsSeen(user.user_id, idsToMark);
+      await engagementService.markAchievementsSeen(user.id, idsToMark);
     }
-  }, [getPendingSeenIds, hideModal, user?.user_id]);
+  }, [getPendingSeenIds, hideModal, user?.id]);
 
   /**
    * Effect: Fetch unseen achievements when user authenticates
    */
   useEffect(() => {
-    if (isAuthenticated && user?.user_id && !hasFetchedUnseen) {
-      // Delay initial fetch to let the app settle after login
+    if (isAuthenticated && user?.id && !hasFetchedUnseen) {
+      // Reset throttle and retry state so a fresh fetch can run
+      // (covers both initial login and post-onboarding re-check)
+      lastFetchTime.current = 0;
+      hasRetriedRef.current = false;
+
+      // Delay fetch to let the app settle
       const timer = setTimeout(() => {
         fetchUnseenAchievements();
       }, 1500);
 
       return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, user?.user_id, hasFetchedUnseen, fetchUnseenAchievements]);
+  }, [isAuthenticated, user?.id, hasFetchedUnseen, fetchUnseenAchievements]);
 
   /**
-   * Effect: Reset fetch flag when user logs out
+   * Effect: Reset fetch flag and retry state when user logs out
    */
   useEffect(() => {
     if (!isAuthenticated) {
       resetFetchFlag();
+      hasRetriedRef.current = false;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
     }
   }, [isAuthenticated, resetFetchFlag]);
 
@@ -121,7 +151,7 @@ export function AchievementHandler() {
         appState.current.match(/inactive|background/) &&
         nextAppState === 'active' &&
         isAuthenticated &&
-        user?.user_id
+        user?.id
       ) {
         console.log('🏆 [ACHIEVEMENT HANDLER] App became active, checking for unseen achievements');
         fetchUnseenAchievements();
@@ -132,7 +162,16 @@ export function AchievementHandler() {
     return () => {
       subscription.remove();
     };
-  }, [isAuthenticated, user?.user_id, fetchUnseenAchievements]);
+  }, [isAuthenticated, user?.id, fetchUnseenAchievements]);
+
+  // Clean up retry timer on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+    };
+  }, []);
 
   // Don't render modal if not authenticated or no achievements
   if (!isAuthenticated) {
