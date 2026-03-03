@@ -47,6 +47,7 @@ export default function ForgotPasswordScreen() {
 
   const alert = useAlert();
   const verificationInputRef = useRef<VerificationCodeInputRef>(null);
+  const submittingRef = useRef(false);
 
   const getStatusBarHeight = () => {
     if (Platform.OS === 'android') {
@@ -77,6 +78,7 @@ export default function ForgotPasswordScreen() {
 
   // Step 1: Send reset code
   const handleSendCode = async () => {
+    if (submittingRef.current) return;
     setEmailError('');
 
     if (!email) {
@@ -88,6 +90,7 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
+    submittingRef.current = true;
     setIsLoading(true);
     try {
       await authService.forgotPassword({ email: email.trim().toLowerCase() });
@@ -105,11 +108,14 @@ export default function ForgotPasswordScreen() {
       }
     } finally {
       setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 
   // Resend code
   const handleResendCode = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsLoading(true);
     setCodeError('');
     setEnteredCode('');
@@ -124,6 +130,7 @@ export default function ForgotPasswordScreen() {
       alert.error('Resend Failed', error.message || 'Failed to resend code. Please try again.');
     } finally {
       setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -149,6 +156,7 @@ export default function ForgotPasswordScreen() {
 
   // Step 3: Reset password
   const handleResetPassword = async () => {
+    if (submittingRef.current) return;
     setPasswordError('');
     setConfirmError('');
 
@@ -172,6 +180,7 @@ export default function ForgotPasswordScreen() {
 
     if (hasError) return;
 
+    submittingRef.current = true;
     setIsLoading(true);
     try {
       await authService.resetPassword({
@@ -206,6 +215,7 @@ export default function ForgotPasswordScreen() {
       }
     } finally {
       setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 

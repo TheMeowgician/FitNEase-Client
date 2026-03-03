@@ -39,6 +39,7 @@ export default function VerifyEmailScreen() {
   const { user, verifyEmail, resendVerification } = useAuth();
   const alert = useAlert();
   const verificationInputRef = useRef<VerificationCodeInputRef>(null);
+  const verifyingRef = useRef(false);
 
   // Get status bar height for Android
   const getStatusBarHeight = () => {
@@ -101,6 +102,8 @@ export default function VerifyEmailScreen() {
 
   // Email verification
   const handleVerifyEmail = async (code?: string) => {
+    if (verifyingRef.current) return;
+
     const verificationCode = code || enteredCode;
 
     if (!verificationCode || verificationCode.length !== 6) {
@@ -111,6 +114,7 @@ export default function VerifyEmailScreen() {
       return;
     }
 
+    verifyingRef.current = true;
     setIsVerifying(true);
     setCodeError('');
 
@@ -144,6 +148,7 @@ export default function VerifyEmailScreen() {
       }
     } finally {
       setIsVerifying(false);
+      verifyingRef.current = false;
     }
   };
 

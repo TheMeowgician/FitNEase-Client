@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, ViewStyle, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -34,6 +34,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
   const { login, user } = useAuth();
   const alert = useAlert();
+  const submittingRef = useRef(false);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -61,8 +62,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   };
 
   const handleLogin = async () => {
+    if (submittingRef.current) return;
     if (!validateForm()) return;
 
+    submittingRef.current = true;
     setIsLoading(true);
     try {
       const success = await login(email, password);
@@ -81,9 +84,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         }, 200);
       }
     } catch (error: any) {
+      const isNetworkError = !error.response && (
+        error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error' || error.message?.includes('timeout')
+      );
+
+      let errorTitle = 'Login Failed';
       let errorMessage = 'An error occurred during login. Please try again.';
 
-      if (error.message) {
+      if (isNetworkError) {
+        errorTitle = 'Connection Problem';
+        errorMessage = 'Please check your internet connection and try again.';
+      } else if (error.message) {
         if (error.message.includes('email') || error.message.includes('user')) {
           errorMessage = 'No account found with this email address. Please check your email or create a new account.';
         } else if (error.message.includes('password') || error.message.includes('credential')) {
@@ -95,9 +107,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         }
       }
 
-      alert.error('Login Failed', errorMessage);
+      alert.error(errorTitle, errorMessage);
     } finally {
       setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 
