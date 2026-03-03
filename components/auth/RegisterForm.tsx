@@ -47,7 +47,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     formData.dateOfBirth ? parseISODate(formData.dateOfBirth) : null
   );
   const [calculatedAge, setCalculatedAge] = useState<number | null>(null);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   // Calculate age when birthdate changes
   useEffect(() => {
@@ -125,9 +124,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       newErrors.contactNumber = 'Contact number must be 11 digits';
     }
 
-    // Terms agreement validation
-    if (!agreedToTerms) newErrors.agreedToTerms = 'You must agree to the terms';
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -170,10 +166,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       // Handle successful registration
       alert.success(
         'Registration Successful!',
-        (response.requiresEmailVerification
-          ? 'Please check your email to verify your account. '
-          : '') +
-        'Next, please review our health disclaimer.',
+        response.requiresEmailVerification
+          ? 'Please check your email to verify your account.'
+          : 'Your account has been created successfully.',
         () => onSuccess(response.requiresEmailVerification, formData.email)
       );
 
@@ -473,29 +468,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         />
         <Text style={styles.hintText}>Repeat your password again correctly.</Text>
 
-        {/* Terms and Privacy */}
-        <View style={styles.termsContainer}>
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setAgreedToTerms(!agreedToTerms)}
-          >
-            <View style={styles.checkboxContainer}>
-              <Ionicons
-                name={agreedToTerms ? "checkbox" : "square-outline"}
-                size={20}
-                color={agreedToTerms ? "#0091FF" : COLORS.SECONDARY[400]}
-              />
-            </View>
-            <Text style={styles.termsText}>
-              I confirm that I have read, understood and agree to Privacy Policy.{'\n'}
-              You agree to our Terms of Service and that you have read our Data Policy and Privacy Policy, including our Cookie Use. This data needs only to craft your Tabata workout plan which provides you with security.
-            </Text>
-          </TouchableOpacity>
-          {errors.agreedToTerms && (
-            <Text style={styles.errorText}>{errors.agreedToTerms}</Text>
-          )}
-        </View>
-
         {/* Submit Button */}
         <View style={styles.submitContainer}>
           <Button
@@ -575,25 +547,6 @@ const styles = {
     color: COLORS.SECONDARY[500],
     marginTop: -12,
     marginBottom: 16,
-  },
-  termsContainer: {
-    marginTop: 24,
-    marginBottom: 24,
-  },
-  termsRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
-  },
-  checkboxContainer: {
-    marginRight: 12,
-    marginTop: 4,
-  },
-  termsText: {
-    fontSize: FONT_SIZES.XS,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
-    lineHeight: 20,
-    flex: 1,
   },
   errorText: {
     fontSize: FONT_SIZES.XS,

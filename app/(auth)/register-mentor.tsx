@@ -11,13 +11,16 @@ import { COLORS } from '../../constants/colors';
 export default function RegisterMentorScreen() {
 
   const handleRegistrationSuccess = (requiresEmailVerification: boolean, userEmail?: string) => {
-    // Navigate directly to disclaimer screen - the RegisterMentorForm already showed a success alert
-    router.push({
-      pathname: '/(auth)/disclaimer',
-      params: {
-        email: requiresEmailVerification ? userEmail : undefined,
-      }
-    });
+    // Terms already accepted on disclaimer screen before registration
+    // Navigate directly to email verification
+    if (requiresEmailVerification && userEmail) {
+      router.push({
+        pathname: '/(auth)/verify-email',
+        params: { email: userEmail }
+      });
+    } else {
+      router.push('/(onboarding)/welcome');
+    }
   };
 
   const navigateToLogin = () => {

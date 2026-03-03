@@ -20,7 +20,7 @@ const DISCLAIMER_KEY = '@fitnease_disclaimer_accepted';
 const SUPPORT_EMAIL = 'support.recoders@gmail.com';
 
 export default function DisclaimerScreen() {
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; selectedRole?: string }>();
   const alert = useAlert();
   const [isAcknowledged, setIsAcknowledged] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,8 +43,16 @@ export default function DisclaimerScreen() {
       // Disclaimer acceptance is stored locally above
       // The user profile doesn't have disclaimer fields, so we skip the API update
 
-      // Navigate to email verification or onboarding
-      if (params.email) {
+      // Navigate to registration (terms accepted before account creation)
+      if (params.selectedRole === 'mentor') {
+        router.replace('/(auth)/register-mentor');
+      } else if (params.selectedRole) {
+        router.replace({
+          pathname: '/(auth)/register',
+          params: { selectedRole: params.selectedRole }
+        });
+      } else if (params.email) {
+        // Fallback: if somehow navigated here with email (legacy path)
         router.replace({
           pathname: '/(auth)/verify-email',
           params: { email: params.email }

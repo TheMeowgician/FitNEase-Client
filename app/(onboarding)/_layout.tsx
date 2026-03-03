@@ -18,6 +18,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="fitness-assessment" />
       <Stack.Screen name="preferences" />
       <Stack.Screen name="complete" />
+      <Stack.Screen name="permissions" />
     </Stack>
   );
 }

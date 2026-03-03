@@ -11,6 +11,7 @@ import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { authService } from '../../services/microservices/authService';
 import { engagementService } from '../../services/microservices/engagementService';
+import { planningService } from '../../services/microservices/planningService';
 import { useAuth } from '../../contexts/AuthContext';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 
@@ -118,6 +119,22 @@ export default function CompleteScreen() {
         console.warn('⚠️ ML profile initialization failed (non-critical):', mlError);
         // Silently fail - this is a non-critical operation that shouldn't block onboarding
       });
+
+      // 7. Generate initial weekly workout plan so dashboard has exercises immediately
+      if (user?.id) {
+        try {
+          console.log('📋 Generating initial weekly workout plan...');
+          await planningService.generateWeeklyPlan({
+            user_id: parseInt(user.id),
+            regenerate: false,
+            client_session_count: 0,
+          });
+          console.log('✅ Initial weekly plan generated successfully');
+        } catch (planError) {
+          console.warn('⚠️ Initial plan generation failed (non-blocking):', planError);
+          // Non-blocking: user can manually generate from weekly-plan page
+        }
+      }
 
       setIsComplete(true);
       setIsProcessing(false);
@@ -243,7 +260,7 @@ export default function CompleteScreen() {
   };
 
   const handleGetStarted = () => {
-    router.replace('/(tabs)');
+    router.push('/(onboarding)/permissions');
   };
 
   if (error) {

@@ -50,14 +50,11 @@ export default function RoleSelection() {
 
     console.log('Selected role:', selectedRole);
 
-    if (selectedRole.id === 'mentor') {
-      router.push('/(auth)/register-mentor');
-    } else {
-      router.push({
-        pathname: '/(auth)/register',
-        params: { selectedRole: selectedRole.id }
-      });
-    }
+    // Navigate to disclaimer first — user must accept terms before registration
+    router.push({
+      pathname: '/(auth)/disclaimer',
+      params: { selectedRole: selectedRole.id }
+    });
   };
 
   const handleBackPress = () => {
