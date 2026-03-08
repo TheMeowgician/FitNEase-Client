@@ -12,6 +12,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { socialService, Group } from '../../services/microservices/socialService';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 import { useReverb } from '../../contexts/ReverbProvider';
+import { mediaService } from '../../services/microservices/mediaService';
 
 export default function GroupsScreen() {
   const { user } = useAuth();
@@ -344,8 +346,15 @@ export default function GroupsScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.groupCardHeader}>
-                    <View style={[styles.groupAvatar, { backgroundColor: COLORS.PRIMARY[600] }]}>
-                      <Ionicons name="people" size={28} color="white" />
+                    <View style={[styles.groupAvatar, { backgroundColor: COLORS.PRIMARY[600], overflow: 'hidden' }]}>
+                      {group.groupImage ? (
+                        <Image
+                          source={{ uri: mediaService.getFullMediaUrl(group.groupImage) }}
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      ) : (
+                        <Ionicons name="people" size={28} color="white" />
+                      )}
                     </View>
                     <View style={styles.groupInfo}>
                       <Text style={styles.groupName}>{group.name}</Text>
@@ -398,8 +407,15 @@ export default function GroupsScreen() {
               {publicGroups.map((group) => (
                 <View key={group.id} style={styles.groupCard}>
                   <View style={styles.groupCardHeader}>
-                    <View style={[styles.groupAvatar, { backgroundColor: '#3B82F6' }]}>
-                      <Ionicons name="globe" size={28} color="white" />
+                    <View style={[styles.groupAvatar, { backgroundColor: '#3B82F6', overflow: 'hidden' }]}>
+                      {group.groupImage ? (
+                        <Image
+                          source={{ uri: mediaService.getFullMediaUrl(group.groupImage) }}
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      ) : (
+                        <Ionicons name="globe" size={28} color="white" />
+                      )}
                     </View>
                     <View style={styles.groupInfo}>
                       <Text style={styles.groupName}>{group.name}</Text>

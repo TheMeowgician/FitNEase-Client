@@ -91,11 +91,16 @@ export default function GroupDetailsScreen() {
   const [selectedMember, setSelectedMember] = useState<GroupMember | null>(null);
   const [showMemberPreview, setShowMemberPreview] = useState(false);
 
+  // Image picker modal state
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+
   // Animation values for smooth modal fade in/out
   const inviteModalFade = useRef(new Animated.Value(0)).current;
   const inviteModalScale = useRef(new Animated.Value(0.9)).current;
   const settingsModalFade = useRef(new Animated.Value(0)).current;
   const settingsModalScale = useRef(new Animated.Value(0.9)).current;
+  const imagePickerModalFade = useRef(new Animated.Value(0)).current;
+  const imagePickerModalScale = useRef(new Animated.Value(0.9)).current;
 
   // Animate invite modal
   useEffect(() => {
@@ -121,14 +126,27 @@ export default function GroupDetailsScreen() {
     }
   }, [showSettingsModal]);
 
+  // Animate image picker modal
+  useEffect(() => {
+    if (showImagePickerModal) {
+      imagePickerModalFade.setValue(0);
+      imagePickerModalScale.setValue(0.9);
+      Animated.parallel([
+        Animated.timing(imagePickerModalFade, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(imagePickerModalScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [showImagePickerModal]);
+
   useEffect(() => {
     loadGroupDetails();
   }, [id]);
 
-  // Refresh lobby state when screen comes into focus
+  // Refresh lobby state and group details when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       refreshLobbyState();
+      loadGroupDetails();
     }, [id])
   );
 
@@ -338,18 +356,7 @@ export default function GroupDetailsScreen() {
 
   const handleGroupImagePress = () => {
     if (userRole !== 'owner' || isUploadingImage) return;
-
-    const options: { text: string; onPress?: () => void; style?: 'destructive' | 'cancel' | 'default' }[] = [
-      { text: 'Take Photo', onPress: () => pickGroupImage('camera') },
-      { text: 'Choose from Gallery', onPress: () => pickGroupImage('gallery') },
-    ];
-
-    if (group?.groupImage) {
-      options.push({ text: 'Remove Image', onPress: handleRemoveGroupImage, style: 'destructive' });
-    }
-
-    options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Group Image', 'Choose an option', options);
+    setShowImagePickerModal(true);
   };
 
   const pickGroupImage = async (source: 'camera' | 'gallery') => {
@@ -729,11 +736,8 @@ export default function GroupDetailsScreen() {
       >
         {/* Group Info Card */}
         <View style={styles.groupInfoCard}>
-          <TouchableOpacity
+          <View
             style={[styles.groupAvatarLarge, { backgroundColor: COLORS.PRIMARY[600] }]}
-            onPress={handleGroupImagePress}
-            activeOpacity={userRole === 'owner' ? 0.7 : 1}
-            disabled={userRole !== 'owner' || isUploadingImage}
           >
             {isUploadingImage ? (
               <ActivityIndicator size="large" color="white" />
@@ -745,12 +749,7 @@ export default function GroupDetailsScreen() {
             ) : (
               <Ionicons name="people" size={48} color="white" />
             )}
-            {userRole === 'owner' && !isUploadingImage && (
-              <View style={styles.groupAvatarEditBadge}>
-                <Ionicons name="camera" size={14} color="white" />
-              </View>
-            )}
-          </TouchableOpacity>
+          </View>
 
           <Text style={styles.groupNameLarge}>{group.name}</Text>
 
@@ -1094,6 +1093,17 @@ export default function GroupDetailsScreen() {
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Group Information</Text>
 
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  setTimeout(() => setShowImagePickerModal(true), 300);
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="camera-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Change Group Image</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.settingsOption} onPress={handleEditGroupName}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="create-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1209,6 +1219,62 @@ export default function GroupDetailsScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Image Picker Modal */}
+      <Modal
+        visible={showImagePickerModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowImagePickerModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.settingsModalContent, { opacity: imagePickerModalFade, transform: [{ scale: imagePickerModalScale }] }]}>
+            <View style={styles.settingsModalHeader}>
+              <Text style={styles.settingsModalTitle}>Group Image</Text>
+              <TouchableOpacity onPress={() => setShowImagePickerModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                setShowImagePickerModal(false);
+                pickGroupImage('camera');
+              }}>
+                <View style={styles.settingsOptionLeft}>
+                  <Ionicons name="camera-outline" size={22} color={COLORS.PRIMARY[600]} />
+                  <Text style={styles.settingsOptionText}>Take Photo</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                setShowImagePickerModal(false);
+                pickGroupImage('gallery');
+              }}>
+                <View style={styles.settingsOptionLeft}>
+                  <Ionicons name="images-outline" size={22} color={COLORS.PRIMARY[600]} />
+                  <Text style={styles.settingsOptionText}>Choose from Gallery</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+              </TouchableOpacity>
+
+              {group?.groupImage && (
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowImagePickerModal(false);
+                  handleRemoveGroupImage();
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                    <Text style={[styles.settingsOptionText, { color: '#EF4444' }]}>Remove Image</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#EF4444" />
+                </TouchableOpacity>
+              )}
+            </View>
           </Animated.View>
         </View>
       </Modal>

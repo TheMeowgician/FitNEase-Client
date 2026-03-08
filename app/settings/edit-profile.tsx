@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,10 @@ export default function EditProfileScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
   const alert = useAlert();
-  const { isUploading, showOptions } = useProfilePicture();
+  const { isUploading, pickAndUpload, takePhoto, removePicture } = useProfilePicture();
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const imagePickerFade = useRef(new Animated.Value(0)).current;
+  const imagePickerScale = useRef(new Animated.Value(0.9)).current;
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -51,6 +54,17 @@ export default function EditProfileScreen() {
       }
     }
   }, [user]);
+
+  useEffect(() => {
+    if (showImagePickerModal) {
+      imagePickerFade.setValue(0);
+      imagePickerScale.setValue(0.9);
+      Animated.parallel([
+        Animated.timing(imagePickerFade, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(imagePickerScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [showImagePickerModal]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -106,7 +120,7 @@ export default function EditProfileScreen() {
 
       <ScrollView style={s.scrollView} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={s.avatarSection}>
-          <TouchableOpacity onPress={() => showOptions(!!user?.profilePicture)} activeOpacity={0.7} disabled={isUploading}>
+          <TouchableOpacity onPress={() => setShowImagePickerModal(true)} activeOpacity={0.7} disabled={isUploading}>
             <Avatar profilePicture={user?.profilePicture} size="xl" />
             {isUploading && (
               <View style={s.avatarOverlay}>
@@ -114,7 +128,7 @@ export default function EditProfileScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={s.changePhotoButton} activeOpacity={0.7} onPress={() => showOptions(!!user?.profilePicture)} disabled={isUploading}>
+          <TouchableOpacity style={s.changePhotoButton} activeOpacity={0.7} onPress={() => setShowImagePickerModal(true)} disabled={isUploading}>
             <Text style={s.changePhotoText}>{isUploading ? 'Uploading...' : 'Change Photo'}</Text>
           </TouchableOpacity>
         </View>
@@ -193,6 +207,61 @@ export default function EditProfileScreen() {
           style={{ ...s.saveButton, backgroundColor: !isSaving ? COLORS.PRIMARY[500] : COLORS.NEUTRAL[300] }}
         />
       </View>
+      {/* Image Picker Modal */}
+      <Modal
+        visible={showImagePickerModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowImagePickerModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Animated.View style={[s.pickerModalContent, { opacity: imagePickerFade, transform: [{ scale: imagePickerScale }] }]}>
+            <View style={s.pickerModalHeader}>
+              <Text style={s.pickerModalTitle}>Profile Picture</Text>
+              <TouchableOpacity onPress={() => setShowImagePickerModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <TouchableOpacity style={s.pickerOption} onPress={() => {
+                setShowImagePickerModal(false);
+                takePhoto();
+              }}>
+                <View style={s.pickerOptionLeft}>
+                  <Ionicons name="camera-outline" size={22} color={COLORS.PRIMARY[600]} />
+                  <Text style={s.pickerOptionText}>Take Photo</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.pickerOption} onPress={() => {
+                setShowImagePickerModal(false);
+                pickAndUpload();
+              }}>
+                <View style={s.pickerOptionLeft}>
+                  <Ionicons name="images-outline" size={22} color={COLORS.PRIMARY[600]} />
+                  <Text style={s.pickerOptionText}>Choose from Gallery</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+              </TouchableOpacity>
+
+              {user?.profilePicture && (
+                <TouchableOpacity style={s.pickerOption} onPress={() => {
+                  setShowImagePickerModal(false);
+                  removePicture();
+                }}>
+                  <View style={s.pickerOptionLeft}>
+                    <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                    <Text style={[s.pickerOptionText, { color: '#EF4444' }]}>Remove Picture</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#EF4444" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -218,4 +287,11 @@ const s = StyleSheet.create({
   genderButtonText: { fontSize: 14, fontFamily: FONTS.REGULAR, color: COLORS.SECONDARY[600] },
   buttonContainer: { paddingHorizontal: 24, paddingBottom: 24, paddingTop: 16 },
   saveButton: { shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  pickerModalContent: { backgroundColor: COLORS.NEUTRAL.WHITE, borderRadius: 20, padding: 24, width: '100%', maxWidth: 500 },
+  pickerModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  pickerModalTitle: { fontSize: 20, fontFamily: FONTS.BOLD, color: COLORS.SECONDARY[900] },
+  pickerOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, backgroundColor: COLORS.NEUTRAL[50], borderRadius: 12, marginBottom: 8 },
+  pickerOptionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pickerOptionText: { fontSize: 16, fontFamily: FONTS.SEMIBOLD, color: COLORS.SECONDARY[900] },
 });
