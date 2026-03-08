@@ -517,7 +517,7 @@ export class SocialService {
     limit: number;
   }> {
     try {
-      const response = await apiClient.get('social', `/api/groups/${groupId}/members?page=${page}&limit=${limit}`);
+      const response = await apiClient.get('social', `/api/groups/${groupId}/members?page=${page}&per_page=${limit}`);
 
       // Transform Laravel response
       const rawData = response.data.data || response.data;

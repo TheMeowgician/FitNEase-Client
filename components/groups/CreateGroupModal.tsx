@@ -265,7 +265,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                 value={formData.max_members?.toString() || ''}
                 onChangeText={(text) => {
                   const num = parseInt(text);
-                  setFormData({ ...formData, max_members: isNaN(num) ? 10 : num });
+                  setFormData({ ...formData, max_members: isNaN(num) ? undefined : num });
                 }}
                 keyboardType="number-pad"
                 maxLength={2}

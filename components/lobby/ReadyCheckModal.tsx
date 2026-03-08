@@ -8,6 +8,7 @@ import {
   Animated,
   Vibration,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
@@ -345,7 +346,7 @@ export function ReadyCheckModal() {
           </View>
 
           {/* Member List */}
-          <View style={styles.memberList}>
+          <ScrollView style={styles.memberList} nestedScrollEnabled showsVerticalScrollIndicator>
             {Object.values(responses).map((response) => (
               <View key={response.userId} style={styles.memberItem}>
                 <View style={[
@@ -370,7 +371,7 @@ export function ReadyCheckModal() {
                 </Text>
               </View>
             ))}
-          </View>
+          </ScrollView>
 
           {/* Result Message */}
           {resultMessage && (
