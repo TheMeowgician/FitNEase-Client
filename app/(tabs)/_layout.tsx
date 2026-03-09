@@ -179,13 +179,16 @@ function CustomTabBar({
       {visibleRoutes.slice(0, 2).map((route, index) => renderTab(route, index))}
 
       {/* Center action button */}
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={onCenterPress}
-        style={barStyles.centerButton}
-      >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
+      <View style={barStyles.centerButtonWrapper}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={onCenterPress}
+          style={barStyles.centerButton}
+        >
+          <Ionicons name="play" size={24} color="#FFFFFF" style={{ marginLeft: 2 }} />
+        </TouchableOpacity>
+        <Text style={barStyles.centerButtonLabel}>Start</Text>
+      </View>
 
       {/* Right tabs (Progress, Profile) */}
       {visibleRoutes.slice(2).map((route, index) => renderTab(route, index + 2))}
@@ -256,6 +259,10 @@ const barStyles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
   },
+  centerButtonWrapper: {
+    alignItems: 'center',
+    marginTop: -45,
+  },
   centerButton: {
     width: 56,
     height: 56,
@@ -263,7 +270,6 @@ const barStyles = StyleSheet.create({
     backgroundColor: TAB_BLUE,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -65,
     borderWidth: 3,
     borderColor: '#FFFFFF',
     shadowColor: TAB_BLUE,
@@ -271,6 +277,12 @@ const barStyles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  centerButtonLabel: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: TAB_BLUE,
+    marginTop: 4,
   },
 });
 

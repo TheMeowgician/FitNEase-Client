@@ -163,7 +163,7 @@ export default function ProfileScreen() {
 
     const name = capitalizeFirstLetter(user.firstName) || 'User';
     const role = user.role === 'mentor' ? 'Mentor' : 'Member';
-    const details = `${fitnessLevel.charAt(0).toUpperCase() + fitnessLevel.slice(1)} Level • Tabata Training`;
+    const details = `${fitnessLevel.charAt(0).toUpperCase() + fitnessLevel.slice(1)} Level`;
 
     return { name, role, details };
   };
@@ -202,7 +202,7 @@ export default function ProfileScreen() {
                     <FitnessLevelBadge level={fitnessLevel} size="small" />
                   </View>
                   <Text style={styles.profileRole}>
-                    {userDisplay.role} • BMI: 24.2
+                    {userDisplay.role}
                   </Text>
                   <Text style={styles.profileDetails}>
                     {userDisplay.details}
@@ -294,9 +294,6 @@ export default function ProfileScreen() {
         <View style={styles.versionSection}>
           <Text style={styles.versionText}>
             FitNEase v1.0.0
-          </Text>
-          <Text style={styles.versionText}>
-            Tabata Training • Content-Based Filtering
           </Text>
           {__DEV__ && user && (
             <Text style={styles.debugText}>

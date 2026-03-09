@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, router } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
@@ -41,9 +40,30 @@ const FITNESS_LEVEL_ICONS = {
 
 const { width } = Dimensions.get('window');
 
+// Sourced from: Parade, BrainyQuote, GMU Center for Well-Being, Peloton, Future Fit
+const FITNESS_QUOTES = [
+  { text: 'The last three or four reps is what makes the muscle grow. This area of pain divides a champion from someone who is not a champion.', author: 'Arnold Schwarzenegger' },
+  { text: 'Physical fitness is not only one of the most important keys to a healthy body, it is the basis of dynamic and creative intellectual activity.', author: 'John F. Kennedy' },
+  { text: 'Take care of your body. It\'s the only place you have to live.', author: 'Jim Rohn' },
+  { text: 'Motivation is what gets you started. Habit is what keeps you going.', author: 'Jim Ryun' },
+  { text: 'Strength does not come from the physical capacity. It comes from an indomitable will.', author: 'Mahatma Gandhi' },
+  { text: 'I hate every minute of training. But I said, don\'t quit. Suffer now and live the rest of your life as a champion.', author: 'Muhammad Ali' },
+  { text: 'Exercise is king. Nutrition is queen. Put them together and you\'ve got a kingdom.', author: 'Jack LaLanne' },
+  { text: 'Blood, sweat and respect. First two you give. Last one you earn.', author: 'Dwayne Johnson' },
+  { text: 'Reading is to the mind what exercise is to the body.', author: 'Joseph Addison' },
+  { text: 'If we could give every individual the right amount of nourishment and exercise, not too little and not too much, we would have found the safest way to health.', author: 'Hippocrates' },
+  { text: 'The only bad workout is the one that didn\'t happen.', author: 'Unknown' },
+  { text: 'Fitness is not about being better than someone else. It\'s about being better than you used to be.', author: 'Khloe Kardashian' },
+  { text: 'Success usually comes to those who are too busy to be looking for it.', author: 'Henry David Thoreau' },
+  { text: 'The pain you feel today will be the strength you feel tomorrow.', author: 'Arnold Schwarzenegger' },
+  { text: 'Your body can stand almost anything. It\'s your mind that you have to convince.', author: 'Andrew Murphy' },
+];
+
 export default function ProgressScreen() {
   const { user } = useAuth();
   const { getUserStats } = useEngagementService();
+
+  const [dailyQuote, setDailyQuote] = useState(() => FITNESS_QUOTES[Math.floor(Math.random() * FITNESS_QUOTES.length)]);
 
   // Use centralized progress store
   const {
@@ -63,13 +83,14 @@ export default function ProgressScreen() {
     loadProgressData();
   }, [user]);
 
-  // Refresh data when screen comes into focus
+  // Refresh data and quote when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       if (user) {
         console.log('🔄 [PROGRESS] Screen focused - refreshing stats');
         loadProgressData();
       }
+      setDailyQuote(FITNESS_QUOTES[Math.floor(Math.random() * FITNESS_QUOTES.length)]);
     }, [user])
   );
 
@@ -195,7 +216,7 @@ export default function ProgressScreen() {
               <Text style={styles.headerTitle}>Your Progress</Text>
               <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
             </View>
-            <View style={[styles.levelBadge, { backgroundColor: levelInfo.color + '20' }]}>
+            <View style={styles.levelBadge}>
               <Image source={levelInfo.image} style={styles.levelBadgeImage} />
             </View>
           </View>
@@ -217,7 +238,7 @@ export default function ProgressScreen() {
             <Text style={styles.headerTitle}>Your Progress</Text>
             <Text style={styles.headerSubtitle}>Track your fitness journey</Text>
           </View>
-          <View style={[styles.levelBadge, { backgroundColor: levelInfo.color + '20' }]}>
+          <View style={styles.levelBadge}>
             <Image source={levelInfo.image} style={styles.levelBadgeImage} />
           </View>
         </View>
@@ -232,11 +253,9 @@ export default function ProgressScreen() {
         }
       >
         {/* Current Level Card */}
-        <LinearGradient colors={levelInfo.gradient} style={styles.levelCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <View style={styles.levelCard}>
           <View style={styles.levelCardContent}>
-            <View style={styles.levelCardIconContainer}>
-              <Image source={levelInfo.image} style={styles.levelCardImage} />
-            </View>
+            <Image source={levelInfo.image} style={styles.levelCardImage} />
             <View style={styles.levelCardText}>
               <Text style={styles.levelCardTitle}>{levelInfo.title} Level</Text>
               <Text style={styles.levelCardDescription}>{levelInfo.description}</Text>
@@ -244,24 +263,24 @@ export default function ProgressScreen() {
           </View>
           <View style={styles.levelCardStats}>
             <View style={styles.levelCardStat}>
-              <Ionicons name="trophy" size={20} color="rgba(255, 255, 255, 0.9)" />
+              <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[500]} />
               <Text style={styles.levelCardStatValue}>{overallStats?.totalWorkouts || 0}</Text>
               <Text style={styles.levelCardStatLabel}>Workouts</Text>
             </View>
             <View style={styles.levelCardStatDivider} />
             <View style={styles.levelCardStat}>
-              <Ionicons name="calendar" size={20} color="rgba(255, 255, 255, 0.9)" />
+              <Ionicons name="calendar" size={20} color={COLORS.PRIMARY[500]} />
               <Text style={styles.levelCardStatValue}>{overallStats?.activeDays || 0}</Text>
               <Text style={styles.levelCardStatLabel}>Active Days</Text>
             </View>
             <View style={styles.levelCardStatDivider} />
             <View style={styles.levelCardStat}>
-              <Ionicons name="flame" size={20} color="rgba(255, 255, 255, 0.9)" />
+              <Ionicons name="flame" size={20} color={COLORS.ERROR[500]} />
               <Text style={styles.levelCardStatValue}>{engagementStreak || 0}</Text>
               <Text style={styles.levelCardStatLabel}>Day Streak</Text>
             </View>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* Progression Card */}
         <ProgressionCard />
@@ -392,9 +411,9 @@ export default function ProgressScreen() {
         <View style={styles.quoteCard}>
           <Ionicons name="bulb" size={24} color={COLORS.WARNING[500]} />
           <Text style={styles.quoteText}>
-            "The only bad workout is the one that didn't happen."
+            "{dailyQuote.text}"
           </Text>
-          <Text style={styles.quoteAuthor}>- Unknown</Text>
+          <Text style={styles.quoteAuthor}>— {dailyQuote.author}</Text>
         </View>
 
         <View style={{ height: 40 }} />
@@ -454,34 +473,26 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   levelCard: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 20,
     padding: 24,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   levelCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
   },
-  levelCardIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-    overflow: 'hidden',
-  },
   levelCardImage: {
     width: 56,
     height: 56,
     resizeMode: 'contain',
+    marginRight: 16,
   },
   levelCardText: {
     flex: 1,
@@ -489,17 +500,17 @@ const styles = StyleSheet.create({
   levelCardTitle: {
     fontSize: FONT_SIZES.XXL,
     fontFamily: FONTS.BOLD,
-    color: 'white',
+    color: COLORS.SECONDARY[900],
     marginBottom: 4,
   },
   levelCardDescription: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: COLORS.SECONDARY[600],
   },
   levelCardStats: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: COLORS.NEUTRAL[50],
     borderRadius: 16,
     padding: 16,
   },
@@ -509,19 +520,19 @@ const styles = StyleSheet.create({
   },
   levelCardStatDivider: {
     width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: COLORS.NEUTRAL[200],
     marginHorizontal: 12,
   },
   levelCardStatValue: {
     fontSize: FONT_SIZES.XL,
     fontFamily: FONTS.BOLD,
-    color: 'white',
+    color: COLORS.SECONDARY[900],
     marginTop: 8,
   },
   levelCardStatLabel: {
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.SEMIBOLD,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: COLORS.SECONDARY[600],
     marginTop: 4,
   },
   section: {

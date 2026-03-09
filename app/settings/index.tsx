@@ -60,6 +60,14 @@ export default function SettingsScreen() {
           },
         },
         {
+          icon: 'shield-checkmark-outline',
+          title: 'Permissions',
+          subtitle: 'Camera, microphone & photo access',
+          onPress: () => {
+            router.push('/settings/permissions');
+          },
+        },
+        {
           icon: 'language-outline',
           title: 'Language',
           subtitle: 'Change app language',
