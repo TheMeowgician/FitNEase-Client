@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Avatar } from '../ui/Avatar';
+import { mediaService } from '../../services/microservices/mediaService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -40,6 +42,8 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
   user,
   context = 'group',
 }) => {
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+
   // Animation values for smooth fade in/out
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -129,10 +133,14 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
 
           {/* Avatar */}
           <View style={styles.avatarSection}>
-            <View style={{ position: 'relative' }}>
+            <TouchableOpacity
+              style={{ position: 'relative' }}
+              activeOpacity={user.profilePicture ? 0.8 : 1}
+              onPress={() => { if (user.profilePicture) setShowPhotoModal(true); }}
+            >
               <Avatar profilePicture={user.profilePicture} size="xl" />
               {user.isOnline && <View style={styles.onlineIndicatorLarge} />}
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* Username */}
@@ -233,6 +241,31 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
           </TouchableOpacity>
         </Animated.View>
       </TouchableOpacity>
+
+      {/* Fullscreen Photo Modal */}
+      <Modal
+        visible={showPhotoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPhotoModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.photoModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPhotoModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => setShowPhotoModal(false)} style={styles.photoModalClose}>
+            <Ionicons name="close" size={28} color="white" />
+          </TouchableOpacity>
+          {user?.profilePicture && (
+            <Image
+              source={{ uri: mediaService.getFullMediaUrl(user.profilePicture) }}
+              style={styles.photoModalImage}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 };
@@ -402,6 +435,24 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
+  },
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  photoModalImage: {
+    width: width - 40,
+    height: width - 40,
+    borderRadius: 12,
   },
 });
 

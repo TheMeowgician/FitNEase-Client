@@ -8,6 +8,7 @@ import {
   StatusBar,
   Dimensions,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { authService } from '../../services/microservices/authService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
 import { Avatar } from '../../components/ui/Avatar';
+import { mediaService } from '../../services/microservices/mediaService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 import { useSmartBack } from '../../hooks/useSmartBack';
@@ -40,6 +42,7 @@ export default function UserProfileScreen() {
     weight: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([]);
   const [availableAchievements, setAvailableAchievements] = useState<Achievement[]>([]);
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
@@ -104,8 +107,12 @@ export default function UserProfileScreen() {
         console.log('[USER-PROFILE] No assessments, using user profile:', user.fitnessLevel);
       }
 
-      // Load workout stats
-      const workoutHistory = await trackingService.getWorkoutHistory(user.id);
+      // Load workout stats and engagement streak in parallel
+      const [workoutHistory, engagementStats] = await Promise.all([
+        trackingService.getWorkoutHistory(user.id),
+        engagementService.getUserStats(String(user.id)).catch(() => null),
+      ]);
+
       if (workoutHistory && workoutHistory.length > 0) {
         const totalWorkouts = workoutHistory.length;
         const totalMinutes = workoutHistory.reduce((sum, w) => sum + (w.duration || 0), 0);
@@ -115,9 +122,14 @@ export default function UserProfileScreen() {
           totalWorkouts,
           totalMinutes,
           totalCalories,
-          currentStreak: 0, // TODO: Calculate streak
-          longestStreak: 0, // TODO: Calculate longest streak
+          currentStreak: engagementStats?.current_streak_days || 0,
+          longestStreak: 0,
         });
+      } else {
+        setStats(prev => ({
+          ...prev,
+          currentStreak: engagementStats?.current_streak_days || 0,
+        }));
       }
 
       // Load recent workout sessions (with full exercise data)
@@ -270,19 +282,19 @@ export default function UserProfileScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Profile Header Section */}
         <View style={styles.profileHeaderSection}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            activeOpacity={user?.profilePicture ? 0.8 : 1}
+            onPress={() => { if (user?.profilePicture) setShowPhotoModal(true); }}
+          >
             <Avatar profilePicture={user?.profilePicture} size="xl" />
-            <View style={[styles.levelBadge, { backgroundColor: getFitnessLevelColor() }]}>
-              <Ionicons name={getFitnessLevelIcon() as any} size={14} color="white" />
-            </View>
-          </View>
+          </TouchableOpacity>
 
           <Text style={styles.userName}>{capitalizeFirstLetter(user?.firstName || 'User')}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
 
           <View style={styles.levelContainer}>
             <View style={[styles.levelPill, { backgroundColor: getFitnessLevelColor() + '20', borderColor: getFitnessLevelColor() }]}>
-              <Ionicons name={getFitnessLevelIcon() as any} size={16} color={getFitnessLevelColor()} />
               <Text style={[styles.levelText, { color: getFitnessLevelColor() }]}>
                 {capitalizeFirstLetter(fitnessLevel)} Level
               </Text>
@@ -536,6 +548,31 @@ export default function UserProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Fullscreen Photo Modal */}
+      <Modal
+        visible={showPhotoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPhotoModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.photoModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPhotoModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => setShowPhotoModal(false)} style={styles.photoModalClose}>
+            <Ionicons name="close" size={28} color="white" />
+          </TouchableOpacity>
+          {user?.profilePicture && (
+            <Image
+              source={{ uri: mediaService.getFullMediaUrl(user.profilePicture) }}
+              style={styles.photoModalImage}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -883,5 +920,23 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
     marginTop: 2,
+  },
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  photoModalImage: {
+    width: width - 40,
+    height: width - 40,
+    borderRadius: 12,
   },
 });
