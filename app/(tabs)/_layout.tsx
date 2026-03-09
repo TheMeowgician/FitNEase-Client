@@ -19,7 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
-const TAB_BLUE = '#6184FB';
+const TAB_BLUE = COLORS.PRIMARY[600];
 const HIDDEN_TABS = ['workouts', 'weekly-plan'];
 const TAB_INACTIVE = '#9CA3AF';
 const PILL_WIDTH = 52;
@@ -219,7 +219,7 @@ const barStyles = StyleSheet.create({
     width: PILL_WIDTH,
     height: PILL_HEIGHT,
     borderRadius: 16,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: COLORS.PRIMARY[50],
   },
   tab: {
     flex: 1,
@@ -263,7 +263,7 @@ const barStyles = StyleSheet.create({
     backgroundColor: TAB_BLUE,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -12,
+    marginTop: -65,
     borderWidth: 3,
     borderColor: '#FFFFFF',
     shadowColor: TAB_BLUE,

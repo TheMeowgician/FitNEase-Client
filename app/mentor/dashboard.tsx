@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -17,7 +18,9 @@ import { useAlert } from '../../contexts/AlertContext';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { Avatar } from '../../components/ui/Avatar';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
+import { mediaService } from '../../services/microservices/mediaService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
 interface TrainingGroup extends Group {
@@ -34,6 +37,7 @@ export default function MentorDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const hasLoadedOnce = useRef(false);
 
   // Load data when screen focuses
   useFocusEffect(
@@ -44,7 +48,9 @@ export default function MentorDashboardScreen() {
 
   const loadTrainingGroups = async () => {
     try {
-      setIsLoading(true);
+      if (!hasLoadedOnce.current) {
+        setIsLoading(true);
+      }
       console.log('🎓 [MENTOR] Loading training groups for mentor:', user?.id);
 
       // Fetch groups where the current mentor is the owner
@@ -109,6 +115,7 @@ export default function MentorDashboardScreen() {
           return g;
         })
       );
+      hasLoadedOnce.current = true;
     } catch (error) {
       console.error('Error loading training groups:', error);
       alert.error('Error', 'Failed to load training groups. Please try again.');
@@ -170,9 +177,12 @@ export default function MentorDashboardScreen() {
       activeOpacity={0.7}
     >
       <View style={styles.memberAvatar}>
-        <Text style={styles.memberAvatarText}>
-          {member.username.charAt(0).toUpperCase()}
-        </Text>
+        <Avatar
+          profilePicture={member.profilePicture}
+          size="xs"
+          backgroundColor={COLORS.PRIMARY[100]}
+          iconColor={COLORS.PRIMARY[600]}
+        />
       </View>
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{member.username}</Text>
@@ -203,8 +213,15 @@ export default function MentorDashboardScreen() {
           onPress={() => toggleGroupExpanded(group.id)}
           activeOpacity={0.7}
         >
-          <View style={styles.groupIcon}>
-            <Ionicons name="people" size={24} color={COLORS.PRIMARY[600]} />
+          <View style={[styles.groupIcon, { overflow: 'hidden' }]}>
+            {group.groupImage ? (
+              <Image
+                source={{ uri: mediaService.getFullMediaUrl(group.groupImage) }}
+                style={{ width: '100%', height: '100%' }}
+              />
+            ) : (
+              <Ionicons name="people" size={24} color={COLORS.PRIMARY[600]} />
+            )}
           </View>
           <View style={styles.groupInfo}>
             <Text style={styles.groupName}>{group.name}</Text>
@@ -655,12 +672,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.PRIMARY[100],
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: 12,
   },
   memberAvatarText: {

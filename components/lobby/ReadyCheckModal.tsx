@@ -57,6 +57,7 @@ export function ReadyCheckModal() {
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const respondingRef = useRef(false); // Synchronous guard against double-tap
 
   // Check if user is on lobby screen
   const isOnLobbyScreen = pathname?.includes('/workout/group-lobby');
@@ -130,6 +131,7 @@ export function ReadyCheckModal() {
       setHasResponded(false);
       setMyResponse(null);
       setIsResponding(false);
+      respondingRef.current = false;
 
       // Vibrate on appearance
       if (Platform.OS !== 'web') {
@@ -194,7 +196,8 @@ export function ReadyCheckModal() {
 
   // Handle accept
   const handleAccept = useCallback(async () => {
-    if (hasResponded || isResponding || !sessionId) return;
+    if (hasResponded || isResponding || respondingRef.current || !sessionId) return;
+    respondingRef.current = true;
 
     setIsResponding(true);
     try {
@@ -217,6 +220,7 @@ export function ReadyCheckModal() {
       }
     } catch (error) {
       console.error('Failed to accept ready check:', error);
+      respondingRef.current = false; // Allow retry on error
     } finally {
       setIsResponding(false);
     }
@@ -224,7 +228,8 @@ export function ReadyCheckModal() {
 
   // Handle decline
   const handleDecline = useCallback(async () => {
-    if (hasResponded || isResponding || !sessionId) return;
+    if (hasResponded || isResponding || respondingRef.current || !sessionId) return;
+    respondingRef.current = true;
 
     setIsResponding(true);
     try {
@@ -233,6 +238,7 @@ export function ReadyCheckModal() {
       setMyResponse('declined');
     } catch (error) {
       console.error('Failed to decline ready check:', error);
+      respondingRef.current = false; // Allow retry on error
     } finally {
       setIsResponding(false);
     }

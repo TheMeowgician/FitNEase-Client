@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
 import { authService } from '../services/microservices/authService';
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 export function useProfilePicture() {
   const { refreshUser } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
+  const uploadingRef = useRef(false); // Synchronous guard against double-tap
 
   const pickAndUpload = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -50,6 +51,8 @@ export function useProfilePicture() {
   };
 
   const uploadImage = async (imageUri: string) => {
+    if (uploadingRef.current) return; // Prevent concurrent uploads
+    uploadingRef.current = true;
     setIsUploading(true);
     try {
       await authService.uploadProfilePicture(imageUri);
@@ -58,6 +61,7 @@ export function useProfilePicture() {
       Alert.alert('Upload Failed', 'Could not upload your profile picture. Please try again.');
       console.error('Profile picture upload error:', error);
     } finally {
+      uploadingRef.current = false;
       setIsUploading(false);
     }
   };

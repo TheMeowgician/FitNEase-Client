@@ -604,13 +604,25 @@ export class AuthService {
       const uploadResponse = await mediaService.uploadProfilePicture(imageUri);
       const relativeUrl = uploadResponse.data.url;
 
-      // Step 2: Update auth service with the relative URL
+      // Step 2: Update auth service with the relative URL (retry up to 2 times)
+      // This is critical — if this fails, DB points to old/deleted file
       const currentUser = await this.getCurrentUser();
-      await apiClient.put('auth', `/api/auth/user-profile/${currentUser.id}`, {
-        profile_picture: relativeUrl,
-      });
+      let lastError: any;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await apiClient.put('auth', `/api/auth/user-profile/${currentUser.id}`, {
+            profile_picture: relativeUrl,
+          });
+          return { profilePictureUrl: relativeUrl };
+        } catch (err) {
+          lastError = err;
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+      }
 
-      return { profilePictureUrl: relativeUrl };
+      throw new Error(lastError?.message || 'Failed to save profile picture after upload');
     } catch (error) {
       throw new Error((error as any).message || 'Profile picture upload failed');
     }
