@@ -238,7 +238,13 @@ export default function GroupDetailsScreen() {
       };
 
       setGroup(updatedGroup);
-      setMembers(membersData.members || []);
+
+      // Enrich current user's profilePicture from auth context (always fresh)
+      // to avoid stale data from social service's Redis cache
+      const enrichedMembers = (membersData.members || []).map((m: GroupMember) =>
+        m.userId === user?.id ? { ...m, profilePicture: user.profilePicture || m.profilePicture } : m
+      );
+      setMembers(enrichedMembers);
 
       // Determine user's role
       const userMember = membersData.members?.find((m: GroupMember) => m.userId === user?.id);

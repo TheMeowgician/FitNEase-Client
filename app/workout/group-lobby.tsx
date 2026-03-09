@@ -128,6 +128,7 @@ export default function GroupLobbyScreen() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [selectedLobbyMember, setSelectedLobbyMember] = useState<any>(null);
   const [showMemberPreview, setShowMemberPreview] = useState(false);
+  const [showAllMembersModal, setShowAllMembersModal] = useState(false);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<Set<number>>(new Set());
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
@@ -2916,9 +2917,14 @@ export default function GroupLobbyScreen() {
                 {lobbyMembers.filter(m => m.status === 'ready').length}/{lobbyMembers.length} ready
               </Text>
             </View>
-            <TouchableOpacity onPress={handleInviteMembers} style={styles.inviteIconButton}>
-              <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity onPress={() => setShowAllMembersModal(true)} style={styles.inviteIconButton}>
+                <Ionicons name="list-outline" size={22} color={COLORS.PRIMARY[600]} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleInviteMembers} style={styles.inviteIconButton}>
+                <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
@@ -3544,6 +3550,101 @@ export default function GroupLobbyScreen() {
         } : null}
         context="lobby"
       />
+
+      {/* All Members Modal */}
+      <Modal
+        visible={showAllMembersModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowAllMembersModal(false)}
+      >
+        <View style={styles.allMembersOverlay}>
+          <View style={styles.allMembersContent}>
+            <View style={styles.allMembersHeader}>
+              <Text style={styles.allMembersTitle}>
+                Lobby Members ({lobbyMembers.length})
+              </Text>
+              <TouchableOpacity onPress={() => setShowAllMembersModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.allMembersList}
+              showsVerticalScrollIndicator={false}
+            >
+              {lobbyMembers.map((member) => {
+                const isOnline = onlineUsers.has(member.user_id.toString());
+                const isCurrentUser = member.user_id === parseInt(currentUser.id);
+                const isLobbyInitiator = member.user_id === currentLobby?.initiator_id;
+                const memberIsReady = member.status === 'ready';
+
+                return (
+                  <TouchableOpacity
+                    key={member.user_id}
+                    style={styles.allMembersRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setShowAllMembersModal(false);
+                      setSelectedLobbyMember(member);
+                      setShowMemberPreview(true);
+                    }}
+                  >
+                    <View style={styles.allMembersLeft}>
+                      <View style={styles.allMembersAvatarWrap}>
+                        <Avatar
+                          profilePicture={member.profile_picture}
+                          size="sm"
+                          backgroundColor={COLORS.PRIMARY[100]}
+                          iconColor={COLORS.PRIMARY[600]}
+                        />
+                        <View
+                          style={[
+                            styles.allMembersOnlineDot,
+                            { backgroundColor: isOnline ? COLORS.SUCCESS[500] : COLORS.SECONDARY[300] },
+                          ]}
+                        />
+                      </View>
+                      <View style={styles.allMembersInfo}>
+                        <View style={styles.allMembersNameRow}>
+                          <Text style={styles.allMembersName} numberOfLines={1}>
+                            {isCurrentUser ? `${member.user_name} (You)` : member.user_name}
+                          </Text>
+                          {isLobbyInitiator && (
+                            <View style={styles.allMembersInitiatorBadge}>
+                              <Ionicons name="star" size={10} color={COLORS.WARNING[500]} />
+                              <Text style={styles.allMembersInitiatorText}>Host</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.allMembersStatus}>
+                          {isOnline ? 'Online' : 'Offline'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[
+                      styles.allMembersReadyBadge,
+                      memberIsReady ? styles.allMembersReadyBadgeReady : styles.allMembersReadyBadgeWaiting,
+                    ]}>
+                      <Ionicons
+                        name={memberIsReady ? 'checkmark-circle' : 'time-outline'}
+                        size={14}
+                        color={memberIsReady ? COLORS.SUCCESS[600] : COLORS.WARNING[600]}
+                      />
+                      <Text style={[
+                        styles.allMembersReadyText,
+                        memberIsReady ? styles.allMembersReadyTextReady : styles.allMembersReadyTextWaiting,
+                      ]}>
+                        {memberIsReady ? 'Ready' : 'Waiting'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Exercise Swap Modal - For group customization */}
       <ExerciseSwapModal
@@ -4893,5 +4994,121 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.XS,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
+  },
+  // All Members Modal
+  allMembersOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  allMembersContent: {
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+  },
+  allMembersHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  allMembersTitle: {
+    fontSize: 20,
+    fontFamily: FONTS.BOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  allMembersList: {
+    flexGrow: 0,
+  },
+  allMembersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.NEUTRAL[100],
+  },
+  allMembersLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  allMembersAvatarWrap: {
+    position: 'relative',
+  },
+  allMembersOnlineDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: COLORS.NEUTRAL.WHITE,
+  },
+  allMembersInfo: {
+    flex: 1,
+  },
+  allMembersNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  allMembersName: {
+    fontSize: 15,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+    flexShrink: 1,
+  },
+  allMembersInitiatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.WARNING[50],
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  allMembersInitiatorText: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.WARNING[600],
+  },
+  allMembersStatus: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginTop: 2,
+  },
+  allMembersReadyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  allMembersReadyBadgeReady: {
+    backgroundColor: COLORS.SUCCESS[50],
+  },
+  allMembersReadyBadgeWaiting: {
+    backgroundColor: COLORS.WARNING[50],
+  },
+  allMembersReadyText: {
+    fontSize: 12,
+    fontFamily: FONTS.SEMIBOLD,
+  },
+  allMembersReadyTextReady: {
+    color: COLORS.SUCCESS[600],
+  },
+  allMembersReadyTextWaiting: {
+    color: COLORS.WARNING[600],
   },
 });

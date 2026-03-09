@@ -434,7 +434,7 @@ export function ReadyCheckModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -442,12 +442,10 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: COLORS.NEUTRAL[900],
-    borderRadius: 24,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
+    borderRadius: 20,
     padding: 24,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.WARNING[500],
   },
   header: {
     alignItems: 'center',
@@ -456,13 +454,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FONT_SIZES.XL,
     fontFamily: FONTS.BOLD,
-    color: COLORS.NEUTRAL.WHITE,
+    color: COLORS.SECONDARY[900],
     marginTop: 8,
   },
   subtitle: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.NEUTRAL[400],
+    color: COLORS.SECONDARY[500],
     marginTop: 4,
   },
   timerContainer: {
@@ -472,7 +470,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: COLORS.NEUTRAL[800],
+    backgroundColor: COLORS.NEUTRAL[100],
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -488,10 +486,10 @@ const styles = StyleSheet.create({
   timerText: {
     fontSize: 32,
     fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[400],
+    color: COLORS.PRIMARY[600],
   },
   timerTextUrgent: {
-    color: COLORS.ERROR[400],
+    color: COLORS.ERROR[500],
   },
   responseStatus: {
     width: '100%',
@@ -523,12 +521,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.NEUTRAL[300],
+    color: COLORS.SECONDARY[600],
   },
   responseCount: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.BOLD,
-    color: COLORS.NEUTRAL.WHITE,
+    color: COLORS.SECONDARY[900],
   },
   memberList: {
     width: '100%',
@@ -556,13 +554,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ERROR[500],
   },
   memberStatusPending: {
-    backgroundColor: COLORS.NEUTRAL[600],
+    backgroundColor: COLORS.SECONDARY[300],
   },
   memberName: {
     flex: 1,
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.NEUTRAL[200],
+    color: COLORS.SECONDARY[700],
   },
   resultContainer: {
     flexDirection: 'row',
@@ -620,7 +618,7 @@ const styles = StyleSheet.create({
   respondedText: {
     fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.NEUTRAL[300],
+    color: COLORS.SECONDARY[600],
   },
 });
 

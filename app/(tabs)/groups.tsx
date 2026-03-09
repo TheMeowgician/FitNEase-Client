@@ -38,6 +38,7 @@ export default function GroupsScreen() {
   const [pendingRequestGroupIds, setPendingRequestGroupIds] = useState<Set<string>>(new Set());
   const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null); // Debounce: tracks which group button is in-flight
   const loadingRef = useRef(false); // Guard against concurrent loadGroups calls
+  const hasLoadedOnce = useRef(false); // Track if initial data load is done
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -90,7 +91,11 @@ export default function GroupsScreen() {
     loadingRef.current = true;
 
     try {
-      setIsLoading(true);
+      // Only show full-screen spinner on first load.
+      // On subsequent focus-triggered reloads, refresh silently in background.
+      if (!hasLoadedOnce.current) {
+        setIsLoading(true);
+      }
 
       if (!user?.id) {
         console.warn('No user ID available');
@@ -163,6 +168,7 @@ export default function GroupsScreen() {
 
       setMyGroups(myGroupsWithCounts || []);
       setPublicGroups(filteredPublicGroups || []);
+      hasLoadedOnce.current = true;
     } catch (error) {
       console.error('❌ Error loading groups:', error);
       alert.error('Error', 'Failed to load groups. Please try again.');
