@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
+import { useReverb } from '../../contexts/ReverbProvider';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -32,6 +33,7 @@ interface TrainingGroup extends Group {
 export default function MentorDashboardScreen() {
   const { user } = useAuth();
   const alert = useAlert();
+  const { onlineUsers } = useReverb();
   const [trainingGroups, setTrainingGroups] = useState<TrainingGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -169,37 +171,42 @@ export default function MentorDashboardScreen() {
     router.push(`/groups/${group.id}`);
   };
 
-  const renderMemberCard = (member: GroupMember, index: number, group: TrainingGroup) => (
-    <TouchableOpacity
-      key={member.id}
-      style={styles.memberCard}
-      onPress={() => navigateToMemberDetail(member, group)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.memberAvatar}>
-        <Avatar
-          profilePicture={member.profilePicture}
-          size="xs"
-          backgroundColor={COLORS.PRIMARY[100]}
-          iconColor={COLORS.PRIMARY[600]}
-        />
-      </View>
-      <View style={styles.memberInfo}>
-        <Text style={styles.memberName}>{member.username}</Text>
-        <Text style={styles.memberRole}>
-          {member.role === 'owner' ? 'Group Owner' : member.role}
-        </Text>
-      </View>
-      <View style={styles.memberStatus}>
-        <View
-          style={[
-            styles.statusDot,
-            { backgroundColor: member.status === 'active' ? COLORS.SUCCESS[500] : COLORS.SECONDARY[400] },
-          ]}
-        />
-      </View>
-    </TouchableOpacity>
-  );
+  const renderMemberCard = (member: GroupMember, index: number, group: TrainingGroup) => {
+    const isOnline = onlineUsers.has(member.userId);
+    return (
+      <TouchableOpacity
+        key={member.id}
+        style={styles.memberCard}
+        onPress={() => navigateToMemberDetail(member, group)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.memberAvatar}>
+          <Avatar
+            profilePicture={member.profilePicture}
+            size="xs"
+            backgroundColor={COLORS.PRIMARY[100]}
+            iconColor={COLORS.PRIMARY[600]}
+          />
+        </View>
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName}>{member.username}</Text>
+          <Text style={styles.memberRole}>
+            {member.role === 'owner' ? 'Group Owner' : member.role}
+          </Text>
+        </View>
+        {isOnline && (
+          <View style={styles.memberStatus}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: COLORS.SUCCESS[500] },
+              ]}
+            />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderGroupCard = (group: TrainingGroup) => {
     const isExpanded = expandedGroups.has(group.id);
