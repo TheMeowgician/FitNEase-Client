@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Modal,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -14,7 +17,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { authService, User } from '../../../services/microservices/authService';
 import { trackingService } from '../../../services/microservices/trackingService';
+import { mediaService } from '../../../services/microservices/mediaService';
+import { Avatar } from '../../../components/ui/Avatar';
 import { COLORS, FONTS, FONT_SIZES } from '../../../constants/colors';
+
+const { width } = Dimensions.get('window');
 
 interface MemberStats {
   totalSessions: number;
@@ -72,6 +79,7 @@ export default function MemberDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'assessments' | 'sessions'>('overview');
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -462,11 +470,17 @@ export default function MemberDetailScreen() {
 
         {/* Member Profile Header */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(member?.username || username || '?').charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          <TouchableOpacity
+            activeOpacity={member?.profilePicture ? 0.8 : 1}
+            onPress={() => { if (member?.profilePicture) setShowPhotoModal(true); }}
+          >
+            <Avatar
+              profilePicture={member?.profilePicture}
+              size="xl"
+              backgroundColor={COLORS.PRIMARY[100]}
+              iconColor={COLORS.PRIMARY[600]}
+            />
+          </TouchableOpacity>
           <Text style={styles.memberName}>
             {member?.firstName && member?.lastName
               ? `${member.firstName} ${member.lastName}`
@@ -511,6 +525,31 @@ export default function MemberDetailScreen() {
         {activeTab === 'assessments' && renderAssessmentsTab()}
         {activeTab === 'sessions' && renderSessionsTab()}
       </ScrollView>
+
+      {/* Fullscreen Photo Modal */}
+      <Modal
+        visible={showPhotoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPhotoModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.photoModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPhotoModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => setShowPhotoModal(false)} style={styles.photoModalClose}>
+            <Ionicons name="close" size={28} color="white" />
+          </TouchableOpacity>
+          {member?.profilePicture && (
+            <Image
+              source={{ uri: mediaService.getFullMediaUrl(member.profilePicture) }}
+              style={styles.photoModalImage}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -565,20 +604,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.NEUTRAL[200],
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.PRIMARY[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.PRIMARY[600],
   },
   memberName: {
     fontSize: FONT_SIZES.XL,
@@ -859,5 +884,23 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
     marginTop: 2,
+  },
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  photoModalImage: {
+    width: width - 40,
+    height: width - 40,
+    borderRadius: 12,
   },
 });
