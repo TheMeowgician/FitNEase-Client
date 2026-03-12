@@ -21,16 +21,34 @@ export default function WorkoutDurationScreen() {
   const fitnessLevel = params.fitnessLevel as string;
   const targetMuscleGroups = params.targetMuscleGroups ? JSON.parse(params.targetMuscleGroups as string) : [];
 
-  const [selectedDuration, setSelectedDuration] = useState<number>(30);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Tabata-aligned durations matching beginner progressive overload (4→5→6 exercises)
-  // Formula: (300n - 60) / 60 minutes, where n = exercise count
-  const durations = [
-    { value: 20, label: '~20 min', description: '4 exercises per session', icon: 'flash-outline', color: '#10B981' },
-    { value: 25, label: '~25 min', description: '5 exercises per session', icon: 'fitness-outline', color: '#F59E0B' },
-    { value: 30, label: '~30 min', description: '6 exercises per session', icon: 'barbell-outline', color: '#8B5CF6' },
-  ];
+  // Duration options adapt to fitness level for progressive training
+  const getDurationsByLevel = (level: string) => {
+    switch (level?.toLowerCase()) {
+      case 'intermediate':
+        return [
+          { value: 30, label: '~30 min', description: '6 exercises per session', color: '#10B981' },
+          { value: 35, label: '~35 min', description: '7 exercises per session', color: '#F59E0B' },
+          { value: 40, label: '~40 min', description: '8 exercises per session', color: '#8B5CF6' },
+        ];
+      case 'advanced':
+        return [
+          { value: 40, label: '~40 min', description: '8 exercises per session', color: '#10B981' },
+          { value: 50, label: '~50 min', description: '10 exercises per session', color: '#F59E0B' },
+          { value: 60, label: '~60 min', description: '12 exercises per session', color: '#8B5CF6' },
+        ];
+      default: // beginner
+        return [
+          { value: 20, label: '~20 min', description: '4 exercises per session', color: '#10B981' },
+          { value: 25, label: '~25 min', description: '5 exercises per session', color: '#F59E0B' },
+          { value: 30, label: '~30 min', description: '6 exercises per session', color: '#8B5CF6' },
+        ];
+    }
+  };
+
+  const durations = getDurationsByLevel(fitnessLevel);
+  const [selectedDuration, setSelectedDuration] = useState<number>(durations[durations.length - 1].value);
 
   const handleBack = () => {
     router.back();
@@ -147,22 +165,6 @@ export default function WorkoutDurationScreen() {
 
                 {/* Content */}
                 <View style={styles.cardContent}>
-                  {/* Icon */}
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      {
-                        backgroundColor: isSelected ? duration.color + '20' : COLORS.NEUTRAL[100],
-                      }
-                    ]}
-                  >
-                    <Ionicons
-                      name={duration.icon as any}
-                      size={28}
-                      color={isSelected ? duration.color : COLORS.SECONDARY[600]}
-                    />
-                  </View>
-
                   {/* Text */}
                   <View style={styles.textContainer}>
                     <Text

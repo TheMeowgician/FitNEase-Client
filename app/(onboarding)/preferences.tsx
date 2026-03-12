@@ -36,10 +36,10 @@ export default function PreferencesScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const muscleGroups: PreferenceOption[] = [
-    { id: 'upper_body', title: 'Upper Body', icon: 'body-outline', color: '#EF4444', description: 'Chest, back, shoulders, arms' },
-    { id: 'lower_body', title: 'Lower Body', icon: 'walk-outline', color: '#6366F1', description: 'Legs, glutes, calves' },
-    { id: 'core', title: 'Core', icon: 'ellipse-outline', color: '#EC4899', description: 'Abs and core stability' },
-    { id: 'whole_body', title: 'Whole Body', icon: 'person-outline', color: '#F97316', description: 'Full body workout' },
+    { id: 'upper_body', title: 'Upper Body', icon: '', color: '#EF4444', description: 'Chest, back, shoulders, arms' },
+    { id: 'lower_body', title: 'Lower Body', icon: '', color: '#6366F1', description: 'Legs, glutes, calves' },
+    { id: 'core', title: 'Core', icon: '', color: '#EC4899', description: 'Abs and core stability' },
+    { id: 'whole_body', title: 'Whole Body', icon: '', color: '#F97316', description: 'Full body workout' },
   ];
 
   const handleToggleSelection = (item: string) => {
@@ -101,24 +101,6 @@ export default function PreferencesScreen() {
             </View>
           </View>
         )}
-
-        {/* Icon */}
-        <View style={styles.cardIconContainer}>
-          <View
-            style={[
-              styles.iconCircle,
-              {
-                backgroundColor: isSelected ? option.color + '15' : COLORS.NEUTRAL[100],
-              }
-            ]}
-          >
-            <Ionicons
-              name={option.icon as any}
-              size={20}
-              color={isSelected ? 'white' : option.color}
-            />
-          </View>
-        </View>
 
         {/* Title */}
         <Text

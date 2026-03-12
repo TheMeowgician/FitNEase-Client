@@ -256,7 +256,6 @@ export default function BMIStatsScreen() {
           {/* Weight */}
           <View style={styles.statItem}>
             <View style={styles.statHeader}>
-              <Ionicons name="fitness-outline" size={24} color={COLORS.PRIMARY[500]} />
               <Text style={styles.statLabel}>Weight</Text>
             </View>
             {renderCustomSlider(
@@ -269,7 +268,6 @@ export default function BMIStatsScreen() {
           {/* Height */}
           <View style={styles.statItem}>
             <View style={styles.statHeader}>
-              <Ionicons name="resize-outline" size={24} color={COLORS.PRIMARY[500]} />
               <Text style={styles.statLabel}>Height</Text>
             </View>
             {renderCustomSlider(
@@ -282,7 +280,6 @@ export default function BMIStatsScreen() {
           {/* Age - Auto-calculated from birthdate */}
           <View style={styles.statItem}>
             <View style={styles.statHeader}>
-              <Ionicons name="calendar-outline" size={24} color={COLORS.PRIMARY[500]} />
               <Text style={styles.statLabel}>Age</Text>
             </View>
             <View style={styles.readOnlyContainer}>
@@ -436,7 +433,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
-    marginLeft: 8,
   },
   sliderContainer: {
     backgroundColor: COLORS.NEUTRAL.WHITE,

@@ -41,7 +41,7 @@ export default function FitnessGoalsScreen() {
       id: 'weight_loss',
       title: 'Weight Loss',
       description: 'Burn calories and reduce body fat through high-intensity workouts',
-      icon: 'trending-down-outline',
+      icon: '',
       color: '#EF4444',
       benefits: [
         'Burn calories efficiently',
@@ -54,7 +54,7 @@ export default function FitnessGoalsScreen() {
       id: 'muscle_gain',
       title: 'Muscle Gain',
       description: 'Build lean muscle mass and increase strength',
-      icon: 'fitness-outline',
+      icon: '',
       color: '#8B5CF6',
       benefits: [
         'Increase muscle mass',
@@ -67,7 +67,7 @@ export default function FitnessGoalsScreen() {
       id: 'endurance',
       title: 'Endurance',
       description: 'Improve cardiovascular fitness and stamina',
-      icon: 'heart-outline',
+      icon: '',
       color: '#F59E0B',
       benefits: [
         'Better cardiovascular health',
@@ -80,7 +80,7 @@ export default function FitnessGoalsScreen() {
       id: 'strength',
       title: 'Strength',
       description: 'Increase power, force, and functional movement',
-      icon: 'barbell-outline',
+      icon: '',
       color: '#10B981',
       benefits: [
         'Increase functional strength',
@@ -93,7 +93,7 @@ export default function FitnessGoalsScreen() {
       id: 'flexibility',
       title: 'Flexibility',
       description: 'Improve mobility, range of motion, and recovery',
-      icon: 'accessibility-outline',
+      icon: '',
       color: '#6366F1',
       benefits: [
         'Better range of motion',
@@ -106,7 +106,7 @@ export default function FitnessGoalsScreen() {
       id: 'general_fitness',
       title: 'General Fitness',
       description: 'Overall health, wellness, and balanced fitness',
-      icon: 'body-outline',
+      icon: '',
       color: '#EC4899',
       benefits: [
         'Balanced fitness development',
@@ -186,24 +186,6 @@ export default function FitnessGoalsScreen() {
             </View>
           </View>
         )}
-
-        {/* Icon */}
-        <View style={styles.goalIconContainer}>
-          <View
-            style={[
-              styles.goalIconCircle,
-              {
-                backgroundColor: isSelected ? goal.color + '15' : COLORS.NEUTRAL[100],
-              }
-            ]}
-          >
-            <Ionicons
-              name={goal.icon as any}
-              size={28}
-              color={isSelected ? goal.color : goal.color}
-            />
-          </View>
-        </View>
 
         {/* Title */}
         <Text

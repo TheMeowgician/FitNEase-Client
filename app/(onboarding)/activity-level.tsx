@@ -41,7 +41,7 @@ export default function ActivityLevelScreen() {
       title: 'Sedentary',
       subtitle: 'Just getting started',
       description: 'Mostly sedentary lifestyle with little to no regular exercise',
-      icon: 'walk-outline',
+      icon: '',
       color: '#3B82F6',
       examples: [
         'Exercise 0-1 times per week',
@@ -55,7 +55,7 @@ export default function ActivityLevelScreen() {
       title: 'Lightly Active',
       subtitle: 'Some movement',
       description: 'Light exercise or sports 1-2 times per week',
-      icon: 'walk-outline',
+      icon: '',
       color: '#8B5CF6',
       examples: [
         'Exercise 1-2 times per week',
@@ -69,7 +69,7 @@ export default function ActivityLevelScreen() {
       title: 'Moderately Active',
       subtitle: 'Regular activity',
       description: 'Regularly active with moderate exercise',
-      icon: 'bicycle-outline',
+      icon: '',
       color: '#F59E0B',
       examples: [
         'Exercise 3-4 times per week',
@@ -83,7 +83,7 @@ export default function ActivityLevelScreen() {
       title: 'Very Active',
       subtitle: 'Highly active lifestyle',
       description: 'Regularly engaged in vigorous physical activities',
-      icon: 'barbell-outline',
+      icon: '',
       color: '#10B981',
       examples: [
         'Exercise 5+ times per week',
@@ -154,24 +154,6 @@ export default function ActivityLevelScreen() {
             </View>
           </View>
         )}
-
-        {/* Icon */}
-        <View style={styles.cardIconContainer}>
-          <View
-            style={[
-              styles.iconCircle,
-              {
-                backgroundColor: isSelected ? level.color + '15' : COLORS.NEUTRAL[100],
-              }
-            ]}
-          >
-            <Ionicons
-              name={level.icon as any}
-              size={32}
-              color={isSelected ? level.color : level.color}
-            />
-          </View>
-        </View>
 
         {/* Title */}
         <Text

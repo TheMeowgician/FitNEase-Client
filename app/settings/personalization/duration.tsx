@@ -22,15 +22,46 @@ export default function DurationSettingsScreen() {
   const { user, refreshUser } = useAuth();
   const { goBack } = useSmartBack();
   const alert = useAlert();
-  const [selectedDuration, setSelectedDuration] = useState<number>(30);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Tabata-aligned durations matching beginner progressive overload (4→5→6 exercises)
-  const durations: DurationOption[] = [
-    { value: 20, label: '~20 min', description: '4 exercises per session', icon: 'flash-outline', color: '#10B981' },
-    { value: 25, label: '~25 min', description: '5 exercises per session', icon: 'fitness-outline', color: '#F59E0B' },
-    { value: 30, label: '~30 min', description: '6 exercises per session', icon: 'barbell-outline', color: '#8B5CF6' },
-  ];
+  // Duration options adapt to fitness level for progressive training
+  const getDurationsByLevel = (level: string): DurationOption[] => {
+    switch (level?.toLowerCase()) {
+      case 'intermediate':
+        return [
+          { value: 30, label: '~30 min', description: '6 exercises per session', icon: 'time-outline', color: '#10B981' },
+          { value: 35, label: '~35 min', description: '7 exercises per session', icon: 'time-outline', color: '#F59E0B' },
+          { value: 40, label: '~40 min', description: '8 exercises per session', icon: 'time-outline', color: '#8B5CF6' },
+        ];
+      case 'advanced':
+        return [
+          { value: 40, label: '~40 min', description: '8 exercises per session', icon: 'time-outline', color: '#10B981' },
+          { value: 50, label: '~50 min', description: '10 exercises per session', icon: 'time-outline', color: '#F59E0B' },
+          { value: 60, label: '~60 min', description: '12 exercises per session', icon: 'time-outline', color: '#8B5CF6' },
+        ];
+      default: // beginner
+        return [
+          { value: 20, label: '~20 min', description: '4 exercises per session', icon: 'time-outline', color: '#10B981' },
+          { value: 25, label: '~25 min', description: '5 exercises per session', icon: 'time-outline', color: '#F59E0B' },
+          { value: 30, label: '~30 min', description: '6 exercises per session', icon: 'time-outline', color: '#8B5CF6' },
+        ];
+    }
+  };
+
+  const durations = getDurationsByLevel(user?.fitnessLevel || 'beginner');
+
+  // Initialize with user's current setting, clamped to nearest valid option
+  const getInitialDuration = () => {
+    const currentDuration = user?.timeConstraints || 30;
+    const validValues = durations.map(d => d.value);
+    if (validValues.includes(currentDuration)) return currentDuration;
+    // Find closest valid option
+    return validValues.reduce((closest, val) =>
+      Math.abs(val - currentDuration) < Math.abs(closest - currentDuration) ? val : closest
+    );
+  };
+
+  const [selectedDuration, setSelectedDuration] = useState<number>(getInitialDuration());
 
   useEffect(() => {
     loadCurrentSettings();
@@ -38,7 +69,16 @@ export default function DurationSettingsScreen() {
 
   const loadCurrentSettings = () => {
     if (user?.timeConstraints) {
-      setSelectedDuration(user.timeConstraints);
+      const validValues = durations.map(d => d.value);
+      if (validValues.includes(user.timeConstraints)) {
+        setSelectedDuration(user.timeConstraints);
+      } else {
+        // Clamp to closest valid option for the user's current fitness level
+        const closest = validValues.reduce((c, val) =>
+          Math.abs(val - user.timeConstraints) < Math.abs(c - user.timeConstraints) ? val : c
+        );
+        setSelectedDuration(closest);
+      }
     }
   };
 
@@ -91,21 +131,6 @@ export default function DurationSettingsScreen() {
             </View>
           </View>
         )}
-
-        <View style={styles.cardIconContainer}>
-          <View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: isSelected ? duration.color + '15' : COLORS.NEUTRAL[100] }
-            ]}
-          >
-            <Ionicons
-              name={duration.icon as any}
-              size={24}
-              color={isSelected ? duration.color : duration.color}
-            />
-          </View>
-        </View>
 
         <Text
           style={[
