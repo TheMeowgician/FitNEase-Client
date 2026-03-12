@@ -354,6 +354,7 @@ export class SocialService {
     search?: string;
     page?: number;
     limit?: number;
+    per_page?: number;
     user_id?: number;
   }): Promise<{ groups: Group[]; total: number; page: number; limit: number }> {
     try {

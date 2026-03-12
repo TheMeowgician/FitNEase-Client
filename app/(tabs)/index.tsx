@@ -27,51 +27,8 @@ import { useAchievementStore } from '../../stores/achievementStore';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 import { getAlgorithmDisplayName } from '../../utils/mlUtils';
-
-// Achievement icons mapping - maps achievement names to image files
-const ACHIEVEMENT_ICONS: { [key: string]: any } = {
-  // Workout count achievements
-  'First Workout': require('../../assets/images/achievements/first_workout.png'),
-  'Getting Started': require('../../assets/images/achievements/getting_started.png'),
-  'Dedicated Trainer': require('../../assets/images/achievements/dedicated_trainer.png'),
-  'Fitness Warrior': require('../../assets/images/achievements/fitness_warrior.png'),
-  'Century Club': require('../../assets/images/achievements/century_club.png'),
-  'Workout Master': require('../../assets/images/achievements/workout_master.png'),
-  // Streak achievements
-  '3-Day Spark': require('../../assets/images/achievements/3_day_spark.png'),
-  'Week Warrior': require('../../assets/images/achievements/week_warrior.png'),
-  'Two Week Terror': require('../../assets/images/achievements/two_week_terror.png'),
-  'Month Master': require('../../assets/images/achievements/month_master.png'),
-  'Iron Will': require('../../assets/images/achievements/iron_will.png'),
-  'Unstoppable': require('../../assets/images/achievements/unstoppable.png'),
-  // Time duration achievements
-  'First Hour': require('../../assets/images/achievements/first_hour.png'),
-  'Dedicated': require('../../assets/images/achievements/dedicated.png'),
-  'Time Investor': require('../../assets/images/achievements/time_investor.png'),
-  'Marathon Mind': require('../../assets/images/achievements/marathon_mind.png'),
-  'Time Lord': require('../../assets/images/achievements/time_lord.png'),
-  // Social achievements
-  'Team Player': require('../../assets/images/achievements/team_player.png'),
-  'Group Regular': require('../../assets/images/achievements/group_regular.png'),
-  'Pack Leader': require('../../assets/images/achievements/pack_leader.png'),
-  'Motivator': require('../../assets/images/achievements/motivator.png'),
-  'Community Legend': require('../../assets/images/achievements/community_legend.png'),
-  // Calorie achievements
-  'First Thousand': require('../../assets/images/achievements/first_thousand.png'),
-  'Calorie Burner': require('../../assets/images/achievements/calorie_burner.png'),
-  'Heat Generator': require('../../assets/images/achievements/heat_generator.png'),
-  'Calorie Crusher': require('../../assets/images/achievements/calorie_crusher.png'),
-  'Furnace Master': require('../../assets/images/achievements/furnace_master.png'),
-  // Fitness level badges
-  'Beginner': require('../../assets/images/achievements/beginner.png'),
-  'Intermediate': require('../../assets/images/achievements/intermediate.png'),
-  'Advanced': require('../../assets/images/achievements/advanced.png'),
-};
-
-// Helper to get achievement icon with fallback
-const getAchievementIcon = (achievementName: string) => {
-  return ACHIEVEMENT_ICONS[achievementName] || null;
-};
+import { getAchievementIcon } from '../../constants/achievementIcons';
+import { engagementService } from '../../services/microservices/engagementService';
 
 // ====================================================================
 // 🧪 TESTING FLAG: Daily Workout Limit Control
@@ -99,7 +56,9 @@ export default function HomeScreen() {
 
   // 🎯 NEW: Use today's exercises from backend weekly plan (single source of truth)
   const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [achievements, setAchievements] = useState<any[]>([]);
+  const [achievementPreviews, setAchievementPreviews] = useState<any[]>([]);
+  const [earnedAchievementCount, setEarnedAchievementCount] = useState(0);
+  const [totalAchievementCount, setTotalAchievementCount] = useState(0);
   const [engagementStats, setEngagementStats] = useState<any>(null);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
   const [isLoading, setIsLoading] = useState(true);
@@ -302,7 +261,11 @@ export default function HomeScreen() {
         }
       }
 
-      const [achievementsResponse, engagementResponse, fitnessAssessment] = await Promise.all([
+      const [availableAchievements, userAchievements, engagementResponse, fitnessAssessment] = await Promise.all([
+        engagementService.getAvailableAchievements().catch(err => {
+          console.warn('Available achievements unavailable:', err);
+          return [];
+        }),
         getUserAchievements(user.id).catch(err => {
           console.warn('Achievements service unavailable:', err);
           return [];
@@ -329,7 +292,31 @@ export default function HomeScreen() {
       console.log(`📊 [DASHBOARD] Using ${recommendations?.length || 0} recommendations from store`);
       console.log('📊 [DASHBOARD] Weekly stats from store:', weeklyStats);
 
-      setAchievements(achievementsResponse || []);
+      // Build achievement previews (same pattern as progress page for UI consistency)
+      const unlockedIds = new Set(
+        (userAchievements || []).filter((ua: any) => ua.is_completed).map((ua: any) => ua.achievement_id)
+      );
+      const sortedAchs = [...(availableAchievements || [])].sort((a: any, b: any) => {
+        const aUnlocked = unlockedIds.has(a.achievement_id);
+        const bUnlocked = unlockedIds.has(b.achievement_id);
+        if (aUnlocked !== bUnlocked) return aUnlocked ? -1 : 1;
+        return a.achievement_id - b.achievement_id;
+      });
+      const iconMap: Record<string, string> = {
+        workout_count: 'fitness', streak: 'flame', calories: 'flash', time: 'time', social: 'people',
+      };
+      const colorMap: Record<string, string> = {
+        common: '#6B7280', rare: '#3B82F6', epic: '#8B5CF6', legendary: '#F59E0B',
+      };
+      setAchievementPreviews(sortedAchs.slice(0, 4).map((ach: any) => ({
+        icon: iconMap[ach.achievement_type] || 'trophy',
+        title: ach.achievement_name,
+        earned: unlockedIds.has(ach.achievement_id),
+        color: colorMap[ach.rarity_level] || '#6B7280',
+        customImage: getAchievementIcon(ach.achievement_name),
+      })));
+      setEarnedAchievementCount((userAchievements || []).filter((a: any) => a.is_completed).length);
+      setTotalAchievementCount((availableAchievements || []).length);
       setEngagementStats(engagementResponse);
 
       // Determine fitness level from assessment data (more accurate than user profile)
@@ -677,6 +664,17 @@ export default function HomeScreen() {
         {/* Week Calendar Strip */}
         {user?.workoutDays && user.workoutDays.length > 0 && (
           <View style={styles.weekCalendarContainer}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarHeaderTitle}>This Week</Text>
+              <TouchableOpacity
+                style={styles.calendarHeaderLink}
+                onPress={() => router.push('/(tabs)/weekly-plan')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.calendarHeaderLinkText}>View Plan</Text>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.PRIMARY[600]} />
+              </TouchableOpacity>
+            </View>
             <WeekCalendarStrip
               weekStart={currentWeekStart}
               workoutDays={user.workoutDays}
@@ -942,65 +940,86 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Achievements Section */}
+        {/* Achievements Section — matches progress page UI */}
         <View style={styles.achievementsSection}>
-          <Text style={styles.sectionHeader}>Recent Achievements</Text>
-          {achievements && achievements.length > 0 ? (
-            <View style={styles.achievementsGrid}>
-              {achievements.slice(0, 3).map((userAchievement: any, index: number) => {
-                const achievementName = userAchievement.achievement?.achievement_name || 'Achievement';
-                const achievementIcon = getAchievementIcon(achievementName);
-                return (
-                  <View
-                    key={index}
-                    style={styles.achievementCard}
-                  >
-                    <View style={[styles.achievementBadge, { backgroundColor: achievementIcon ? 'transparent' : (userAchievement.achievement?.badge_color || COLORS.PRIMARY[600]) }]}>
-                      {achievementIcon ? (
-                        <Image source={achievementIcon} style={styles.achievementIconImage} />
-                      ) : (
-                        <Ionicons
-                          name={userAchievement.achievement?.badge_icon as any || "trophy"}
-                          size={24}
-                          color="white"
+          <View style={styles.achievementsSectionHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="trophy" size={20} color={COLORS.PRIMARY[600]} />
+              <Text style={styles.sectionHeader}>Achievements</Text>
+            </View>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              onPress={() => router.push('/achievements')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+              <Ionicons name="chevron-forward" size={14} color={COLORS.PRIMARY[600]} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.achievementPreviewCard}>
+            {achievementPreviews.length > 0 ? (
+              <>
+                <View style={styles.achievementPreviewRow}>
+                  {achievementPreviews.map((achievement: any, index: number) => (
+                    <View key={index} style={styles.achievementPreviewItem}>
+                      {achievement.earned && achievement.customImage ? (
+                        <Image
+                          source={achievement.customImage}
+                          style={styles.achievementPreviewImage}
+                          resizeMode="contain"
                         />
+                      ) : (
+                        <View
+                          style={[
+                            styles.achievementPreviewIcon,
+                            achievement.earned
+                              ? { backgroundColor: achievement.color }
+                              : styles.achievementPreviewIconLocked,
+                          ]}
+                        >
+                          {achievement.earned ? (
+                            <Ionicons name={achievement.icon as any} size={20} color="white" />
+                          ) : (
+                            <Ionicons name="lock-closed" size={16} color={COLORS.SECONDARY[400]} />
+                          )}
+                        </View>
                       )}
+                      <Text
+                        style={[
+                          styles.achievementPreviewLabel,
+                          !achievement.earned && styles.achievementPreviewLabelLocked,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {achievement.title}
+                      </Text>
                     </View>
-                    <Text style={styles.achievementName}>
-                      {achievementName}
-                    </Text>
-                    <Text style={styles.achievementPoints}>
-                      {userAchievement.points_earned || 0} pts
-                    </Text>
+                  ))}
+                </View>
+
+                {/* Progress Bar */}
+                <View style={styles.achievementProgressSection}>
+                  <View style={styles.achievementProgressBar}>
+                    <View
+                      style={[
+                        styles.achievementProgressFill,
+                        { width: `${totalAchievementCount > 0 ? (earnedAchievementCount / totalAchievementCount) * 100 : 0}%` },
+                      ]}
+                    />
                   </View>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyAchievements}>
-              <Ionicons name="trophy-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyAchievementsTitle}>No Achievements Yet</Text>
-              <Text style={styles.emptyAchievementsText}>
-                Complete workouts to earn your first achievement
-              </Text>
-            </View>
-          )}
-          {engagementStats && (
-            <View style={styles.engagementSummary}>
-              <View style={styles.engagementStat}>
-                <Text style={styles.engagementStatNumber}>{engagementStats.total_points || 0}</Text>
-                <Text style={styles.engagementStatLabel}>Total Points</Text>
+                  <Text style={styles.achievementProgressText}>
+                    {earnedAchievementCount} of {totalAchievementCount} unlocked
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.achievementEmptyState}>
+                <Ionicons name="trophy-outline" size={32} color={COLORS.SECONDARY[300]} />
+                <Text style={styles.achievementEmptyText}>Loading achievements...</Text>
               </View>
-              <View style={styles.engagementStat}>
-                <Text style={styles.engagementStatNumber}>{engagementStats.current_streak_days || 0}</Text>
-                <Text style={styles.engagementStatLabel}>Day Streak</Text>
-              </View>
-              <View style={styles.engagementStat}>
-                <Text style={styles.engagementStatNumber}>{engagementStats.total_achievements || 0}</Text>
-                <Text style={styles.engagementStatLabel}>Achievements</Text>
-              </View>
-            </View>
-          )}
+            )}
+          </View>
         </View>
 
         {/* Quick Actions */}
@@ -1151,6 +1170,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginHorizontal: 16,
     overflow: 'hidden',
+    backgroundColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -1269,101 +1289,114 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginBottom: 24,
   },
-  achievementsGrid: {
+  achievementsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  viewAllText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+  },
+  achievementPreviewCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  achievementPreviewRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  achievementCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 12,
+  achievementPreviewItem: {
     alignItems: 'center',
     flex: 1,
-    marginHorizontal: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  achievementBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  achievementPreviewIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-    overflow: 'hidden',
+    marginBottom: 6,
   },
-  achievementIconImage: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
+  achievementPreviewImage: {
+    width: 48,
+    height: 48,
+    marginBottom: 6,
   },
-  achievementName: {
-    fontSize: 12,
-    fontFamily: FONTS.SEMIBOLD,
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 4,
+  achievementPreviewIconLocked: {
+    backgroundColor: COLORS.NEUTRAL[200],
   },
-  achievementPoints: {
+  achievementPreviewLabel: {
     fontSize: 10,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.PRIMARY[600],
-  },
-  emptyAchievements: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 32,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 16,
-  },
-  emptyAchievementsTitle: {
-    fontSize: 16,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  emptyAchievementsText: {
-    fontSize: 14,
-    fontFamily: FONTS.REGULAR,
-    color: '#9CA3AF',
+    color: COLORS.SECONDARY[700],
     textAlign: 'center',
+  },
+  achievementPreviewLabelLocked: {
+    color: COLORS.SECONDARY[400],
+  },
+  achievementProgressSection: {
+    alignItems: 'center',
+  },
+  achievementProgressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: COLORS.NEUTRAL[200],
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  achievementProgressFill: {
+    height: '100%',
+    backgroundColor: COLORS.PRIMARY[500],
+    borderRadius: 3,
+  },
+  achievementProgressText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.MEDIUM,
+    color: COLORS.SECONDARY[600],
+  },
+  achievementEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  achievementEmptyText: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
     marginTop: 8,
   },
-  engagementSummary: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
+  calendarHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  engagementStat: {
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
-  engagementStatNumber: {
-    fontSize: 20,
-    fontFamily: FONTS.BOLD,
+  calendarHeaderTitle: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[800],
+  },
+  calendarHeaderLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  calendarHeaderLinkText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY[600],
-    marginBottom: 4,
-  },
-  engagementStatLabel: {
-    fontSize: 12,
-    fontFamily: FONTS.REGULAR,
-    color: '#6B7280',
-    textAlign: 'center',
   },
   sectionHeader: {
     fontSize: 14,

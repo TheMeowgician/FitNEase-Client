@@ -149,7 +149,11 @@ export default function PermissionsScreen() {
   };
 
   const handleCardPress = async (key: string) => {
-    if (permissions[key] === 'granted') return;
+    // If already granted, open device settings so the user can revoke if needed
+    if (permissions[key] === 'granted') {
+      Linking.openSettings();
+      return;
+    }
 
     // If already denied (can't re-ask on iOS), open settings
     if (permissions[key] === 'denied' && Platform.OS === 'ios') {
@@ -244,7 +248,7 @@ export default function PermissionsScreen() {
                   styles.permissionCard,
                   status === 'granted' && styles.permissionCardGranted,
                 ]}
-                activeOpacity={status === 'granted' ? 1 : 0.7}
+                activeOpacity={0.7}
                 onPress={() => handleCardPress(config.key)}
               >
                 <View style={[

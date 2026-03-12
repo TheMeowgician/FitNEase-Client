@@ -66,17 +66,14 @@ class PushNotificationService {
     }
 
     try {
-      // Check for permission first
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+      // Only proceed if permission is already granted.
+      // Do NOT auto-request here — the permissions page handles that explicitly.
+      // This prevents the OS notification dialog from appearing unexpectedly
+      // (e.g. right after email verification, before the user reaches permissions page).
+      const { status } = await Notifications.getPermissionsAsync();
 
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== 'granted') {
-        // Silent fail - permission denied
+      if (status !== 'granted') {
+        // Silent fail - permission not yet granted, will register token later
         return null;
       }
 

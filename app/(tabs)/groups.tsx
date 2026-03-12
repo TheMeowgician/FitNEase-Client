@@ -108,7 +108,7 @@ export default function GroupsScreen() {
       // Load user's groups, discover public groups, and get user's pending join requests
       const [myGroupsData, publicGroupsData, userJoinRequests] = await Promise.all([
         socialService.getGroups({ user_id: parseInt(user.id) }), // Get groups where user is a member
-        socialService.getGroups({ limit: 10 }), // Get public groups to discover
+        socialService.getGroups({ per_page: 10 }), // Get public groups to discover
         socialService.getUserJoinRequests().catch(() => ({ data: [] })), // Get user's pending requests
       ]);
 
@@ -395,7 +395,7 @@ export default function GroupsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Discover Groups</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/groups/discover')} activeOpacity={0.7}>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>

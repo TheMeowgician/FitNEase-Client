@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import { usePathname } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAchievementStore } from '../../stores/achievementStore';
 import { engagementService } from '../../services/microservices/engagementService';
@@ -17,6 +18,7 @@ import AchievementUnlockModal from './AchievementUnlockModal';
  */
 export function AchievementHandler() {
   const { isAuthenticated, user } = useAuth();
+  const pathname = usePathname();
   const {
     unlockedQueue,
     isModalVisible,
@@ -43,10 +45,18 @@ export function AchievementHandler() {
       return;
     }
 
-    // Don't show achievements during onboarding — wait until user reaches dashboard
+    // Don't show achievements during onboarding or auth flows — wait until user reaches dashboard.
+    // This prevents the modal from appearing on the permissions page (last onboarding step)
+    // when the OS permission dialog briefly backgrounds the app, triggering the AppState listener.
     if (!user.onboardingCompleted) {
       console.log('🏆 [ACHIEVEMENT HANDLER] Skipping - onboarding not complete');
       setHasFetchedUnseen(true);
+      return;
+    }
+
+    const isOnOnboardingOrAuth = pathname.includes('(onboarding)') || pathname.includes('(auth)');
+    if (isOnOnboardingOrAuth) {
+      console.log('🏆 [ACHIEVEMENT HANDLER] Skipping - still on onboarding/auth route:', pathname);
       return;
     }
 
@@ -89,7 +99,7 @@ export function AchievementHandler() {
     } catch (error) {
       console.warn('🏆 [ACHIEVEMENT HANDLER] Error fetching unseen achievements:', error);
     }
-  }, [isAuthenticated, user?.id, user?.onboardingCompleted, addUnlockedAchievements, showModal, setHasFetchedUnseen]);
+  }, [isAuthenticated, user?.id, user?.onboardingCompleted, pathname, addUnlockedAchievements, showModal, setHasFetchedUnseen]);
 
   /**
    * Handle modal close - mark achievements as seen
