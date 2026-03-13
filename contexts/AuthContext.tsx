@@ -5,6 +5,7 @@ import { workoutNotificationScheduler, NotificationSettings } from '../services/
 import { useInvitationStore } from '../stores/invitationStore';
 
 const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
+const PENDING_VERIFICATION_EMAIL_KEY = '@pending_verification_email';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -12,12 +13,14 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isEmailVerified: boolean;
   onboardingCompleted: boolean;
+  pendingVerificationEmail: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (userData: RegisterRequest) => Promise<{ requiresEmailVerification: boolean; user?: AuthUser }>;
   logout: () => Promise<void>;
   verifyEmail: (code: string, email?: string) => Promise<void>;
   resendVerification: (email?: string) => Promise<void>;
   refreshUser: () => Promise<void>;
+  clearPendingVerification: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,6 +32,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   const isAuthenticated = !!user;
   const isEmailVerified = !!user?.isEmailVerified;
@@ -54,11 +58,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const initializeAuth = async () => {
     try {
+      // Load pending verification email from storage (must complete before isLoading=false)
+      const pendingEmail = await AsyncStorage.getItem(PENDING_VERIFICATION_EMAIL_KEY);
+      setPendingVerificationEmail(pendingEmail);
+
       // Check if user is already authenticated
       const isAuth = await authService.isAuthenticated();
       if (isAuth) {
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);
+
+        // If user is authenticated and email verified, clear any stale pending email
+        if (currentUser.isEmailVerified && pendingEmail) {
+          await AsyncStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY);
+          setPendingVerificationEmail(null);
+        }
 
         // Schedule workout reminders for returning user
         scheduleWorkoutRemindersForUser(currentUser);
@@ -84,6 +98,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Small delay to ensure state propagates
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Clear any pending verification email since user logged in
+      await AsyncStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY);
+      setPendingVerificationEmail(null);
 
       // Schedule workout reminders if user has workout days configured
       scheduleWorkoutRemindersForUser(response.user);
@@ -158,6 +176,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(response.user);
       }
 
+      // Save pending verification email so user can resume if they close the app
+      if (response.requiresEmailVerification) {
+        await AsyncStorage.setItem(PENDING_VERIFICATION_EMAIL_KEY, userData.email);
+        setPendingVerificationEmail(userData.email);
+      }
+
       return {
         requiresEmailVerification: response.requiresEmailVerification,
         user: response.user || undefined
@@ -182,6 +206,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await authService.logout();
       console.log('🔓 AuthContext: Server logout completed, clearing user state');
       setUser(null);
+
+      // Clear pending verification email on logout
+      await AsyncStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY);
+      setPendingVerificationEmail(null);
+
       console.log('🔓 AuthContext: User state cleared, navigation should trigger');
     } catch (error) {
       console.error('Logout failed:', error);
@@ -189,7 +218,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       useInvitationStore.getState().clearAllInvitations();
       console.log('🔓 AuthContext: Clearing user state despite logout error');
       setUser(null);
+      await AsyncStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY).catch(() => {});
+      setPendingVerificationEmail(null);
     }
+  };
+
+  const clearPendingVerification = async (): Promise<void> => {
+    await AsyncStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY);
+    setPendingVerificationEmail(null);
   };
 
   const verifyEmail = async (code: string, email?: string): Promise<void> => {
@@ -214,6 +250,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         console.log('✅ Email verified. User needs to login to get tokens.');
       }
+
+      // Clear pending verification email — verification complete
+      await AsyncStorage.removeItem(PENDING_VERIFICATION_EMAIL_KEY);
+      setPendingVerificationEmail(null);
     } catch (error) {
       console.error('Email verification failed:', error);
       throw error;
@@ -250,12 +290,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated,
     isEmailVerified,
     onboardingCompleted,
+    pendingVerificationEmail,
     login,
     register,
     logout,
     verifyEmail,
     resendVerification,
     refreshUser,
+    clearPendingVerification,
   };
 
   return (

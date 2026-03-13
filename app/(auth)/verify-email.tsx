@@ -36,7 +36,7 @@ export default function VerifyEmailScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const { email } = useLocalSearchParams<{ email?: string }>();
-  const { user, verifyEmail, resendVerification } = useAuth();
+  const { user, verifyEmail, resendVerification, clearPendingVerification } = useAuth();
   const alert = useAlert();
   const verificationInputRef = useRef<VerificationCodeInputRef>(null);
   const verifyingRef = useRef(false);
@@ -271,26 +271,43 @@ export default function VerifyEmailScreen() {
   };
 
   const handleSkipVerification = () => {
+    const isLoggedIn = !!user;
     alert.confirm(
-      'Skip Verification?',
-      'You can verify your email later in settings. Some features may be limited.',
-      () => {
+      isLoggedIn ? 'Skip Verification?' : 'Go to Login?',
+      isLoggedIn
+        ? 'You can verify your email later in settings. Some features may be limited.'
+        : 'You can verify your email after logging in.',
+      async () => {
         Keyboard.dismiss();
-        router.replace('/(tabs)');
+        await clearPendingVerification();
+        if (isLoggedIn) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/login');
+        }
       },
       undefined,
-      'Skip',
+      isLoggedIn ? 'Skip' : 'Go to Login',
       'Cancel'
     );
   };
 
   const handleBackPress = () => {
+    const isLoggedIn = !!user;
     alert.confirm(
       'Go Back?',
-      'You\'ll need to sign up again if you go back now.',
-      () => {
+      isLoggedIn
+        ? 'You\'ll need to sign up again if you go back now.'
+        : 'You can verify your email later by logging in.',
+      async () => {
         Keyboard.dismiss();
-        router.back();
+        await clearPendingVerification();
+        if (isLoggedIn) {
+          router.back();
+        } else {
+          // Not authenticated — go to splash instead of back (avoids infinite loop with index.tsx)
+          router.replace('/(auth)/splash');
+        }
       },
       undefined,
       'Go Back',

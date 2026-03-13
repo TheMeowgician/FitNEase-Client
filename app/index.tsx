@@ -5,7 +5,7 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function IndexPage() {
-  const { isAuthenticated, isLoading, isEmailVerified, onboardingCompleted } = useAuth();
+  const { isAuthenticated, isLoading, isEmailVerified, onboardingCompleted, pendingVerificationEmail, user } = useAuth();
 
   useEffect(() => {
     if (!isLoading) {
@@ -13,26 +13,32 @@ export default function IndexPage() {
         isAuthenticated,
         isEmailVerified,
         onboardingCompleted,
+        pendingVerificationEmail,
         isLoading,
         timestamp: new Date().toISOString()
       });
 
       if (!isAuthenticated) {
-        console.log('➡️ Redirecting to splash (not authenticated)');
-        // Use push instead of replace to ensure navigation happens
-        router.push('/(auth)/splash');
+        if (pendingVerificationEmail) {
+          // User registered but closed app before verifying email — resume verification
+          console.log('➡️ Redirecting to verify-email (pending verification for:', pendingVerificationEmail, ')');
+          router.push({ pathname: '/(auth)/verify-email', params: { email: pendingVerificationEmail } });
+        } else {
+          console.log('➡️ Redirecting to splash (not authenticated)');
+          router.push('/(auth)/splash');
+        }
       } else if (!isEmailVerified) {
         console.log('➡️ Redirecting to verify-email (email not verified)');
-        router.push('/(auth)/verify-email');
+        router.push({ pathname: '/(auth)/verify-email', params: { email: user?.email } });
       } else if (!onboardingCompleted) {
-        console.log('➡️ Redirecting to fitness-assessment (onboarding not completed)');
-        router.push('/(onboarding)/fitness-assessment');
+        console.log('➡️ Redirecting to welcome (onboarding not completed)');
+        router.push('/(onboarding)/welcome');
       } else {
         console.log('➡️ Redirecting to main app (all checks passed)');
         router.push('/(tabs)');
       }
     }
-  }, [isAuthenticated, isLoading, isEmailVerified, onboardingCompleted]);
+  }, [isAuthenticated, isLoading, isEmailVerified, onboardingCompleted, pendingVerificationEmail]);
 
   if (isLoading) {
     return (
