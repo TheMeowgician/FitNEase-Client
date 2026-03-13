@@ -45,18 +45,16 @@ export function AchievementHandler() {
       return;
     }
 
-    // Don't show achievements during onboarding or auth flows — wait until user reaches dashboard.
-    // This prevents the modal from appearing on the permissions page (last onboarding step)
-    // when the OS permission dialog briefly backgrounds the app, triggering the AppState listener.
-    if (!user.onboardingCompleted) {
-      console.log('🏆 [ACHIEVEMENT HANDLER] Skipping - onboarding not complete');
-      setHasFetchedUnseen(true);
-      return;
-    }
-
-    const isOnOnboardingOrAuth = pathname.includes('(onboarding)') || pathname.includes('(auth)');
-    if (isOnOnboardingOrAuth) {
-      console.log('🏆 [ACHIEVEMENT HANDLER] Skipping - still on onboarding/auth route:', pathname);
+    // Only show achievements on main tab routes (dashboard, groups, progress, etc.).
+    // usePathname() strips route group names like (onboarding)/(auth), so we use an
+    // allowlist of tab paths instead. This prevents the modal from appearing on:
+    // - Onboarding pages (permissions, welcome, goals, etc.)
+    // - Auth pages (login, register, verify-email, etc.)
+    // - Any non-tab screen (group detail, settings, workout session, etc.)
+    const TAB_ROUTES = ['/', '/groups', '/progress', '/profile', '/workouts', '/weekly-plan'];
+    const isOnTabRoute = TAB_ROUTES.includes(pathname);
+    if (!isOnTabRoute) {
+      console.log('🏆 [ACHIEVEMENT HANDLER] Skipping - not on a tab route:', pathname);
       return;
     }
 
@@ -99,7 +97,7 @@ export function AchievementHandler() {
     } catch (error) {
       console.warn('🏆 [ACHIEVEMENT HANDLER] Error fetching unseen achievements:', error);
     }
-  }, [isAuthenticated, user?.id, user?.onboardingCompleted, pathname, addUnlockedAchievements, showModal, setHasFetchedUnseen]);
+  }, [isAuthenticated, user?.id, pathname, addUnlockedAchievements, showModal, setHasFetchedUnseen]);
 
   /**
    * Handle modal close - mark achievements as seen
