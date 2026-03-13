@@ -202,6 +202,10 @@ export default function GroupLobbyScreen() {
   const userChannelRef = useRef<any>(null);
   // Track pending exercise swap for WebSocket confirmation (handles HTTP timeout but WebSocket success)
   const pendingSwapRef = useRef<{ slotIndex: number; exerciseId: number; confirmed: boolean } | null>(null);
+  // Track previous member count to detect "member left" vs "member pressed ready"
+  // Used by allMembersReady trigger to prevent the old bug where a member leaving
+  // caused stale 'ready' statuses to fire exercise generation.
+  const prevMemberCountRef = useRef(0);
 
   // Block Android hardware back button — route through handleLeaveLobby confirmation
   useEffect(() => {
@@ -805,12 +809,38 @@ export default function GroupLobbyScreen() {
     };
   }, []);
 
-  // NOTE: The allMembersReady auto-generation trigger was removed.
-  // Exercise generation is exclusively driven by readyCheckResult === 'success'
-  // (the useEffect above). Using allMembersReady as a trigger caused Bug 2:
-  // when a user left after a failed/incomplete ready check, the remaining members
-  // still had 'ready' status so allMembersReady became true and exercises generated
-  // without any successful ready check having occurred.
+  /**
+   * Watch for ALL members pressing "Mark Ready" — triggers exercise generation
+   * without requiring the ready check modal.
+   *
+   * Safety guard (prevMemberCountRef): Prevents the old bug where a member leaving
+   * caused allMembersReady to become true from stale 'ready' statuses. If member
+   * count DECREASED, the transition is a side-effect of someone leaving — not
+   * everyone actively pressing ready — so we skip generation.
+   *
+   * The readyCheckResult === 'success' trigger (above) remains intact as a
+   * secondary path for exercise generation via the ready check modal.
+   */
+  useEffect(() => {
+    const currentCount = lobbyMembers.length;
+    const prevCount = prevMemberCountRef.current;
+    prevMemberCountRef.current = currentCount;
+
+    // Only act when all members are ready
+    if (!allMembersReady) return;
+
+    // Don't trigger if member count decreased (someone left with stale ready statuses)
+    if (currentCount < prevCount) return;
+
+    // Standard guards
+    if (!isInitiator || hasExercises || isGenerating) return;
+    if (isCleaningUpRef.current) return;
+    if (currentCount < 2) return;
+
+    console.log('🎯 [ALL READY] All members marked ready — generating exercises...');
+    autoGenerateExercises(currentCount);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMembersReady, lobbyMembers.length, isInitiator, hasExercises, isGenerating]);
 
   /**
    * Clear exercises when member count drops below 2
