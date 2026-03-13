@@ -89,6 +89,14 @@ export default function SettingsScreen() {
       section: 'Support',
       items: [
         {
+          icon: 'document-text-outline',
+          title: 'Privacy Policy & Terms',
+          subtitle: 'View legal documents',
+          onPress: () => {
+            router.push('/settings/legal');
+          },
+        },
+        {
           icon: 'help-circle-outline',
           title: 'Help & FAQ',
           subtitle: 'Get assistance',
