@@ -24,6 +24,9 @@ import { trackingService } from '../../services/microservices/trackingService';
 import { commsService } from '../../services/microservices/commsService';
 import { generateTabataSession } from '../../services/workoutSessionGenerator';
 import { useAchievementStore } from '../../stores/achievementStore';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import NetInfo from '@react-native-community/netinfo';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
 import { getAlgorithmDisplayName } from '../../utils/mlUtils';
@@ -42,6 +45,7 @@ const ENABLE_DAILY_WORKOUT_LIMIT = true;
 export default function HomeScreen() {
   const { user, logout } = useAuth();
   const alert = useAlert();
+  const { isConnected } = useNetwork();
   const { getUserStats, getUserAchievements } = useEngagementService();
   const { unreadCount } = useNotifications();
   const { getTodayExercises } = usePlanningService();
@@ -87,16 +91,28 @@ export default function HomeScreen() {
     loadDashboardData();
   }, []);
 
+  // Auto-recovery: when connection returns, refresh data
+  useEffect(() => {
+    if (isConnected && !loadingRef.current) {
+      console.log('🔄 [DASHBOARD] Connection restored - loading data');
+      loadDashboardData();
+    }
+  }, [isConnected]);
+
   // Refresh progress data when screen comes into focus (e.g., after completing a workout)
   // Uses centralized progress store - lightweight and cached
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        console.log('🔄 [DASHBOARD] Screen focused - refreshing progress from store');
-        fetchAllProgressData(user.id);
-        checkTodayWorkoutCompletion(); // Check if today's workout is completed
-        checkWeeklyAssessmentStatus(); // Check if weekly assessment is completed
-        checkCompletedDays(); // Check completed days for week calendar
+        // Check network before making API calls — prevents error toasts when offline
+        NetInfo.fetch().then(state => {
+          if (!state.isConnected) return;
+          console.log('🔄 [DASHBOARD] Screen focused - refreshing progress from store');
+          fetchAllProgressData(user.id);
+          checkTodayWorkoutCompletion();
+          checkWeeklyAssessmentStatus();
+          checkCompletedDays();
+        });
       }
     }, [user, fetchAllProgressData])
   );
@@ -224,6 +240,13 @@ export default function HomeScreen() {
       return;
     }
 
+    // Skip API calls when offline — prevents error toasts and useless retries
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      console.log('⚠️ [DASHBOARD] Device offline, skipping data load');
+      return;
+    }
+
     // On first dashboard load, tell AchievementHandler to re-check for
     // unseen achievements (e.g. fitness level badge earned during onboarding)
     if (!achievementCheckRef.current) {
@@ -248,8 +271,8 @@ export default function HomeScreen() {
         }
       } catch (recError) {
         console.error('📊 [DASHBOARD] Error fetching today\'s exercises:', recError);
-        // Only show alert if it's a critical error, not just empty results
-        if (recError && (recError as any).message !== 'Empty response') {
+        // Only show alert if it's a critical error and we're online (don't spam offline users)
+        if (recError && (recError as any).message !== 'Empty response' && isConnected) {
           alert.confirm(
             'Recommendation Error',
             'Unable to load exercise recommendations. Please check your internet connection and try again.',
@@ -360,14 +383,17 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('📊 [DASHBOARD] Fatal error loading dashboard data:', error);
-      alert.confirm(
-        'Error',
-        'Failed to load dashboard. Please try restarting the app.',
-        () => loadDashboardData(),
-        undefined,
-        'Retry',
-        'OK'
-      );
+      // Don't show error alert when offline — OfflinePlaceholder handles that
+      if (isConnected) {
+        alert.confirm(
+          'Error',
+          'Failed to load dashboard. Please try restarting the app.',
+          () => loadDashboardData(),
+          undefined,
+          'Retry',
+          'OK'
+        );
+      }
     } finally {
       setIsLoading(false);
       loadingRef.current = false; // Reset loading flag
@@ -582,6 +608,15 @@ export default function HomeScreen() {
       color: '#8B5CF6',
     },
   ];
+
+  // Show offline placeholder on ANY screen state when there's no internet
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <OfflinePlaceholder onRetry={loadDashboardData} />
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) {
     return (

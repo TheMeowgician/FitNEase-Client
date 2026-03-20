@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { COLORS, FONTS } from '../../constants/colors';
 import { socialService, Group } from '../../services/microservices/socialService';
 import { useAuth } from '../../contexts/AuthContext';
+import NetInfo from '@react-native-community/netinfo';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const TAB_BLUE = '#6184FB';
@@ -83,6 +84,14 @@ export const WorkoutActionModal: React.FC<WorkoutActionModalProps> = ({
 
   const fetchUserGroups = async () => {
     if (!user?.id || loadingRef.current) return;
+
+    // Skip API call when offline
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      setGroupsError('No internet connection. Please check your Wi-Fi or mobile data.');
+      return;
+    }
+
     loadingRef.current = true;
     setIsLoadingGroups(true);
     setGroupsError(null);

@@ -3,7 +3,7 @@ import { useFonts } from 'expo-font';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View } from 'react-native';
+import { View, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Context Providers
@@ -19,11 +19,22 @@ import { AlertProvider } from '../contexts/AlertContext';
 
 // Global Lobby Components
 import { GlobalLobbyIndicator } from '../components/lobby/GlobalLobbyIndicator';
+import { NetworkBanner } from '../components/ui/NetworkBanner';
 import { ReadyCheckHandler } from '../components/lobby/ReadyCheckHandler';
 import { ReadyCheckModal } from '../components/lobby/ReadyCheckModal';
 
 // Achievement Handler - Global achievement notification modal
 import { AchievementHandler } from '../components/achievements/AchievementHandler';
+
+// Suppress network error toasts in development (LogBox only exists in dev builds)
+LogBox.ignoreLogs([
+  'Network error',
+  'Device offline',
+  'unable to reach service',
+  'Network Error',
+  'ERR_NETWORK',
+  'ECONNABORTED',
+]);
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -65,7 +76,8 @@ export default function RootLayout() {
                           <StatusBar style="auto" />
                           <View style={{ flex: 1 }}>
                             <Slot />
-                            {/* Global Lobby Components - render on top of all screens */}
+                            {/* Global UI overlays - render on top of all screens */}
+                            <NetworkBanner />
                             <GlobalLobbyIndicator />
                             <ReadyCheckHandler />
                             <ReadyCheckModal />

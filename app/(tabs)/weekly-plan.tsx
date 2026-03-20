@@ -19,6 +19,8 @@ import { trackingService } from '@/services/microservices/trackingService';
 import { format, startOfWeek, addDays, isSameDay, isToday as isDateToday } from 'date-fns';
 import { COLORS, FONTS, FONT_SIZES } from '@/constants/colors';
 import { WeekCalendarStrip } from '@/components/calendar/WeekCalendarStrip';
+import { useNetwork } from '@/contexts/NetworkContext';
+import { OfflinePlaceholder } from '@/components/ui/OfflinePlaceholder';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
@@ -35,6 +37,7 @@ interface DayData {
 export default function WeeklyPlanScreen() {
   const { user } = useAuth();
   const alert = useAlert();
+  const { isConnected } = useNetwork();
   const params = useLocalSearchParams<{ selectedDate?: string }>();
 
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyWorkoutPlan | null>(null);
@@ -269,6 +272,15 @@ export default function WeeklyPlanScreen() {
 
   const weekDays = getWeekDays();
   const selectedDayData = weekDays.find(d => isSameDay(d.date, selectedDate)) || weekDays.find(d => d.isToday) || weekDays[0];
+
+  // Show offline placeholder when there's no internet
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <OfflinePlaceholder />
+      </SafeAreaView>
+    );
+  }
 
   // Loading state
   if (loading) {

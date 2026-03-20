@@ -14,6 +14,9 @@ import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { authService } from '../../services/microservices/authService';
+import NetInfo from '@react-native-community/netinfo';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
 import { COLORS, FONTS } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 import FitnessLevelBadge from '../../components/FitnessLevelBadge';
@@ -22,6 +25,7 @@ import { Avatar } from '../../components/ui/Avatar';
 export default function ProfileScreen() {
   const { user, logout, isLoading } = useAuth();
   const alert = useAlert();
+  const { isConnected } = useNetwork();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
 
@@ -38,6 +42,10 @@ export default function ProfileScreen() {
 
   const loadFitnessLevel = async () => {
     if (!user) return;
+
+    // Skip API calls when offline — prevents error toasts
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) return;
 
     try {
       console.log('[PROFILE] Loading fitness level from assessment for user:', user.id);
@@ -170,6 +178,15 @@ export default function ProfileScreen() {
 
   const userDisplay = getUserDisplayData();
   const showLoading = isLoading || isLoggingOut;
+
+  // Show offline placeholder on ANY screen state when there's no internet
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <OfflinePlaceholder onRetry={loadFitnessLevel} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

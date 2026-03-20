@@ -19,6 +19,8 @@ import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { COLORS, FONTS } from '../../constants/colors';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
 
 // ====================================================================
 // 🧪 TESTING FLAG: Daily Workout Limit Control
@@ -29,6 +31,7 @@ const ENABLE_DAILY_WORKOUT_LIMIT = true;
 export default function WorkoutsScreen() {
   const { user } = useAuth();
   const alert = useAlert();
+  const { isConnected } = useNetwork();
   const { getTodayExercises } = usePlanningService();
 
   const [exercises, setExercises] = useState<any[]>([]);
@@ -310,6 +313,15 @@ export default function WorkoutsScreen() {
 
     return { exerciseCount: workoutExercises.length, totalDuration, totalCalories, targetArea };
   };
+
+  // Show offline placeholder when there's no internet
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <OfflinePlaceholder />
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) {
     return (

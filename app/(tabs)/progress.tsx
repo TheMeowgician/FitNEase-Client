@@ -15,6 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import NetInfo from '@react-native-community/netinfo';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressionCard from '../../components/ProgressionCard';
 import { progressionService } from '../../services/microservices/progressionService';
@@ -61,6 +64,7 @@ const FITNESS_QUOTES = [
 
 export default function ProgressScreen() {
   const { user } = useAuth();
+  const { isConnected } = useNetwork();
   const { getUserStats } = useEngagementService();
 
   const [dailyQuote, setDailyQuote] = useState(() => FITNESS_QUOTES[Math.floor(Math.random() * FITNESS_QUOTES.length)]);
@@ -83,6 +87,14 @@ export default function ProgressScreen() {
     loadProgressData();
   }, [user]);
 
+  // Auto-recovery: when connection returns, refresh data
+  useEffect(() => {
+    if (isConnected) {
+      console.log('🔄 [PROGRESS] Connection restored - loading progress data');
+      loadProgressData();
+    }
+  }, [isConnected]);
+
   // Refresh data and quote when screen comes into focus
   useFocusEffect(
     useCallback(() => {
@@ -96,6 +108,13 @@ export default function ProgressScreen() {
 
   const loadProgressData = async () => {
     if (!user?.id) return;
+
+    // Skip API calls when offline — prevents error toasts and useless retries
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      console.log('⚠️ [PROGRESS] Device offline, skipping data load');
+      return;
+    }
 
     try {
       console.log('📊 [PROGRESS] Loading progress data from store');
@@ -205,6 +224,15 @@ export default function ProgressScreen() {
   };
 
   const levelInfo = getFitnessLevelInfo();
+
+  // Show offline placeholder on ANY screen state when there's no internet
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <OfflinePlaceholder onRetry={loadProgressData} />
+      </SafeAreaView>
+    );
+  }
 
   // Show loading state on first load
   if (isLoading && !overallStats) {

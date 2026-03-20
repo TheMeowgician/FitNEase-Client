@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } f
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { API_CONFIG } from '../../config/api.config';
 
 export interface ApiResponse<T = any> {
@@ -150,6 +151,21 @@ export class APIClient {
         );
 
         if (isNetworkError) {
+          // Check if device is offline — skip retries to fail fast (saves 4s of useless waits)
+          try {
+            const netState = await NetInfo.fetch();
+            if (!netState.isConnected) {
+              console.warn(`⚠️ [${serviceName}] Device offline — skipping network retries`);
+              throw this.handleError(error, serviceName);
+            }
+          } catch (netCheckError) {
+            // If the netCheckError is our own handleError throw, re-throw it
+            if (netCheckError instanceof Error && netCheckError.message.includes('Network error')) {
+              throw netCheckError;
+            }
+            // NetInfo check itself failed — fall through to normal retry logic
+          }
+
           const networkRetryCount = originalRequest._networkRetryCount || 0;
           if (networkRetryCount < 2) {
             originalRequest._networkRetryCount = networkRetryCount + 1;
@@ -158,7 +174,7 @@ export class APIClient {
             await this.delay(delayMs);
             return client(originalRequest);
           }
-          console.error(`❌ [${serviceName}] Network error retry exhausted after 2 attempts`);
+          console.warn(`⚠️ [${serviceName}] Network error retry exhausted after 2 attempts`);
         }
 
         // Handle rate limiting (429) with exponential backoff retry.
@@ -504,36 +520,49 @@ export class APIClient {
         });
         throw error;
       } else {
-        // Log detailed error for critical services or unexpected errors
-        console.error(`❌ [${service}] CAUGHT ERROR in request method:`, {
-          error,
-          errorType: error?.constructor?.name,
-          errorMessage: (error as any)?.message,
-          errorStack: (error as any)?.stack,
-          isAxiosError: (error as any)?.isAxiosError,
-          hasResponse: !!(error as any)?.response,
-          hasRequest: !!(error as any)?.request,
-          hasConfig: !!(error as any)?.config
-        });
+        // Check if this is a network/offline error — use warn instead of error
+        // to avoid red LogBox toasts that alarm users when they're simply offline
+        const isNetworkRelated = errorMessage.includes('Network error') ||
+                                  errorMessage.includes('Device offline') ||
+                                  errorMessage.includes('unable to reach service');
 
-        console.error(`❌ [API REQUEST ERROR] Service: ${service}`, {
-          message: errorMessage,
-          code: axiosError?.code,
-          url: config.url,
-          fullURL: `${this.configs[service].baseURL}${config.url}`,
-          timeout: config.timeout,
-          hasResponse: !!axiosError?.response,
-          hasRequest: !!axiosError?.request,
-          responseStatus: axiosError?.response?.status,
-          responseData: axiosError?.response?.data
-        });
+        if (isNetworkRelated) {
+          console.warn(`⚠️ [${service}] Request failed (network issue):`, {
+            message: errorMessage,
+            url: config.url
+          });
+        } else {
+          // Log detailed error for critical services or unexpected errors
+          console.error(`❌ [${service}] CAUGHT ERROR in request method:`, {
+            error,
+            errorType: error?.constructor?.name,
+            errorMessage: (error as any)?.message,
+            errorStack: (error as any)?.stack,
+            isAxiosError: (error as any)?.isAxiosError,
+            hasResponse: !!(error as any)?.response,
+            hasRequest: !!(error as any)?.request,
+            hasConfig: !!(error as any)?.config
+          });
 
-        console.error(`❌ API request failed for ${service}:`, {
-          config,
-          error: error,
-          message: errorMessage,
-          response: axiosError?.response?.data
-        });
+          console.error(`❌ [API REQUEST ERROR] Service: ${service}`, {
+            message: errorMessage,
+            code: axiosError?.code,
+            url: config.url,
+            fullURL: `${this.configs[service].baseURL}${config.url}`,
+            timeout: config.timeout,
+            hasResponse: !!axiosError?.response,
+            hasRequest: !!axiosError?.request,
+            responseStatus: axiosError?.response?.status,
+            responseData: axiosError?.response?.data
+          });
+
+          console.error(`❌ API request failed for ${service}:`, {
+            config,
+            error: error,
+            message: errorMessage,
+            response: axiosError?.response?.data
+          });
+        }
         throw error;
       }
     }

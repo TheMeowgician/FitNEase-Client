@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/colors';
 import { GlobalLobbyIndicator } from '../../components/lobby/GlobalLobbyIndicator';
-import { NetworkBanner } from '../../components/ui/NetworkBanner';
 import { WorkoutActionModal } from '../../components/workout/WorkoutActionModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -347,7 +346,6 @@ export default function TabLayout() {
         />
       </Tabs>
       <GlobalLobbyIndicator />
-      <NetworkBanner />
       <WorkoutActionModal
         visible={showWorkoutModal}
         onClose={() => setShowWorkoutModal(false)}

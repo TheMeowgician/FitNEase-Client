@@ -24,11 +24,15 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { socialService, Group } from '../../services/microservices/socialService';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 import { useReverb } from '../../contexts/ReverbProvider';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import NetInfo from '@react-native-community/netinfo';
 import { mediaService } from '../../services/microservices/mediaService';
 
 export default function GroupsScreen() {
   const { user } = useAuth();
   const alert = useAlert();
+  const { isConnected } = useNetwork();
   const { addNotificationListener } = useNotifications();
   const { refreshGroupSubscriptions } = useReverb();
   const [isLoading, setIsLoading] = useState(true);
@@ -71,6 +75,14 @@ export default function GroupsScreen() {
     }, [])
   );
 
+  // Auto-recovery: when connection returns, refresh data
+  useEffect(() => {
+    if (isConnected && !loadingRef.current) {
+      console.log('🔄 [GROUPS] Connection restored - loading groups');
+      loadGroups();
+    }
+  }, [isConnected]);
+
   // Real-time: refresh groups when relevant group notifications arrive
   useEffect(() => {
     const unsubscribe = addNotificationListener((notification) => {
@@ -88,6 +100,14 @@ export default function GroupsScreen() {
       console.log('⚠️ [GROUPS] loadGroups already in-flight, skipping');
       return;
     }
+
+    // Skip API calls when offline — prevents error toasts and useless retries
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      console.log('⚠️ [GROUPS] Device offline, skipping data load');
+      return;
+    }
+
     loadingRef.current = true;
 
     try {
@@ -171,7 +191,10 @@ export default function GroupsScreen() {
       hasLoadedOnce.current = true;
     } catch (error) {
       console.error('❌ Error loading groups:', error);
-      alert.error('Error', 'Failed to load groups. Please try again.');
+      // Don't show error alert when offline — OfflinePlaceholder handles that
+      if (isConnected) {
+        alert.error('Error', 'Failed to load groups. Please try again.');
+      }
     } finally {
       setIsLoading(false);
       loadingRef.current = false;
@@ -272,6 +295,15 @@ export default function GroupsScreen() {
   const handleViewGroup = (group: Group) => {
     router.push(`/groups/${group.id}`);
   };
+
+  // Show offline placeholder on ANY screen state when there's no internet
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <OfflinePlaceholder onRetry={loadGroups} />
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) {
     return (
