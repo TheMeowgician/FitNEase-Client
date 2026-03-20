@@ -57,7 +57,7 @@ export default function SplashScreen() {
             ]}
           >
             <Image
-              source={require('../../assets/images/FitNEase_logo.png')}
+              source={require('../../assets/images/fitnease-og-logo.png')}
               style={styles.logo}
               resizeMode="contain"
             />

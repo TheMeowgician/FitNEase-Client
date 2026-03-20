@@ -54,6 +54,8 @@ export default function PermissionsSettingsScreen() {
     microphone: 'undetermined',
     photoLibrary: 'undetermined',
   });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isRequesting, setIsRequesting] = useState(false);
 
   useEffect(() => {
     checkAllPermissions();
@@ -116,21 +118,45 @@ export default function PermissionsSettingsScreen() {
     }
   }, []);
 
-  const handleCardPress = async (key: string) => {
+  const handleCardPress = (key: string) => {
+    // Already granted — no action needed in settings
     if (permissions[key] === 'granted') return;
 
+    // Denied — open device settings to change
     if (permissions[key] === 'denied') {
       Linking.openSettings();
       return;
     }
 
-    const result = await requestPermission(key);
-    if (result === 'permanently_denied') {
-      Linking.openSettings();
+    // Toggle selection for undetermined cards
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleAllowSelected = async () => {
+    if (isRequesting || selected.size === 0) return;
+    setIsRequesting(true);
+    try {
+      for (const key of selected) {
+        if (permissions[key] !== 'granted') {
+          await requestPermission(key);
+        }
+      }
+      setSelected(new Set());
+    } finally {
+      setIsRequesting(false);
     }
   };
 
-  const getStatusColor = (status: PermissionStatus) => {
+  const getStatusColor = (status: PermissionStatus, isSelected: boolean) => {
+    if (isSelected && status !== 'granted') return COLORS.PRIMARY[500];
     switch (status) {
       case 'granted': return COLORS.SUCCESS[500];
       case 'denied': return COLORS.ERROR[500];
@@ -138,7 +164,8 @@ export default function PermissionsSettingsScreen() {
     }
   };
 
-  const getStatusIcon = (status: PermissionStatus): string => {
+  const getStatusIcon = (status: PermissionStatus, isSelected: boolean): string => {
+    if (isSelected && status !== 'granted') return 'checkmark-circle';
     switch (status) {
       case 'granted': return 'checkmark-circle';
       case 'denied': return 'close-circle';
@@ -146,7 +173,8 @@ export default function PermissionsSettingsScreen() {
     }
   };
 
-  const getStatusLabel = (status: PermissionStatus) => {
+  const getStatusLabel = (status: PermissionStatus, isSelected: boolean) => {
+    if (isSelected && status !== 'granted') return 'Selected';
     switch (status) {
       case 'granted': return 'Allowed';
       case 'denied': return 'Denied';
@@ -176,12 +204,14 @@ export default function PermissionsSettingsScreen() {
         <View style={styles.cardsContainer}>
           {PERMISSION_CONFIG.map((config) => {
             const status = permissions[config.key];
+            const isSelected = selected.has(config.key);
             return (
               <TouchableOpacity
                 key={config.key}
                 style={[
                   styles.permissionCard,
                   status === 'granted' && styles.permissionCardGranted,
+                  isSelected && status !== 'granted' && styles.permissionCardSelected,
                 ]}
                 activeOpacity={status === 'granted' ? 1 : 0.7}
                 onPress={() => handleCardPress(config.key)}
@@ -189,6 +219,7 @@ export default function PermissionsSettingsScreen() {
                 <View style={[
                   styles.iconContainer,
                   status === 'granted' && styles.iconContainerGranted,
+                  isSelected && status !== 'granted' && styles.iconContainerSelected,
                 ]}>
                   <Ionicons
                     name={config.icon as any}
@@ -204,12 +235,12 @@ export default function PermissionsSettingsScreen() {
 
                 <View style={styles.statusContainer}>
                   <Ionicons
-                    name={getStatusIcon(status) as any}
+                    name={getStatusIcon(status, isSelected) as any}
                     size={22}
-                    color={getStatusColor(status)}
+                    color={getStatusColor(status, isSelected)}
                   />
-                  <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-                    {getStatusLabel(status)}
+                  <Text style={[styles.statusText, { color: getStatusColor(status, isSelected) }]}>
+                    {getStatusLabel(status, isSelected)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -224,6 +255,21 @@ export default function PermissionsSettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {selected.size > 0 && (
+        <View style={styles.bottomButtonContainer}>
+          <TouchableOpacity
+            style={[styles.allowButton, isRequesting && styles.allowButtonDisabled]}
+            activeOpacity={0.7}
+            onPress={handleAllowSelected}
+            disabled={isRequesting}
+          >
+            <Text style={styles.allowButtonText}>
+              {isRequesting ? 'Requesting...' : 'Allow Selected'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -291,6 +337,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.SUCCESS[200],
   },
+  permissionCardSelected: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY[300],
+  },
   iconContainer: {
     width: 44,
     height: 44,
@@ -302,6 +353,9 @@ const styles = StyleSheet.create({
   },
   iconContainerGranted: {
     backgroundColor: COLORS.SUCCESS[100],
+  },
+  iconContainerSelected: {
+    backgroundColor: COLORS.PRIMARY[100],
   },
   cardContent: {
     flex: 1,
@@ -337,5 +391,26 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[400],
     lineHeight: 18,
+  },
+  bottomButtonContainer: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: 'white',
+  },
+  allowButton: {
+    backgroundColor: COLORS.PRIMARY[500],
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  allowButtonDisabled: {
+    opacity: 0.6,
+  },
+  allowButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontFamily: FONTS.SEMIBOLD,
   },
 });

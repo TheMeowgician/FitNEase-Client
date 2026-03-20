@@ -134,7 +134,7 @@ export default function WeeklyGoalScreen() {
         {/* Logo */}
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/images/FitNEase_logo_without_text.png')}
+            source={require('../../assets/images/fitnease-og-logo.png')}
             style={[
               styles.logo,
               {

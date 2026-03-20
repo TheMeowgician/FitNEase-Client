@@ -70,6 +70,7 @@ export default function PermissionsScreen() {
     photoLibrary: 'undetermined',
   });
   const [isRequesting, setIsRequesting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     checkAllPermissions();
@@ -137,34 +138,46 @@ export default function PermissionsScreen() {
     if (isRequesting) return; // Prevent re-entry on rapid taps
     setIsRequesting(true);
     try {
+      // If user selected specific permissions, only request those
+      // Otherwise request all undetermined/denied permissions
+      const toRequest = selected.size > 0
+        ? PERMISSION_CONFIG.filter((c) => selected.has(c.key) && permissions[c.key] !== 'granted')
+        : PERMISSION_CONFIG.filter((c) => permissions[c.key] !== 'granted');
+
       // Request permissions sequentially to avoid dialog overlap
-      for (const config of PERMISSION_CONFIG) {
-        if (permissions[config.key] !== 'granted') {
-          await requestPermission(config.key);
-        }
+      for (const config of toRequest) {
+        await requestPermission(config.key);
       }
+      // Clear selection after requesting
+      setSelected(new Set());
     } finally {
       setIsRequesting(false);
     }
   };
 
-  const handleCardPress = async (key: string) => {
+  const handleCardPress = (key: string) => {
     // If already granted, open device settings so the user can revoke if needed
     if (permissions[key] === 'granted') {
       Linking.openSettings();
       return;
     }
 
-    // If already denied (can't re-ask on iOS), open settings
+    // If denied on iOS (can't re-ask), open settings
     if (permissions[key] === 'denied' && Platform.OS === 'ios') {
       Linking.openSettings();
       return;
     }
 
-    const result = await requestPermission(key);
-    if (result === 'permanently_denied') {
-      Linking.openSettings();
-    }
+    // Toggle selection for undetermined/denied cards
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const navigatingRef = useRef(false);
@@ -186,7 +199,8 @@ export default function PermissionsScreen() {
   const allGranted = Object.values(permissions).every((s) => s === 'granted');
   const someGranted = Object.values(permissions).some((s) => s === 'granted');
 
-  const getStatusColor = (status: PermissionStatus) => {
+  const getStatusColor = (status: PermissionStatus, isSelected: boolean) => {
+    if (isSelected && status !== 'granted') return COLORS.PRIMARY[500];
     switch (status) {
       case 'granted': return COLORS.SUCCESS[500];
       case 'denied': return COLORS.ERROR[500];
@@ -194,7 +208,8 @@ export default function PermissionsScreen() {
     }
   };
 
-  const getStatusIcon = (status: PermissionStatus): string => {
+  const getStatusIcon = (status: PermissionStatus, isSelected: boolean): string => {
+    if (isSelected && status !== 'granted') return 'checkmark-circle';
     switch (status) {
       case 'granted': return 'checkmark-circle';
       case 'denied': return 'close-circle';
@@ -202,7 +217,8 @@ export default function PermissionsScreen() {
     }
   };
 
-  const getStatusLabel = (status: PermissionStatus) => {
+  const getStatusLabel = (status: PermissionStatus, isSelected: boolean) => {
+    if (isSelected && status !== 'granted') return 'Selected';
     switch (status) {
       case 'granted': return 'Allowed';
       case 'denied': return 'Denied';
@@ -221,7 +237,7 @@ export default function PermissionsScreen() {
         {/* Logo */}
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/images/FitNEase_logo_without_text.png')}
+            source={require('../../assets/images/fitnease-og-logo.png')}
             style={[styles.logo, { width: width * 0.2, height: width * 0.2 }]}
             resizeMode="contain"
           />
@@ -241,12 +257,14 @@ export default function PermissionsScreen() {
         <View style={styles.cardsContainer}>
           {PERMISSION_CONFIG.map((config) => {
             const status = permissions[config.key];
+            const isSelected = selected.has(config.key);
             return (
               <TouchableOpacity
                 key={config.key}
                 style={[
                   styles.permissionCard,
                   status === 'granted' && styles.permissionCardGranted,
+                  isSelected && status !== 'granted' && styles.permissionCardSelected,
                 ]}
                 activeOpacity={0.7}
                 onPress={() => handleCardPress(config.key)}
@@ -254,6 +272,7 @@ export default function PermissionsScreen() {
                 <View style={[
                   styles.iconContainer,
                   status === 'granted' && styles.iconContainerGranted,
+                  isSelected && status !== 'granted' && styles.iconContainerSelected,
                 ]}>
                   <Ionicons
                     name={config.icon as any}
@@ -269,12 +288,12 @@ export default function PermissionsScreen() {
 
                 <View style={styles.statusContainer}>
                   <Ionicons
-                    name={getStatusIcon(status) as any}
+                    name={getStatusIcon(status, isSelected) as any}
                     size={22}
-                    color={getStatusColor(status)}
+                    color={getStatusColor(status, isSelected)}
                   />
-                  <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-                    {getStatusLabel(status)}
+                  <Text style={[styles.statusText, { color: getStatusColor(status, isSelected) }]}>
+                    {getStatusLabel(status, isSelected)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -295,7 +314,7 @@ export default function PermissionsScreen() {
       <View style={styles.buttonContainer}>
         {!allGranted && (
           <Button
-            title={isRequesting ? 'Requesting...' : 'Allow All'}
+            title={isRequesting ? 'Requesting...' : selected.size > 0 ? 'Allow Selected' : 'Allow All'}
             onPress={handleAllowAll}
             disabled={isRequesting}
             style={styles.allowButton}
@@ -381,6 +400,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.SUCCESS[50],
     borderColor: COLORS.SUCCESS[200],
   },
+  permissionCardSelected: {
+    backgroundColor: COLORS.PRIMARY[50],
+    borderColor: COLORS.PRIMARY[300],
+  },
   iconContainer: {
     width: 48,
     height: 48,
@@ -392,6 +415,9 @@ const styles = StyleSheet.create({
   },
   iconContainerGranted: {
     backgroundColor: COLORS.SUCCESS[100],
+  },
+  iconContainerSelected: {
+    backgroundColor: COLORS.PRIMARY[100],
   },
   cardContent: {
     flex: 1,
