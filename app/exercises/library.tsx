@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { contentService, ExerciseListItem } from '../../services/microservices/contentService';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { hasExerciseDemo } from '../../constants/exerciseDemos';
 import ExerciseDemoModal from '../../components/workout/ExerciseDemoModal';
@@ -22,6 +22,7 @@ import ExerciseDemoModal from '../../components/workout/ExerciseDemoModal';
 const PER_PAGE = 30;
 
 export default function ExerciseLibraryScreen() {
+  const { goBack } = useSmartBack();
   const [exercises, setExercises] = useState<ExerciseListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -384,7 +385,7 @@ export default function ExerciseLibraryScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={goBack}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={24} color="#111827" />
@@ -408,7 +409,7 @@ export default function ExerciseLibraryScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={goBack}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color="#111827" />

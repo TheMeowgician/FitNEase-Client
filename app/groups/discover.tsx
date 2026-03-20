@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONTS } from '../../constants/colors';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { socialService, Group } from '../../services/microservices/socialService';
@@ -22,6 +23,7 @@ import { mediaService } from '../../services/microservices/mediaService';
 const PER_PAGE = 15;
 
 export default function DiscoverGroupsScreen() {
+  const { goBack } = useSmartBack();
   const { user } = useAuth();
   const alert = useAlert();
 
@@ -364,7 +366,7 @@ export default function DiscoverGroupsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Discover Groups</Text>
@@ -382,7 +384,7 @@ export default function DiscoverGroupsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Discover Groups</Text>
@@ -407,7 +409,7 @@ export default function DiscoverGroupsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={goBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Discover Groups</Text>

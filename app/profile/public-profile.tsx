@@ -11,12 +11,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { authService } from '../../services/microservices/authService';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { trackingService } from '../../services/microservices/trackingService';
 import { Avatar } from '../../components/ui/Avatar';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter } from '../../utils/stringUtils';
 
 export default function PublicProfileScreen() {
+  const { goBack } = useSmartBack();
   const { userId, username } = useLocalSearchParams<{ userId: string; username: string }>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -85,7 +87,7 @@ export default function PublicProfileScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
@@ -102,7 +104,7 @@ export default function PublicProfileScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
@@ -123,7 +125,7 @@ export default function PublicProfileScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={goBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{displayName}'s Profile</Text>

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -34,6 +35,7 @@ interface Notification {
 }
 
 export default function NotificationsScreen() {
+  const { goBack } = useSmartBack();
   const { user } = useAuth();
   const alert = useAlert();
   const { markAsRead: markAsReadInContext, refreshUnreadCount, addNotificationListener } = useNotifications();
@@ -635,7 +637,7 @@ export default function NotificationsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Notifications</Text>
@@ -652,7 +654,7 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={goBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>

@@ -8,10 +8,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { useSmartBack } from '../../hooks/useSmartBack';
 
 export default function WorkoutDetailScreen() {
+  const { goBack } = useSmartBack();
   const params = useLocalSearchParams<{ sessionData: string }>();
 
   const workout = params.sessionData ? JSON.parse(params.sessionData) : null;
@@ -20,7 +22,7 @@ export default function WorkoutDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Workout Details</Text>
@@ -62,7 +64,7 @@ export default function WorkoutDetailScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={goBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Workout Details</Text>

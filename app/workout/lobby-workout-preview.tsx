@@ -9,11 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { contentService, Exercise } from '../../services/microservices/contentService';
 
 export default function LobbyWorkoutPreviewScreen() {
+  const { goBack } = useSmartBack();
   const { sessionId, exercises } = useLocalSearchParams();
   const [exerciseDetails, setExerciseDetails] = useState<Exercise[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,7 +58,7 @@ export default function LobbyWorkoutPreviewScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={goBack}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />

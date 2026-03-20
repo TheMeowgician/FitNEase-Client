@@ -1,52 +1,60 @@
-import { router, useSegments } from 'expo-router';
+import { useCallback } from 'react';
+import { BackHandler } from 'react-native';
+import { router, useSegments, useFocusEffect } from 'expo-router';
 
 /**
- * Custom hook for smart back navigation that preserves tab context
- * Fixes issue where router.back() always goes to dashboard instead of previous screen
+ * Custom hook for smart back navigation that preserves tab context.
+ * Handles both in-app back buttons AND Android hardware/gesture back.
+ * Fixes issue where router.back() goes to dashboard instead of the correct parent screen.
  */
 export function useSmartBack() {
   const segments = useSegments();
 
-  const goBack = () => {
-    // Check if we're in a nested screen (outside tabs)
+  const goBack = useCallback(() => {
     const isInSettings = segments.includes('settings');
     const isInProfile = segments.includes('profile') && !segments.includes('(tabs)');
     const isInAchievements = segments.includes('achievements');
+    const isInAssessment = segments.includes('assessment');
     const isInGroups = segments.includes('groups') && !segments.includes('(tabs)');
+    const isInMentor = segments.includes('mentor');
 
-    // For profile-related screens, always go back to profile tab
-    // This fixes the issue where navigation from tabs doesn't preserve history
-    if (isInProfile || isInAchievements) {
-      console.log('📱 [SmartBack] Profile/Achievements screen detected, navigating to Profile tab');
+    // Routes accessed from Profile tab — hardcode because router.back()
+    // pops to the tab navigator which resets to Home (wrong)
+    if (isInSettings || isInProfile || isInAchievements || isInAssessment) {
       router.push('/(tabs)/profile');
       return;
     }
 
-    // For settings screens, always go back to profile tab
-    if (isInSettings) {
-      console.log('📱 [SmartBack] Settings screen detected, navigating to Profile tab');
-      router.push('/(tabs)/profile');
-      return;
-    }
-
-    // For group detail screens, always go back to groups tab
-    if (isInGroups) {
-      console.log('📱 [SmartBack] Group details screen detected, navigating to Groups tab');
+    // Routes accessed from Groups tab — same reason
+    if (isInGroups || isInMentor) {
       router.push('/(tabs)/groups');
       return;
     }
 
-    // Try to go back if possible
+    // All other screens (notifications, workout, exercises, etc.)
+    // router.back() works here because these are either:
+    // - Accessed from Home tab (back → Home = correct, it's the default tab)
+    // - Deep in the stack (back → previous non-tab screen = correct)
     if (router.canGoBack()) {
-      console.log('📱 [SmartBack] Can go back, using router.back()');
       router.back();
       return;
     }
 
-    // Default fallback to home
-    console.log('📱 [SmartBack] No back history, navigating to Home tab');
+    // No history fallback → home tab
     router.replace('/(tabs)');
-  };
+  }, [segments]);
+
+  // Override Android hardware back button / gesture navigation
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        goBack();
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [goBack])
+  );
 
   return { goBack };
 }

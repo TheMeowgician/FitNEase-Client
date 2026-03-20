@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 
 import { authService, User } from '../../../services/microservices/authService';
 import { trackingService } from '../../../services/microservices/trackingService';
@@ -69,6 +70,7 @@ interface SessionHistory {
 }
 
 export default function MemberDetailScreen() {
+  const { goBack } = useSmartBack();
   const { id, username } = useLocalSearchParams<{ id: string; username?: string }>();
 
   const [member, setMember] = useState<User | null>(null);
@@ -461,7 +463,7 @@ export default function MemberDetailScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Member Details</Text>

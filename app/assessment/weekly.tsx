@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSmartBack } from '../../hooks/useSmartBack';
 
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -13,6 +13,7 @@ import { authService } from '../../services/microservices/authService';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 
 export default function WeeklyAssessmentScreen() {
+  const { goBack } = useSmartBack();
   const { user } = useAuth();
   const alert = useAlert();
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +67,7 @@ export default function WeeklyAssessmentScreen() {
         score: workoutRating,
       });
 
-      alert.success('Assessment Saved!', 'Thank you for your feedback. This helps us improve your workout recommendations.', () => router.back());
+      alert.success('Assessment Saved!', 'Thank you for your feedback. This helps us improve your workout recommendations.', () => goBack());
     } catch (error) {
       console.error('Error saving weekly assessment:', error);
       alert.error('Error', 'Failed to save assessment. Please try again.');
@@ -181,7 +182,7 @@ export default function WeeklyAssessmentScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Weekly Check-In</Text>
@@ -199,7 +200,7 @@ export default function WeeklyAssessmentScreen() {
           </Text>
           <Button
             title="Back to Dashboard"
-            onPress={() => router.back()}
+            onPress={goBack}
             style={styles.completedButton}
           />
         </View>
@@ -212,7 +213,7 @@ export default function WeeklyAssessmentScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={goBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[900]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Weekly Check-In</Text>

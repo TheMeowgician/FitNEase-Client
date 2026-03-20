@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -65,6 +66,7 @@ function getPeriodForTime(value: string): Period {
 }
 
 export default function NotificationSettingsScreen() {
+  const { goBack } = useSmartBack();
   const { user } = useAuth();
   const alert = useAlert();
   const [isLoading, setIsLoading] = useState(false);
@@ -152,7 +154,7 @@ export default function NotificationSettingsScreen() {
         alert.info('Notifications Disabled', 'All workout reminders have been cancelled.');
       }
 
-      router.back();
+      goBack();
     } catch (error) {
       console.error('Error saving notification settings:', error);
       alert.error('Error', 'Failed to save settings. Please try again.');
@@ -174,7 +176,7 @@ export default function NotificationSettingsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={goBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={COLORS.SECONDARY[900]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Reminders</Text>
