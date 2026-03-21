@@ -413,67 +413,69 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
           >
             {/* ── Real content (always present — defines card height) ──── */}
             <Animated.View style={[styles.realLayer, { opacity: realOpacity }]}>
-              {/* Number badge */}
-              <View style={styles.numberBadge}>
-                <LinearGradient
-                  colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
-                  style={styles.numberGradient}
-                >
-                  <Text style={styles.numberText}>{index + 1}</Text>
-                </LinearGradient>
-              </View>
-
-              {/* Exercise info */}
-              <View style={styles.exerciseContent}>
-                <Text style={styles.exerciseName} numberOfLines={2}>
-                  {exercise.exercise_name}
-                </Text>
-
-                <View style={styles.exerciseMeta}>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="body-outline" size={14} color={COLORS.SECONDARY[500]} />
-                    <Text style={styles.metaText}>
-                      {formatMuscleGroup(exercise.target_muscle_group || '')}
-                    </Text>
-                  </View>
-                  <View style={[
-                    styles.difficultyBadge,
-                    { backgroundColor: getDifficultyColor(difficultyLevel) + '20' },
-                  ]}>
-                    <View style={styles.difficultyStars}>
-                      {[1, 2, 3].map(star => (
-                        <Ionicons
-                          key={star}
-                          name={star <= difficultyLevel ? 'star' : 'star-outline'}
-                          size={10}
-                          color={getDifficultyColor(difficultyLevel)}
-                        />
-                      ))}
-                    </View>
-                    <Text style={[
-                      styles.difficultyText,
-                      { color: getDifficultyColor(difficultyLevel) },
-                    ]}>
-                      {getDifficultyLabel(difficultyLevel)}
-                    </Text>
-                  </View>
+              <View style={styles.exerciseRow}>
+                {/* Number badge */}
+                <View style={styles.numberBadge}>
+                  <LinearGradient
+                    colors={[COLORS.PRIMARY[500], COLORS.PRIMARY[600]]}
+                    style={styles.numberGradient}
+                  >
+                    <Text style={styles.numberText}>{index + 1}</Text>
+                  </LinearGradient>
                 </View>
 
-                <View style={styles.tabataInfo}>
-                  <View style={styles.tabataItem}>
-                    <Text style={styles.tabataValue}>20s</Text>
-                    <Text style={styles.tabataLabel}>Work</Text>
+                {/* Exercise info */}
+                <View style={styles.exerciseContent}>
+                  <Text style={styles.exerciseName} numberOfLines={2}>
+                    {exercise.exercise_name}
+                  </Text>
+
+                  <View style={styles.exerciseMeta}>
+                    <View style={styles.metaItem}>
+                      <Ionicons name="body-outline" size={14} color={COLORS.SECONDARY[500]} />
+                      <Text style={styles.metaText}>
+                        {formatMuscleGroup(exercise.target_muscle_group || '')}
+                      </Text>
+                    </View>
+                    <View style={[
+                      styles.difficultyBadge,
+                      { backgroundColor: getDifficultyColor(difficultyLevel) + '20' },
+                    ]}>
+                      <View style={styles.difficultyStars}>
+                        {[1, 2, 3].map(star => (
+                          <Ionicons
+                            key={star}
+                            name={star <= difficultyLevel ? 'star' : 'star-outline'}
+                            size={10}
+                            color={getDifficultyColor(difficultyLevel)}
+                          />
+                        ))}
+                      </View>
+                      <Text style={[
+                        styles.difficultyText,
+                        { color: getDifficultyColor(difficultyLevel) },
+                      ]}>
+                        {getDifficultyLabel(difficultyLevel)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.tabataDivider} />
-                  <View style={styles.tabataItem}>
-                    <Text style={styles.tabataValue}>10s</Text>
-                    <Text style={styles.tabataLabel}>Rest</Text>
-                  </View>
-                  <View style={styles.tabataDivider} />
-                  <View style={styles.tabataItem}>
-                    <Text style={styles.tabataValue}>8</Text>
-                    <Text style={styles.tabataLabel}>Rounds</Text>
-                  </View>
+                </View>
+              </View>
+
+              <View style={styles.tabataInfo}>
+                <View style={styles.tabataItem}>
+                  <Text style={styles.tabataValue}>20s</Text>
+                  <Text style={styles.tabataLabel}>Work</Text>
+                </View>
+                <View style={styles.tabataDivider} />
+                <View style={styles.tabataItem}>
+                  <Text style={styles.tabataValue}>10s</Text>
+                  <Text style={styles.tabataLabel}>Rest</Text>
+                </View>
+                <View style={styles.tabataDivider} />
+                <View style={styles.tabataItem}>
+                  <Text style={styles.tabataValue}>8</Text>
+                  <Text style={styles.tabataLabel}>Rounds</Text>
                 </View>
               </View>
             </Animated.View>
@@ -626,6 +628,8 @@ const styles = StyleSheet.create({
 
   // Real content layer
   realLayer: {
+  },
+  exerciseRow: {
     flexDirection: 'row',
   },
 
@@ -661,7 +665,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
   },
   metaItem: {
     flexDirection: 'row',
@@ -696,6 +699,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 8,
     paddingHorizontal: 12,
+    marginTop: 12,
   },
   tabataItem: {
     flex: 1,

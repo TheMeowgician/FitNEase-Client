@@ -124,6 +124,7 @@ export default function GroupLobbyScreen() {
   const [isLeaving, setIsLeaving] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false); // Synchronous guard against duplicate generation calls
   const [isStartingReadyCheck, setIsStartingReadyCheck] = useState(false);
   const [onlineMembers, setOnlineMembers] = useState<Set<number>>(new Set());
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -153,12 +154,6 @@ export default function GroupLobbyScreen() {
   const votingBackdropOpacity = useRef(new Animated.Value(0)).current;
   const votingSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
-  // Workout section reveal — slides up from section position to fullscreen, then back
-  const expandedTranslateY = useRef(new Animated.Value(0)).current;
-  const expandedOpacity = useRef(new Animated.Value(0)).current;
-  const workoutSectionRef = useRef<any>(null);
-  const [isRevealExpanded, setIsRevealExpanded] = useState(false);
-  const sectionMeasuredYRef = useRef(0); // Stores Y for symmetric collapse
   // Prevents replaying the reveal on re-entry; resets whenever exercises are cleared
   const hasPlayedRevealRef = useRef(false);
   // Prevents handleRevealComplete from firing more than once per reveal cycle
@@ -394,26 +389,24 @@ export default function GroupLobbyScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVotingActive, votingExpiresAt, isInitiator]);
 
+  // Auto-dismiss "Group accepted the recommended workout!" banner after 5 seconds
+  useEffect(() => {
+    if (votingResult === 'accept_recommended') {
+      const timer = setTimeout(() => clearVoting(), 3000);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [votingResult]);
+
   /**
-   * When voting starts and the fullscreen reveal overlay is still visible (which can happen
-   * on slow devices where the reveal animation takes longer than the initiator's), dismiss
-   * the overlay immediately so the vote sheet is not hidden behind it.
-   *
-   * Root cause: reveal animation takes up to ~7s per exercise-set. The initiator finishes
-   * first, calls startVoting, and the VotingStarted event reaches other devices while they
-   * are still mid-animation. The vote sheet opens at zIndex < overlay → invisible.
+   * When voting starts while reveal animation is still playing on a slow device,
+   * mark it as complete so the vote sheet isn't blocked.
    */
   useEffect(() => {
     if (isVotingActive) {
-      // If voting starts while reveal animation is still playing, dismiss expanded view
       hasPlayedRevealRef.current = true;
       hasCalledRevealCompleteRef.current = true;
-      expandedTranslateY.stopAnimation();
-      expandedOpacity.stopAnimation();
-      expandedOpacity.setValue(0);
-      setIsRevealExpanded(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVotingActive]);
 
   /**
@@ -2355,6 +2348,11 @@ export default function GroupLobbyScreen() {
     if (!isInitiator || totalMemberCount < 2 || isGenerating || hasExercises) {
       return;
     }
+    // Synchronous ref guard — prevents duplicate calls in the same render cycle
+    // (React state updates are batched, so isGenerating may still be false for a
+    // concurrent caller that reads it before the setState propagates)
+    if (isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
 
     console.log('🎯 Auto-generating exercises for', totalMemberCount, 'members (all ready)');
     setIsGenerating(true);
@@ -2416,6 +2414,7 @@ export default function GroupLobbyScreen() {
       console.error('❌ Error auto-generating exercises:', error);
       alert.warning('Notice', 'Could not generate personalized workout. Please try again later.');
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };
@@ -2840,90 +2839,7 @@ export default function GroupLobbyScreen() {
     // Once cleanup starts, this component instance should never accept more events
   };
 
-  /**
-   * Measure the workout section's Y position, then show the expanded view
-   * sliding up from that position to fill the screen.
-   * Called once when exercises arrive for ALL users.
-   */
-  const expandSection = (retryCount = 0) => {
-    if (!isMountedRef.current || isCleaningUpRef.current) return;
-
-    if (useVotingStore.getState().isActive) {
-      console.log('[REVEAL] Skipping expand — VotingStarted already arrived');
-      hasPlayedRevealRef.current = true;
-      hasCalledRevealCompleteRef.current = true;
-      return;
-    }
-
-    workoutSectionRef.current?.measure(
-      (_x: number, _y: number, _w: number, h: number, _px: number, py: number) => {
-        if (!isMountedRef.current || isCleaningUpRef.current) return;
-        if (useVotingStore.getState().isActive) {
-          hasPlayedRevealRef.current = true;
-          hasCalledRevealCompleteRef.current = true;
-          return;
-        }
-
-        // On slow devices layout may not be ready yet
-        if (h < 50) {
-          if (retryCount < 3) {
-            setTimeout(() => expandSection(retryCount + 1), 150);
-          }
-          return;
-        }
-
-        // Store Y for symmetric collapse
-        sectionMeasuredYRef.current = py;
-        hasCalledRevealCompleteRef.current = false;
-
-        // Start expanded view at the section's Y position, then slide to top
-        expandedTranslateY.setValue(py);
-        expandedOpacity.setValue(0);
-        setIsRevealExpanded(true);
-
-        Animated.parallel([
-          Animated.spring(expandedTranslateY, {
-            toValue: 0,
-            damping: 22,
-            stiffness: 130,
-            mass: 1,
-            useNativeDriver: true,
-          }),
-          Animated.timing(expandedOpacity, {
-            toValue: 1,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }
-    );
-  };
-
-  /**
-   * Slide the expanded view back to the section's position, then hide it.
-   */
-  const collapseSection = (onDone?: () => void) => {
-    Animated.parallel([
-      Animated.spring(expandedTranslateY, {
-        toValue: sectionMeasuredYRef.current,
-        damping: 22,
-        stiffness: 130,
-        mass: 1,
-        useNativeDriver: true,
-      }),
-      Animated.timing(expandedOpacity, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setIsRevealExpanded(false);
-      hasCalledRevealCompleteRef.current = false;
-      onDone?.();
-    });
-  };
-
-  // Expand the first time exercises arrive — for ALL users.
+  // Mark reveal as played the first time exercises arrive — for ALL users.
   // For non-initiators isGenerating is always false, so this fires the moment
   // exercises land via WebSocket. For the initiator, setIsGenerating(false) is
   // called in the finally block of autoGenerateExercises, after exercises are saved.
@@ -2932,7 +2848,7 @@ export default function GroupLobbyScreen() {
       if (!isMountedRef.current || isCleaningUpRef.current) return;
       if (!hasJoinedRef.current) return;
       hasPlayedRevealRef.current = true;
-      expandSection();
+      hasCalledRevealCompleteRef.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasExercises, isGenerating]);
@@ -2941,15 +2857,12 @@ export default function GroupLobbyScreen() {
   useEffect(() => {
     if (!hasExercises) {
       hasPlayedRevealRef.current = false;
-      expandedOpacity.setValue(0);
-      setIsRevealExpanded(false);
     }
   }, [hasExercises]);
 
   /**
    * Called by AnimatedExerciseReveal when all cards have revealed.
-   * Collapses the expanded view back, then triggers voting
-   * (initiator only — non-initiators have no pending voting data).
+   * Triggers voting (initiator only — non-initiators have no pending voting data).
    */
   const handleRevealComplete = () => {
     if (isCleaningUpRef.current || !isMountedRef.current) return;
@@ -2957,16 +2870,13 @@ export default function GroupLobbyScreen() {
     if (hasCalledRevealCompleteRef.current) return;
     hasCalledRevealCompleteRef.current = true;
 
-    collapseSection(() => {
-      if (!pendingVotingDataRef.current) return;
-      if (isCleaningUpRef.current || !isMountedRef.current) return;
+    if (!pendingVotingDataRef.current) return;
 
-      const { exercises, alternatives } = pendingVotingDataRef.current;
-      pendingVotingDataRef.current = null;
+    const { exercises, alternatives } = pendingVotingDataRef.current;
+    pendingVotingDataRef.current = null;
 
-      console.log('🎬 [REVEAL] Animation complete — triggering voting now');
-      triggerVoting(exercises, alternatives);
-    });
+    console.log('🎬 [REVEAL] Animation complete — triggering voting now');
+    triggerVoting(exercises, alternatives);
   };
 
   // Show loading only if user is not available
@@ -3142,11 +3052,7 @@ export default function GroupLobbyScreen() {
 
         {/* Workout Exercises Section */}
         <View
-          ref={workoutSectionRef}
-          style={[
-            styles.workoutSection,
-            isRevealExpanded && { opacity: 0 },
-          ]}
+          style={styles.workoutSection}
         >
           <View style={styles.workoutHeader}>
             <Text style={styles.sectionTitle}>
@@ -3165,7 +3071,6 @@ export default function GroupLobbyScreen() {
               exercises={currentLobby?.workout_data?.exercises || []}
               isGenerating={isGenerating}
               onRevealComplete={handleRevealComplete}
-              skipAnimation={isRevealExpanded}
             />
           </ScrollView>
 
@@ -3934,37 +3839,6 @@ export default function GroupLobbyScreen() {
 
     </SafeAreaView>
 
-      {/* Expanded exercise reveal — slides up from section position to fullscreen */}
-      {isRevealExpanded && (
-        <Animated.View
-          style={[
-            styles.revealExpandedView,
-            {
-              opacity: expandedOpacity,
-              transform: [{ translateY: expandedTranslateY }],
-            },
-          ]}
-        >
-          <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-            <View style={styles.revealExpandedHeader}>
-              <Ionicons name="sparkles" size={22} color={COLORS.PRIMARY[500]} />
-              <Text style={styles.revealExpandedTitle}>Workout Plan</Text>
-            </View>
-            <ScrollView
-              style={{ flex: 1 }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }}
-            >
-              <AnimatedExerciseReveal
-                exercises={currentLobby?.workout_data?.exercises || []}
-                isGenerating={false}
-                onRevealComplete={handleRevealComplete}
-              />
-            </ScrollView>
-          </SafeAreaView>
-        </Animated.View>
-      )}
-
     </View>
   );
 }
@@ -3972,32 +3846,6 @@ export default function GroupLobbyScreen() {
 const styles = StyleSheet.create({
   screenWrapper: {
     flex: 1,
-  },
-  revealExpandedView: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    zIndex: 100,
-    elevation: 100,
-  },
-  revealExpandedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.SECONDARY[100],
-  },
-  revealExpandedTitle: {
-    fontSize: FONT_SIZES.LG,
-    fontFamily: FONTS.BOLD,
-    color: COLORS.SECONDARY[900],
   },
   container: {
     flex: 1,
