@@ -516,7 +516,7 @@ export default function GroupsScreen() {
         onRequestClose={() => setShowJoinModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <Animated.View style={[styles.modalContent, { opacity: joinModalFade, transform: [{ scale: joinModalScale }] }]}>
