@@ -85,6 +85,7 @@ export interface SessionExercise {
   plannedSets: ExerciseSet[];
   completedSets: ExerciseSet[];
   skipped: boolean;
+  completed?: boolean;
   notes?: string;
   actualDuration?: number;
   perceivedExertion?: number;
@@ -394,7 +395,7 @@ export class TrackingService {
     completed: boolean;
     completionPercentage?: number; // Actual completion percentage based on exercises/sets completed
     notes?: string;
-    exercises?: Array<{ exercise_id: number; exercise_name: string; target_muscle_group?: string }>;
+    exercises?: Array<{ exercise_id: number; exercise_name: string; target_muscle_group?: string; completed?: boolean }>;
   }): Promise<WorkoutSession> {
     try {
       // Backend expects specific field names
@@ -423,6 +424,7 @@ export class TrackingService {
           exercise_id: ex.exercise_id,
           exercise_name: ex.exercise_name,
           target_muscle_group: ex.target_muscle_group || null,
+          completed: ex.completed ?? true,
         }));
       }
 
@@ -572,6 +574,7 @@ export class TrackingService {
           plannedSets: [],
           completedSets: [],
           skipped: false,
+          completed: ex.completed_at !== null,
           actualDuration: ex.completed_duration_seconds || undefined,
           perceivedExertion: ex.difficulty_perceived ? undefined : undefined,
           formQuality: ex.form_rating ? parseFloat(ex.form_rating) : undefined,
@@ -640,10 +643,13 @@ export class TrackingService {
         limit: 1000 // Get all sessions for stats calculation
       });
 
-      console.log(`📊 [getWorkoutHistory] Retrieved ${result.sessions.length} completed workouts for user ${userIdString}`);
+      // Filter to only completed sessions (getSessions doesn't pass status filter to backend)
+      const completedSessions = result.sessions.filter(session => session.status === 'completed');
+
+      console.log(`📊 [getWorkoutHistory] Retrieved ${completedSessions.length} completed workouts out of ${result.sessions.length} total for user ${userIdString}`);
 
       // Transform to simplified format for profile stats
-      return result.sessions.map(session => ({
+      return completedSessions.map(session => ({
         id: session.id,
         duration: session.duration || 0,
         caloriesBurned: session.actualCaloriesBurned || 0,

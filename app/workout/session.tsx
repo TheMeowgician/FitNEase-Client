@@ -947,13 +947,13 @@ export default function WorkoutSessionScreen() {
         const actualCompletionPercentage = Math.round((completedSets / totalSets) * 100);
 
         if (completedSets > 0) {
-          // Build completed exercises array so backend records them in user_exercise_history
-          const completedExerciseCount = sessionState.currentExercise;
-          const completedExercises = tabataSession && completedExerciseCount > 0
-            ? tabataSession.exercises.slice(0, completedExerciseCount).map((ex: any) => ({
+          // Build ALL exercises with completion status so backend records them in user_exercise_history
+          const allExercises = tabataSession
+            ? tabataSession.exercises.map((ex: any, index: number) => ({
                 exercise_id: ex.exercise_id,
                 exercise_name: ex.exercise_name,
                 target_muscle_group: ex.target_muscle_group,
+                completed: index < sessionState.currentExercise,
               }))
             : [];
 
@@ -968,7 +968,7 @@ export default function WorkoutSessionScreen() {
             caloriesBurned: accurateCaloriesBurned,
             completionPercentage: actualCompletionPercentage,
             completed: false,
-            exercises: completedExercises,
+            exercises: allExercises,
           });
           console.log('💾 [SESSION] Saved partial progress before disconnect navigation');
         }
@@ -1507,13 +1507,13 @@ export default function WorkoutSessionScreen() {
         if (completedSets === 0) {
           console.log('❌ [EXIT] No sets completed — skipping session save');
         } else {
-        // Build completed exercises array so backend records them in user_exercise_history
-        const completedExerciseCount = sessionState.currentExercise;
-        const completedExercises = tabataSession && completedExerciseCount > 0
-          ? tabataSession.exercises.slice(0, completedExerciseCount).map((ex: any) => ({
+        // Build ALL exercises with completion status so backend records them in user_exercise_history
+        const allExercises = tabataSession
+          ? tabataSession.exercises.map((ex: any, index: number) => ({
               exercise_id: ex.exercise_id,
               exercise_name: ex.exercise_name,
               target_muscle_group: ex.target_muscle_group,
+              completed: index < sessionState.currentExercise,
             }))
           : [];
 
@@ -1529,7 +1529,7 @@ export default function WorkoutSessionScreen() {
           caloriesBurned: accurateCaloriesBurned,
           completed: false,
           completionPercentage: actualCompletionPercentage, // Pass actual completion percentage
-          exercises: completedExercises,
+          exercises: allExercises,
           notes: `Session ended early - ${tabataSession ? `${sessionState.currentExercise + 1}/${tabataSession.exercises.length} exercises, set ${sessionState.currentSet + 1}/8` : 'Partial workout'} (${actualCompletionPercentage}% complete, ${actualDurationMinutes}min)`
         });
         } // end else (completedSets > 0)
@@ -1638,13 +1638,14 @@ export default function WorkoutSessionScreen() {
         nextLevel: progressionService.getFitnessLevelName(beforeProgress?.next_level || 'intermediate'),
       };
 
-      // STEP 2: Save partial session data (include completed exercises for user_exercise_history)
+      // STEP 2: Save partial session data (include ALL exercises with completion status for user_exercise_history)
       console.log('💾 [EXIT & RATE] Saving partial workout session...');
-      const partialExercises = tabataSession && completedExerciseCount > 0
-        ? tabataSession.exercises.slice(0, completedExerciseCount).map((ex: any) => ({
+      const allExercises = tabataSession
+        ? tabataSession.exercises.map((ex: any, index: number) => ({
             exercise_id: ex.exercise_id,
             exercise_name: ex.exercise_name,
             target_muscle_group: ex.target_muscle_group,
+            completed: index < completedExerciseCount,
           }))
         : [];
 
@@ -1659,7 +1660,7 @@ export default function WorkoutSessionScreen() {
         caloriesBurned: accurateCaloriesBurned,
         completed: false, // Partial completion
         completionPercentage: actualCompletionPercentage,
-        exercises: partialExercises,
+        exercises: allExercises,
         notes: `Partial workout - ${completedExerciseCount}/${totalExercises} exercises completed (${actualCompletionPercentage}% complete, ${actualDurationMinutes}min)`
       });
 
@@ -1839,6 +1840,7 @@ export default function WorkoutSessionScreen() {
           exercise_id: ex.exercise_id,
           exercise_name: ex.exercise_name,
           target_muscle_group: ex.target_muscle_group,
+          completed: true,
         })) || [],
       });
 

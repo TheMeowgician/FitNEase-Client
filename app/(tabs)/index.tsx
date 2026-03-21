@@ -584,6 +584,29 @@ export default function HomeScreen() {
     return user.workoutDays.includes(todayName);
   };
 
+  // Check if it's time to show the weekly check-in
+  // Only shows on or after the user's last scheduled workout day of the week
+  const shouldShowWeeklyCheckIn = () => {
+    const DAYS_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const today = new Date().getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const todayIndex = today === 0 ? 6 : today - 1; // Convert to Monday-based (0=Mon, 6=Sun)
+
+    if (!user?.workoutDays || user.workoutDays.length === 0) {
+      return todayIndex >= 4; // No schedule set — show from Friday onward
+    }
+
+    const workoutDayIndices = user.workoutDays
+      .map((day: string) => DAYS_ORDER.indexOf(day.toLowerCase()))
+      .filter((i: number) => i >= 0);
+
+    if (workoutDayIndices.length === 0) {
+      return todayIndex >= 4; // Fallback: Friday onward
+    }
+
+    const lastWorkoutDayIndex = Math.max(...workoutDayIndices);
+    return todayIndex >= lastWorkoutDayIndex;
+  };
+
   const quickActions = [
     // Only show "Start Workout" on workout days
     ...(isWorkoutDay() ? [{
@@ -777,9 +800,10 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Weekly Check-In Card - Only show after user's first week (account age >= 7 days) and has done at least 1 workout */}
-        {(recentWorkouts.length > 0 || (weeklyStats?.this_week_sessions ?? 0) > 0) &&
-         user?.createdAt && (Date.now() - new Date(user.createdAt).getTime() >= 7 * 24 * 60 * 60 * 1000) && (
+        {/* Weekly Check-In Card - Shows on/after last workout day, after first week, only if user did workouts THIS week */}
+        {(weeklyStats?.this_week_sessions ?? 0) > 0 &&
+         user?.createdAt && (Date.now() - new Date(user.createdAt).getTime() >= 7 * 24 * 60 * 60 * 1000) &&
+         shouldShowWeeklyCheckIn() && (
           weeklyAssessmentStatus.completed_this_week ? (
             // Completed state - show success message
             <View style={styles.weeklyCheckInCardCompleted}>

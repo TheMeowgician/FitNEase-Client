@@ -23,8 +23,8 @@ interface WorkoutHistoryItem {
   date: string;
   duration: number;
   caloriesBurned: number;
-  workoutType: string;
-  completed: boolean;
+  workoutType?: string;
+  completed?: boolean;
 }
 
 interface ProgressState {
@@ -55,8 +55,10 @@ interface ProgressState {
 
 const calculateWeeklyStats = (workoutHistory: any[]): WeeklyStats => {
   const now = new Date();
+  const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const diffToMonday = day === 0 ? 6 : day - 1; // Days since Monday
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setDate(now.getDate() - diffToMonday);
   startOfWeek.setHours(0, 0, 0, 0);
 
   const thisWeekWorkouts = workoutHistory.filter((w: any) => {
@@ -74,9 +76,11 @@ const calculateWeeklyStats = (workoutHistory: any[]): WeeklyStats => {
 const calculateOverallStats = (workoutHistory: any[], engagementStats: any): OverallStats => {
   const now = new Date();
 
-  // This week
+  // This week (Monday-based, consistent with backend)
+  const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const diffToMonday = day === 0 ? 6 : day - 1;
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setDate(now.getDate() - diffToMonday);
   startOfWeek.setHours(0, 0, 0, 0);
   const thisWeekWorkouts = workoutHistory.filter((w: any) => {
     const workoutDate = new Date(w.date);
