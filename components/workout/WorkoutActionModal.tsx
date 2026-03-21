@@ -97,7 +97,21 @@ export const WorkoutActionModal: React.FC<WorkoutActionModalProps> = ({
     setGroupsError(null);
     try {
       const result = await socialService.getGroups({ user_id: parseInt(user.id) });
-      setGroups(result.groups || []);
+      const rawGroups = result.groups || [];
+
+      // Fetch actual member counts (current_member_count column can be stale)
+      const groupsWithCounts = await Promise.all(
+        rawGroups.map(async (group) => {
+          try {
+            const membersData = await socialService.getGroupMembers(group.id, 1, 1);
+            return { ...group, memberCount: membersData.total || group.memberCount };
+          } catch {
+            return group;
+          }
+        })
+      );
+
+      setGroups(groupsWithCounts);
     } catch (error: any) {
       setGroupsError(error.message || 'Failed to load groups');
     } finally {
