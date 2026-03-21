@@ -34,6 +34,7 @@ interface UserProfilePreviewModalProps {
   onClose: () => void;
   user: UserProfileData | null;
   context?: 'group' | 'lobby'; // Context determines which info to show
+  onViewProfile?: (user: UserProfileData) => void; // Optional: lets parent control navigation (e.g., lobby sets minimize flag first)
 }
 
 export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = ({
@@ -41,6 +42,7 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
   onClose,
   user,
   context = 'group',
+  onViewProfile,
 }) => {
   const [showPhotoModal, setShowPhotoModal] = useState(false);
 
@@ -229,11 +231,17 @@ export const UserProfilePreviewModal: React.FC<UserProfilePreviewModalProps> = (
             style={styles.viewProfileButton}
             activeOpacity={0.7}
             onPress={() => {
-              onClose();
-              router.push({
-                pathname: '/profile/public-profile',
-                params: { userId: String(user.userId), username: user.username },
-              });
+              if (onViewProfile) {
+                // Let parent handle navigation (e.g., lobby sets minimize flag to prevent leave)
+                onViewProfile(user);
+              } else {
+                // Default behavior for non-lobby contexts
+                onClose();
+                router.push({
+                  pathname: '/profile/public-profile',
+                  params: { userId: String(user.userId), username: user.username },
+                });
+              }
             }}
           >
             <Text style={styles.viewProfileButtonText}>View Full Profile</Text>

@@ -3579,6 +3579,17 @@ export default function GroupLobbyScreen() {
           profilePicture: selectedLobbyMember.profile_picture,
         } : null}
         context="lobby"
+        onViewProfile={(profileUser) => {
+          // CRITICAL: Set minimize flag so unmount handler doesn't call leaveLobbyV2
+          // Same pattern as handleMinimizeLobby — user is exploring, not leaving
+          isMinimizedRef.current = true;
+          setShowMemberPreview(false);
+          setSelectedLobbyMember(null);
+          router.push({
+            pathname: '/profile/public-profile',
+            params: { userId: String(profileUser.userId), username: profileUser.username },
+          });
+        }}
       />
 
       {/* All Members Modal */}
