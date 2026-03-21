@@ -14,6 +14,7 @@ import {
   Animated,
   Image,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -82,6 +83,9 @@ export default function GroupDetailsScreen() {
 
   // Remove members modal state
   const [showRemoveMembersModal, setShowRemoveMembersModal] = useState(false);
+  const [isRemoveMembersVisible, setIsRemoveMembersVisible] = useState(false);
+  const removeMembersOverlayAnim = useRef(new Animated.Value(0)).current;
+  const removeMembersSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
   // Join requests modal state
   const [showJoinRequestsModal, setShowJoinRequestsModal] = useState(false);
@@ -137,6 +141,27 @@ export default function GroupDetailsScreen() {
       ]).start();
     }
   }, [showImagePickerModal]);
+
+  // Animate remove members modal (overlay fade + content slide-up)
+  const screenHeight = Dimensions.get('window').height;
+  useEffect(() => {
+    if (showRemoveMembersModal) {
+      setIsRemoveMembersVisible(true);
+      removeMembersOverlayAnim.setValue(0);
+      removeMembersSlideAnim.setValue(screenHeight);
+      Animated.parallel([
+        Animated.timing(removeMembersOverlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(removeMembersSlideAnim, { toValue: 0, friction: 9, tension: 50, useNativeDriver: true }),
+      ]).start();
+    } else if (isRemoveMembersVisible) {
+      Animated.parallel([
+        Animated.timing(removeMembersOverlayAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+        Animated.timing(removeMembersSlideAnim, { toValue: screenHeight, duration: 250, useNativeDriver: true }),
+      ]).start(() => {
+        setIsRemoveMembersVisible(false);
+      });
+    }
+  }, [showRemoveMembersModal]);
 
   useEffect(() => {
     loadGroupDetails();
@@ -1458,55 +1483,54 @@ export default function GroupDetailsScreen() {
       />
 
       {/* Remove Members Modal */}
-      <Modal
-        visible={showRemoveMembersModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowRemoveMembersModal(false)}
-      >
-        <View style={styles.removeMembersOverlay}>
-          <View style={styles.removeMembersContainer}>
-            <View style={styles.removeMembersHeader}>
-              <Text style={styles.removeMembersTitle}>Remove Members</Text>
-              <TouchableOpacity onPress={() => setShowRemoveMembersModal(false)}>
-                <Ionicons name="close" size={24} color={COLORS.SECONDARY[600]} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.removeMembersList}>
-              {members.filter(m => m.userId !== user?.id && m.role !== 'owner').length === 0 ? (
-                <View style={{ padding: 32, alignItems: 'center' }}>
-                  <Ionicons name="people-outline" size={48} color={COLORS.SECONDARY[300]} />
-                  <Text style={{ color: COLORS.SECONDARY[500], marginTop: 12, fontSize: 14 }}>No removable members</Text>
-                </View>
-              ) : (
-                members.filter(m => m.userId !== user?.id && m.role !== 'owner').map((member) => (
-                  <View key={member.userId} style={styles.removeMemberRow}>
-                    <Avatar
-                      name={member.username}
-                      size="sm"
-                      profilePicture={member.profilePicture}
-                    />
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={{ fontSize: 15, fontFamily: FONTS.SEMIBOLD, color: COLORS.SECONDARY[900] }}>{member.username}</Text>
-                      <Text style={{ fontSize: 12, color: COLORS.SECONDARY[500] }}>{member.role}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.removeMemberButton}
-                      onPress={() => {
-                        setShowRemoveMembersModal(false);
-                        handleKickMember(member);
-                      }}
-                    >
-                      <Ionicons name="person-remove" size={16} color="#EF4444" />
-                      <Text style={{ color: '#EF4444', fontSize: 13, fontFamily: FONTS.SEMIBOLD, marginLeft: 4 }}>Remove</Text>
-                    </TouchableOpacity>
+      {isRemoveMembersVisible && (
+        <Modal transparent visible statusBarTranslucent onRequestClose={() => setShowRemoveMembersModal(false)}>
+          <View style={styles.removeMembersOverlay}>
+            <Animated.View style={[styles.removeMembersBackdrop, { opacity: removeMembersOverlayAnim }]}>
+              <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowRemoveMembersModal(false)} />
+            </Animated.View>
+            <Animated.View style={[styles.removeMembersContainer, { transform: [{ translateY: removeMembersSlideAnim }] }]}>
+              <View style={styles.removeMembersHeader}>
+                <Text style={styles.removeMembersTitle}>Remove Members</Text>
+                <TouchableOpacity onPress={() => setShowRemoveMembersModal(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.SECONDARY[600]} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.removeMembersList}>
+                {members.filter(m => m.userId !== user?.id && m.role !== 'owner').length === 0 ? (
+                  <View style={{ padding: 32, alignItems: 'center' }}>
+                    <Ionicons name="people-outline" size={48} color={COLORS.SECONDARY[300]} />
+                    <Text style={{ color: COLORS.SECONDARY[500], marginTop: 12, fontSize: 14 }}>No removable members</Text>
                   </View>
-                ))
-              )}
-            </ScrollView>
+                ) : (
+                  members.filter(m => m.userId !== user?.id && m.role !== 'owner').map((member) => (
+                    <View key={member.userId} style={styles.removeMemberRow}>
+                      <Avatar
+                        size="sm"
+                        profilePicture={member.profilePicture}
+                      />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={{ fontSize: 15, fontFamily: FONTS.SEMIBOLD, color: COLORS.SECONDARY[900] }}>{member.username}</Text>
+                        <Text style={{ fontSize: 12, color: COLORS.SECONDARY[500] }}>{member.role}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeMemberButton}
+                        onPress={() => {
+                          setShowRemoveMembersModal(false);
+                          handleKickMember(member);
+                        }}
+                      >
+                        <Ionicons name="person-remove" size={16} color="#EF4444" />
+                        <Text style={{ color: '#EF4444', fontSize: 13, fontFamily: FONTS.SEMIBOLD, marginLeft: 4 }}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </Animated.View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -2259,8 +2283,11 @@ const styles = StyleSheet.create({
   },
   removeMembersOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+  },
+  removeMembersBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   removeMembersContainer: {
     backgroundColor: 'white',

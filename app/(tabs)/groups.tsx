@@ -221,7 +221,7 @@ export default function GroupsScreen() {
     try {
       // Call join with code endpoint (expects 8-character code)
       await socialService.joinGroupWithCode(groupCode.trim().toUpperCase());
-      alert.success('Welcome!', 'You have successfully joined the group!', () => {
+      alert.success('Request Sent!', 'Your request to join has been sent to the group owner for approval.', () => {
         setShowJoinModal(false);
         setGroupCode('');
         loadGroups();
