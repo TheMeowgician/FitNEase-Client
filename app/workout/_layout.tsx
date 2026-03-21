@@ -12,6 +12,11 @@ export default function WorkoutLayout() {
   const appState = useRef(AppState.currentState);
   const pathname = usePathname();
   const hasNavigatedToSessionRef = useRef<Set<string>>(new Set());
+  // CRITICAL: Always-fresh pathname ref for async closures (handleAppStateChange,
+  // checkForMissedWorkoutStart, Zustand subscriber). Using `pathname` directly in
+  // those closures captures a stale value from when the closure was created.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
     // Monitor app state changes to check for missed workout starts
@@ -39,15 +44,17 @@ export default function WorkoutLayout() {
 
       // Check if workout started and we haven't navigated yet for this session
       if ((status === 'in_progress' || status === 'starting') && !hasNavigatedToSessionRef.current.has(sessionId)) {
-          // Check if we're NOT already on the session screen or lobby screen
-          const isOnSessionScreen = pathname?.includes('/workout/session');
-          const isOnLobbyScreen = pathname?.includes('/workout/group-lobby');
+          // CRITICAL: Use pathnameRef.current (always fresh) instead of closure `pathname`
+          // (stale — captured when useEffect last ran, not when subscriber fires)
+          const currentPath = pathnameRef.current;
+          const isOnSessionScreen = currentPath?.includes('/workout/session');
+          const isOnLobbyScreen = currentPath?.includes('/workout/group-lobby');
 
           if (!isOnSessionScreen && !isOnLobbyScreen) {
             console.log('🚨 BACKGROUND WORKOUT START DETECTED!', {
               sessionId,
               status,
-              currentPath: pathname,
+              currentPath,
               membersCount: lobbyState.members?.length
             });
 
@@ -122,6 +129,16 @@ export default function WorkoutLayout() {
   const checkForMissedWorkoutStart = async () => {
     if (!user) return;
 
+    // CRITICAL FIX: Don't navigate if already on session or lobby screen.
+    // Without this, permission dialogs (e.g. Agora camera) cause inactive→active
+    // app state transition, which triggers this function and pushes a DUPLICATE
+    // session screen on top of the existing one.
+    const currentPath = pathnameRef.current;
+    if (currentPath?.includes('/workout/session') || currentPath?.includes('/workout/group-lobby')) {
+      console.log('📱 Already on workout screen, skipping missed workout check:', currentPath);
+      return;
+    }
+
     try {
       // Check all group lobbies for active sessions
       const keys = await AsyncStorage.getAllKeys();
@@ -152,6 +169,9 @@ export default function WorkoutLayout() {
         // Only process if this is the current lobby session
         if (lobbyState && lobbyState.session_id === sessionId && (lobbyState.status === 'in_progress' || lobbyState.status === 'starting')) {
           console.log('🚨 MISSED WORKOUT START! Navigating to session...');
+
+          // Mark this session as navigated (prevents subscriber from duplicating)
+          hasNavigatedToSessionRef.current.add(sessionId);
 
           // Transform workout data to session format
           const workoutSession = {

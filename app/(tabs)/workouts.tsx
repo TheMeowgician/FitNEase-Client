@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAlert } from '../../contexts/AlertContext';
 import { usePlanningService } from '../../hooks/api/usePlanningService';
 import { trackingService } from '../../services/microservices/trackingService';
+import { mlService } from '../../services/microservices/mlService';
 import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useNetwork } from '../../contexts/NetworkContext';
@@ -197,7 +198,6 @@ export default function WorkoutsScreen() {
       if (canCustomize && user) {
         try {
           console.log('[WORKOUTS] Fetching alternatives for customization...');
-          const { mlService } = await import('../../services/microservices/mlService');
           const response = await mlService.getRecommendations(String(user.id), {
             num_recommendations: 6,
             include_alternatives: true,

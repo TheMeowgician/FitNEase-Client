@@ -29,6 +29,7 @@ import { useReverb } from '../../contexts/ReverbProvider';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { reverbService } from '../../services/reverbService';
 import { socialService } from '../../services/microservices/socialService';
+import { mlService } from '../../services/microservices/mlService';
 import { contentService, Exercise } from '../../services/microservices/contentService';
 import { Avatar } from '../../components/ui/Avatar';
 import DragList, { DragListRenderItemInfo } from 'react-native-draglist';
@@ -158,6 +159,8 @@ export default function GroupLobbyScreen() {
   const hasPlayedRevealRef = useRef(false);
   // Prevents handleRevealComplete from firing more than once per reveal cycle
   const hasCalledRevealCompleteRef = useRef(false);
+  // Tracks whether the exercise reveal animation has completed (used to gate Start Workout button)
+  const [isRevealComplete, setIsRevealComplete] = useState(false);
 
   // Check if current user can customize (mentor or advanced fitness level)
   const currentUserMember = lobbyMembers.find(m => m.user_id === parseInt(currentUser?.id || '0'));
@@ -240,8 +243,10 @@ export default function GroupLobbyScreen() {
   const hasExercises = currentLobby?.workout_data?.exercises?.length > 0;
 
   // Check if all members are ready AND exercises exist AND minimum 2 members present
-  // This prevents starting a group workout alone
-  const canStartWorkout = isInitiator && allMembersReady && lobbyMembers.length >= 2 && hasExercises;
+  // AND reveal animation finished AND voting is not in progress
+  // This prevents starting during the exercise reveal animation or while voting is active
+  const canStartWorkout = isInitiator && allMembersReady && lobbyMembers.length >= 2 && hasExercises
+    && isRevealComplete && !isVotingActive;
 
   // Check if ready check can be started (any member, no active ready check, no exercises yet)
   const canStartReadyCheck = !isReadyCheckActive && !hasExercises && lobbyMembers.length >= 2 && !isGenerating;
@@ -406,6 +411,7 @@ export default function GroupLobbyScreen() {
     if (isVotingActive) {
       hasPlayedRevealRef.current = true;
       hasCalledRevealCompleteRef.current = true;
+      setIsRevealComplete(true);
     }
   }, [isVotingActive]);
 
@@ -918,6 +924,7 @@ export default function GroupLobbyScreen() {
       if (hasExercises) {
         console.log('🧹 [LOBBY] Member count dropped below 2, clearing exercises');
         setExerciseDetails([]);
+        setIsRevealComplete(false);
 
         // Also clear from lobby state if user is initiator
         if (isInitiator && currentLobby?.session_id && !isCleaningUpRef.current) {
@@ -1067,6 +1074,7 @@ export default function GroupLobbyScreen() {
       // reveal effect also prevents premature firing.
       hasPlayedRevealRef.current = false;
       hasCalledRevealCompleteRef.current = false;
+      setIsRevealComplete(false);
 
       try {
         // Re-subscribe to channels first
@@ -2363,9 +2371,6 @@ export default function GroupLobbyScreen() {
 
       console.log('📤 Calling ML group recommendations for users:', userIds);
 
-      // Import ML service
-      const { mlService } = await import('../../services/microservices/mlService');
-
       // Call ML group recommendations API with alternatives for voting
       const response = await mlService.getGroupWorkoutRecommendations(userIds, {
         workout_format: 'tabata',
@@ -2869,6 +2874,9 @@ export default function GroupLobbyScreen() {
     // Guard against double-fire (e.g. safety timeout + normal chain both firing)
     if (hasCalledRevealCompleteRef.current) return;
     hasCalledRevealCompleteRef.current = true;
+
+    // Mark reveal as complete — gates the Start Workout button
+    setIsRevealComplete(true);
 
     if (!pendingVotingDataRef.current) return;
 

@@ -33,7 +33,6 @@ import { agoraService } from '../../services/agoraService';
 import { TabataWorkoutSession } from '../../services/workoutSessionGenerator';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useLobbyStore } from '../../stores/lobbyStore';
-import { useConnectionStore } from '../../stores/connectionStore';
 import { useProgressStore } from '../../stores/progressStore';
 import ProgressUpdateModal from '../../components/ProgressUpdateModal';
 import AgoraVideoCall from '../../components/video/AgoraVideoCall';
@@ -339,15 +338,28 @@ export default function WorkoutSessionScreen() {
   // Subscribe to session channel after tabataSession is loaded
   useEffect(() => {
     if (type === 'group_tabata' && tabataSession) {
-      console.log('🏃 Group workout detected - setting up session subscription and auto-starting...');
+      console.log('🏃 Group workout detected - setting up session subscription and syncing...');
 
       // Subscribe to session channel for pause/resume events
       setupSessionSubscription();
 
-      // Auto-start after a short delay
-      setTimeout(() => {
-        startSession();
-      }, 100);
+      // Need sessionStartTime for time elapsed display
+      setSessionStartTime(new Date());
+
+      // CRITICAL: Sync from server FIRST to get the actual state (paused/running/etc.)
+      // before starting the local timer. Without this, reconnecting to a paused workout
+      // blindly calls startSession() → timer counts down → auto-completes at 0 seconds
+      // because no server ticks arrive during pause.
+      syncSessionFromServer().then((synced) => {
+        if (!synced) {
+          // Sync failed — fallback to local start (e.g., first join when server briefly unavailable)
+          console.log('⚠️ [SESSION] Server sync failed — falling back to startSession()');
+          startSession();
+        }
+        // If synced: state is set from server.
+        // - 'running' → timer useEffect starts the timer automatically
+        // - 'paused' → timer stays stopped, resumes when host sends WorkoutResumed event
+      });
     }
   }, [tabataSession]);
 
@@ -587,6 +599,17 @@ export default function WorkoutSessionScreen() {
               lastServerTickRef.current = Date.now();
               lastServerTimeRef.current = serverTime;
 
+              // CRITICAL FIX: Update serverStateRef so the interval timer doesn't
+              // overwrite 'paused' back to 'running' on its next tick.
+              // Without this, the interval reads srv.status='running' and writes it
+              // back to React state, undoing the pause. The timer then counts to 0
+              // and auto-complete fires (all clients finish simultaneously).
+              serverStateRef.current = {
+                ...serverStateRef.current,
+                status: 'paused',
+                phase: data.session_state.phase || serverStateRef.current.phase,
+              };
+
               // ALWAYS use server time on pause - no drift tolerance
               // This ensures all users see the exact same paused time
               return {
@@ -603,6 +626,7 @@ export default function WorkoutSessionScreen() {
 
             // Fallback: just pause at current time
             console.log('⚠️ [PAUSE] No server state provided, pausing at current time');
+            serverStateRef.current = { ...serverStateRef.current, status: 'paused' };
             return { ...prev, status: 'paused' };
           });
         } else if (eventName === 'WorkoutResumed') {
@@ -627,6 +651,17 @@ export default function WorkoutSessionScreen() {
               lastServerTickRef.current = Date.now();
               lastServerTimeRef.current = serverTime;
 
+              // CRITICAL FIX: Update serverStateRef so the interval timer uses
+              // the correct 'running' status and phase from the server.
+              serverStateRef.current = {
+                ...serverStateRef.current,
+                status: 'running',
+                phase: data.session_state.phase || serverStateRef.current.phase,
+                exercise: data.session_state.current_exercise ?? serverStateRef.current.exercise,
+                set: data.session_state.current_set ?? serverStateRef.current.set,
+                round: data.session_state.current_round ?? serverStateRef.current.round,
+              };
+
               // ALWAYS use server time on resume - no drift tolerance
               // This ensures all users resume from the exact same point
               return {
@@ -642,6 +677,7 @@ export default function WorkoutSessionScreen() {
             }
 
             console.log('⚠️ [RESUME] No server state provided, resuming from current position:', prev.timeRemaining);
+            serverStateRef.current = { ...serverStateRef.current, status: 'running' };
             return { ...prev, status: 'running' };
           });
         } else if (eventName === 'WorkoutStopped') {
@@ -823,11 +859,16 @@ export default function WorkoutSessionScreen() {
     if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
       // App came to foreground — check if connection was lost while backgrounded
       if (type === 'group_tabata') {
-        const connState = useConnectionStore.getState();
-        if (!connState.isConnected) {
-          console.log('⚠️ [SESSION] App resumed but WebSocket is disconnected');
+        // CRITICAL FIX: Use reverbService.isConnected() (checks actual Pusher state)
+        // instead of connectionStore.isConnected (ALWAYS false — never updated by any caller).
+        // The stale connectionStore caused false "Connection lost" banners on every
+        // inactive→active transition (e.g. camera permission dialog, app backgrounding).
+        const isWsConnected = reverbService.isConnected();
+        if (!isWsConnected) {
+          const wsState = reverbService.getConnectionState();
+          console.log('⚠️ [SESSION] App resumed but WebSocket is disconnected:', wsState);
           setSelfDisconnected(true);
-          setSelfReconnecting(connState.connectionState === 'reconnecting');
+          setSelfReconnecting(wsState === 'connecting' || wsState === 'reconnecting');
         } else {
           // WebSocket is connected but we may have missed ticks while backgrounded.
           // Sync from server to catch up on phase/set/round/timer changes.
@@ -846,8 +887,8 @@ export default function WorkoutSessionScreen() {
    * Updates serverStateRef, lastServerTimeRef, lastServerTickRef, and sessionState
    * so the timer, phase, set, and round all match the server immediately.
    */
-  const syncSessionFromServer = async () => {
-    if (!tabataSession) return;
+  const syncSessionFromServer = async (): Promise<boolean> => {
+    if (!tabataSession) return false;
 
     // Increment sequence so we can detect stale responses from earlier calls.
     // If WiFi flickers, multiple syncs fire — only the latest should apply.
@@ -860,7 +901,7 @@ export default function WorkoutSessionScreen() {
       // Discard if a newer sync was started while we were waiting for this response
       if (mySequence !== syncSequenceRef.current) {
         console.log('⚠️ [SESSION] Stale sync response (seq:', mySequence, 'current:', syncSequenceRef.current, ') — discarding');
-        return;
+        return true; // Another sync is handling it — caller shouldn't fall back to startSession
       }
 
       console.log('🔄 [SESSION] Server state received:', serverState);
@@ -869,7 +910,7 @@ export default function WorkoutSessionScreen() {
       if (serverState.status === 'completed' || serverState.status === 'stopped') {
         console.log('🔄 [SESSION] Server says workout is finished — transitioning to complete');
         transitionToCompleted();
-        return;
+        return true;
       }
 
       // Update all server refs so the interval timer reads fresh data
@@ -906,9 +947,11 @@ export default function WorkoutSessionScreen() {
         exercise: serverState.current_exercise,
         status: serverState.status,
       });
+
+      return true;
     } catch (err) {
       console.warn('⚠️ [SESSION] Failed to fetch session state from server:', err);
-      // Not critical — next server tick will sync us anyway
+      return false;
     }
   };
 
@@ -1084,9 +1127,13 @@ export default function WorkoutSessionScreen() {
           // GROUP WORKOUTS: Smooth interpolation from server refs
           // This interval is the ONLY writer to React state - no blinking
 
-          // Guard: never overwrite a completed state — transitionToCompleted() may have fired
-          // between the last server tick and this interval tick
+          // Guard: never overwrite a completed or paused state from the interval timer.
+          // - completed: transitionToCompleted() may have fired between ticks
+          // - paused: WorkoutPaused event sets status='paused' + updates serverStateRef,
+          //   but in a race condition the interval could fire before serverStateRef is updated.
+          //   Don't let the interval overwrite 'paused' with stale 'running' from refs.
           if (prev.status === 'completed') return prev;
+          if (prev.status === 'paused') return prev;
 
           const elapsedMs = now - lastServerTickRef.current;
           const elapsedSeconds = Math.floor(elapsedMs / 1000);
