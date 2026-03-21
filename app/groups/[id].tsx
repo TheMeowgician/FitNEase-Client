@@ -70,7 +70,7 @@ export default function GroupDetailsScreen() {
   // Edit group states
   const [showEditNameModal, setShowEditNameModal] = useState(false);
   const [showEditDescModal, setShowEditDescModal] = useState(false);
-  const [showRolesModal, setShowRolesModal] = useState(false);
+
   const [editNameValue, setEditNameValue] = useState('');
   const [editDescValue, setEditDescValue] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -502,32 +502,6 @@ export default function GroupDetailsScreen() {
     );
   };
 
-  const handleManageRoles = () => {
-    setShowRolesModal(true);
-    setShowSettingsModal(false);
-  };
-
-  const handleChangeRole = async (member: GroupMember, newRole: 'moderator' | 'member') => {
-    if (!group) return;
-
-    const action = newRole === 'moderator' ? 'promote' : 'demote';
-    alert.confirm(
-      `${action.charAt(0).toUpperCase() + action.slice(1)} Member`,
-      `Are you sure you want to ${action} ${member.username} to ${newRole}?`,
-      async () => {
-        setIsUpdating(true);
-        try {
-          await socialService.updateMemberRole(group.id, member.userId.toString(), newRole);
-          alert.success('Success', `${member.username} is now a ${newRole}`);
-          loadGroupDetails(); // Refresh to get updated roles
-        } catch (error: any) {
-          alert.error('Error', error.message || 'Failed to update role');
-        } finally {
-          setIsUpdating(false);
-        }
-      }
-    );
-  };
 
   const handleKickMember = (member: GroupMember) => {
     if (!group || member.userId === user?.id || isProcessingAction.current) return;
@@ -1193,14 +1167,6 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={handleManageRoles}>
-                  <View style={styles.settingsOptionLeft}>
-                    <Ionicons name="shield-outline" size={22} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.settingsOptionText}>Manage Member Roles</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
-                </TouchableOpacity>
-
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
                   setShowRemoveMembersModal(true);
@@ -1405,60 +1371,6 @@ export default function GroupDetailsScreen() {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Manage Roles Modal */}
-      <Modal
-        visible={showRolesModal}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowRolesModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.editModalContent, { maxHeight: '70%' }]}>
-            <View style={styles.editModalHeader}>
-              <Text style={styles.editModalTitle}>Manage Roles</Text>
-              <TouchableOpacity onPress={() => setShowRolesModal(false)}>
-                <Ionicons name="close" size={24} color={COLORS.SECONDARY[700]} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
-              {members.filter(m => m.role !== 'owner').map((member) => (
-                <View key={member.id} style={styles.roleMemberItem}>
-                  <View style={styles.roleMemberInfo}>
-                    <Avatar profilePicture={member.profilePicture} size="xs" backgroundColor={COLORS.PRIMARY[100]} iconColor={COLORS.PRIMARY[600]} />
-                    <View style={styles.roleMemberDetails}>
-                      <Text style={styles.roleMemberName}>{member.username}</Text>
-                      <Text style={styles.roleMemberRole}>
-                        {member.role === 'moderator' ? 'Moderator' : 'Member'}
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleToggleButton,
-                      member.role === 'moderator' ? styles.demoteButton : styles.promoteButton
-                    ]}
-                    onPress={() => handleChangeRole(member, member.role === 'moderator' ? 'member' : 'moderator')}
-                    disabled={isUpdating}
-                  >
-                    <Ionicons
-                      name={member.role === 'moderator' ? 'arrow-down' : 'arrow-up'}
-                      size={16}
-                      color={COLORS.NEUTRAL.WHITE}
-                    />
-                    <Text style={styles.roleToggleText}>
-                      {member.role === 'moderator' ? 'Demote' : 'Promote'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-              {members.filter(m => m.role !== 'owner').length === 0 && (
-                <Text style={styles.noMembersText}>No members to manage</Text>
-              )}
-            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -2182,61 +2094,6 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.NEUTRAL.WHITE,
-  },
-  // Role Management Styles
-  roleMemberItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.SECONDARY[100],
-  },
-  roleMemberInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  roleMemberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.PRIMARY[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roleMemberDetails: {
-    flex: 1,
-  },
-  roleMemberName: {
-    fontSize: FONT_SIZES.BASE,
-    fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
-  },
-  roleMemberRole: {
-    fontSize: FONT_SIZES.SM,
-    fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
-  },
-  roleToggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
-  },
-  promoteButton: {
-    backgroundColor: COLORS.SUCCESS[600],
-  },
-  demoteButton: {
-    backgroundColor: COLORS.WARNING[600],
-  },
-  roleToggleText: {
-    fontSize: FONT_SIZES.SM,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.NEUTRAL.WHITE,
   },
