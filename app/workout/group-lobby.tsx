@@ -36,6 +36,8 @@ import LobbyChat from '../../components/groups/LobbyChat';
 import { UserProfilePreviewModal } from '../../components/groups/UserProfilePreviewModal';
 import { AnimatedExerciseReveal } from '../../components/lobby/AnimatedExerciseReveal';
 import { ExerciseSwapModal } from '../../components/workout/ExerciseSwapModal';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
 
 /**
  * Group Lobby Screen
@@ -67,6 +69,7 @@ export default function GroupLobbyScreen() {
   const alert = useAlert();
   const { saveLobbySession, clearActiveLobbyLocal } = useLobby();
   const { addUserChannelListener } = useNotifications();
+  const { isConnected: isNetworkConnected } = useNetwork();
 
   // Safe area insets for modal
   const insets = useSafeAreaInsets();
@@ -206,6 +209,10 @@ export default function GroupLobbyScreen() {
   // Used by allMembersReady trigger to prevent the old bug where a member leaving
   // caused stale 'ready' statuses to fire exercise generation.
   const prevMemberCountRef = useRef(0);
+  const [isNetworkDisconnected, setIsNetworkDisconnected] = useState(false); // True when network drops — shows OfflinePlaceholder after auto-leave
+  const memberDisconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map()); // Per-member timers for detecting true disconnects
+  const onlineUsersRef = useRef<Set<string>>(new Set()); // Always-fresh ref for onlineUsers (used in timer callbacks)
+  onlineUsersRef.current = onlineUsers; // Sync ref on every render
 
   // Block Android hardware back button — route through handleLeaveLobby confirmation
   useEffect(() => {
@@ -808,6 +815,35 @@ export default function GroupLobbyScreen() {
       leaveOnUnmount();
     };
   }, []);
+
+  /**
+   * Network disconnect detection — instant auto-leave lobby when network drops.
+   *
+   * A disconnected user blocks the entire group (can't mark ready, can't start workout).
+   * Immediately leave the lobby so other members can continue, then show OfflinePlaceholder.
+   * The leave API will likely fail (user is offline), but backend presence channel
+   * will detect the WebSocket disconnect and the stale-membership auto-cleanup handles the rest.
+   */
+  useEffect(() => {
+    if (!isNetworkConnected && !isNetworkDisconnected && !isCleaningUpRef.current) {
+      console.log('🚫 [NETWORK] Network lost — auto-leaving lobby instantly');
+      setIsNetworkDisconnected(true);
+
+      // Leave lobby so other members aren't blocked
+      const leaveOnDisconnect = async () => {
+        if (sessionId) {
+          try {
+            await socialService.leaveLobbyV2(sessionId);
+            console.log('✅ [NETWORK] Leave API succeeded');
+          } catch (error) {
+            console.log('⚠️ [NETWORK] Leave API failed (expected when offline) — backend presence will detect disconnect');
+          }
+          await cleanup();
+        }
+      };
+      leaveOnDisconnect();
+    }
+  }, [isNetworkConnected]);
 
   /**
    * Watch for ALL members pressing "Mark Ready" — triggers exercise generation
@@ -1764,6 +1800,13 @@ export default function GroupLobbyScreen() {
           console.log('✅ Member joining:', member);
           if (member?.user_id) {
             setOnlineMembers((prev) => new Set([...prev, member.user_id]));
+            // Cancel any pending disconnect timer for this member (they reconnected)
+            const existingTimer = memberDisconnectTimersRef.current.get(member.user_id);
+            if (existingTimer) {
+              clearTimeout(existingTimer);
+              memberDisconnectTimersRef.current.delete(member.user_id);
+              console.log('✅ [PRESENCE] Cancelled disconnect timer for rejoining member:', member.user_id);
+            }
           }
         },
         onLeaving: (member: any) => {
@@ -1776,6 +1819,43 @@ export default function GroupLobbyScreen() {
               newSet.delete(member.user_id);
               return newSet;
             });
+
+            // Don't auto-kick yourself
+            if (member.user_id === parseInt(currentUser?.id || '0')) return;
+
+            // Start 5-second timer to check if member truly disconnected (vs. just minimized)
+            // After 5s: if they're also gone from global onlineUsers → truly disconnected → initiator kicks
+            const timer = setTimeout(async () => {
+              memberDisconnectTimersRef.current.delete(member.user_id);
+              if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+              // Check global online status — if still online, they just minimized (don't kick)
+              // Use ref for fresh value (closure would be stale inside setTimeout)
+              const stillGloballyOnline = onlineUsersRef.current.has(member.user_id.toString());
+
+              if (stillGloballyOnline) {
+                console.log('📦 [PRESENCE] Member left lobby presence but still online globally — minimized, not disconnected:', member.user_id);
+                return;
+              }
+
+              // Member is truly disconnected — only initiator removes them
+              const currentLobbyState = useLobbyStore.getState().currentLobby;
+              const amIInitiator = currentLobbyState?.initiator_id === parseInt(currentUser?.id || '0');
+              if (!amIInitiator) {
+                console.log('⚠️ [PRESENCE] Member disconnected but I am not initiator — skipping kick:', member.user_id);
+                return;
+              }
+
+              console.log('🚫 [PRESENCE] Member truly disconnected — initiator auto-kicking:', member.user_id);
+              try {
+                await socialService.kickMemberFromLobbyV2(sessionId, member.user_id);
+                console.log('✅ [PRESENCE] Disconnected member auto-kicked successfully');
+              } catch (error) {
+                console.log('⚠️ [PRESENCE] Auto-kick failed:', (error as any)?.message);
+              }
+            }, 5000);
+
+            memberDisconnectTimersRef.current.set(member.user_id, timer);
           }
         },
       });
@@ -1888,6 +1968,8 @@ export default function GroupLobbyScreen() {
   const handleMinimizeLobby = () => {
     console.log('📦 [MINIMIZE] User minimizing lobby to explore app');
     isMinimizedRef.current = true; // Mark as minimized so unmount doesn't call leave API
+    // Send extended heartbeat (5 min TTL) so server doesn't remove us while away
+    socialService.sendLobbyHeartbeat(sessionId, 300).catch(() => {});
     router.back();
   };
 
@@ -2694,6 +2776,10 @@ export default function GroupLobbyScreen() {
         console.log('🧹 [CLEANUP] Removed user channel listener');
       }
 
+      // Clear all pending member disconnect timers
+      memberDisconnectTimersRef.current.forEach((timer) => clearTimeout(timer));
+      memberDisconnectTimersRef.current.clear();
+
       // STEP 2: Small delay to ensure unsubscribe messages are processed
       // This prevents any in-flight WebSocket events from updating state
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -2873,6 +2959,19 @@ export default function GroupLobbyScreen() {
         <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
         <Text style={styles.loadingText}>Loading lobby...</Text>
       </View>
+    );
+  }
+
+  // Network disconnected — show offline screen (MUST be before !currentLobby check)
+  // cleanup() clears currentLobby, so !currentLobby would trigger first without this ordering
+  if (isNetworkDisconnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <OfflinePlaceholder
+          message="You were disconnected from the lobby. Check your connection and rejoin via a new invitation."
+          onRetry={() => router.back()}
+        />
+      </SafeAreaView>
     );
   }
 
@@ -3583,6 +3682,8 @@ export default function GroupLobbyScreen() {
           // CRITICAL: Set minimize flag so unmount handler doesn't call leaveLobbyV2
           // Same pattern as handleMinimizeLobby — user is exploring, not leaving
           isMinimizedRef.current = true;
+          // Send extended heartbeat (5 min TTL) so server doesn't remove us while viewing profile
+          socialService.sendLobbyHeartbeat(sessionId, 300).catch(() => {});
           setShowMemberPreview(false);
           setSelectedLobbyMember(null);
           router.push({

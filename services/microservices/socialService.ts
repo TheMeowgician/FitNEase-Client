@@ -1201,6 +1201,19 @@ export class SocialService {
     }
   }
 
+  /**
+   * Send extended heartbeat before minimize/profile view.
+   * Prevents heartbeat-based cleanup from removing the user while they're away from the lobby screen.
+   */
+  public async sendLobbyHeartbeat(sessionId: string, ttl: number = 300): Promise<void> {
+    try {
+      await apiClient.post('social', `/api/v2/lobby/${sessionId}/heartbeat`, { ttl });
+    } catch (error) {
+      // Non-critical — worst case: user gets removed and needs to rejoin
+      console.warn('⚠️ [SOCIAL V2] Heartbeat failed:', (error as any)?.message);
+    }
+  }
+
   public async joinLobbyV2(
     sessionId: string
   ): Promise<{
