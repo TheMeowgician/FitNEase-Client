@@ -16,6 +16,7 @@ import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useInvitationStore, selectCurrentInvitation, selectInvitationCount } from '../../stores/invitationStore';
 import { useLobby } from '../../contexts/LobbyContext';
 import { useAlert } from '../../contexts/AlertContext';
+import { useNetwork } from '../../contexts/NetworkContext';
 
 const { width } = Dimensions.get('window');
 
@@ -41,6 +42,7 @@ export default function InvitationQueueModal() {
   // Access lobby context to check for active lobby
   const { activeLobby, clearActiveLobby } = useLobby();
   const alert = useAlert();
+  const { isConnected: isNetworkConnected } = useNetwork();
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -270,13 +272,6 @@ export default function InvitationQueueModal() {
 
           {/* Workout Details */}
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Workout Format */}
-            <View style={styles.formatBadge}>
-              <Text style={styles.formatText}>
-                {(workout_data.workout_format || 'tabata').toUpperCase()} WORKOUT
-              </Text>
-            </View>
-
             {/* Tabata Structure */}
             {tabata_structure && (
               <View style={styles.tabataInfo}>
@@ -362,6 +357,14 @@ export default function InvitationQueueModal() {
             )}
           </ScrollView>
 
+          {/* Offline Warning */}
+          {!isNetworkConnected && (
+            <View style={styles.offlineWarning}>
+              <Ionicons name="cloud-offline-outline" size={16} color={COLORS.ERROR[600]} />
+              <Text style={styles.offlineWarningText}>No internet — cannot join lobby</Text>
+            </View>
+          )}
+
           {/* Action Buttons */}
           <View style={styles.actions}>
             <TouchableOpacity
@@ -376,9 +379,9 @@ export default function InvitationQueueModal() {
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.acceptButton, (isProcessing || isLoading) && styles.acceptButtonDisabled]}
+              style={[styles.acceptButton, (isProcessing || isLoading || !isNetworkConnected) && styles.acceptButtonDisabled]}
               onPress={handleAccept}
-              disabled={isProcessing || isLoading}
+              disabled={isProcessing || isLoading || !isNetworkConnected}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color={COLORS.NEUTRAL.WHITE} />
@@ -413,9 +416,6 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    backgroundColor: COLORS.SECONDARY[50],
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.SECONDARY[200],
     alignItems: 'center',
   },
   headerIcon: {
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   },
   content: {
     maxHeight: '60%',
-    padding: 20,
+    paddingHorizontal: 20,
   },
   formatBadge: {
     backgroundColor: COLORS.PRIMARY[600],
@@ -597,6 +597,20 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
     marginLeft: 4,
+  },
+  offlineWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.ERROR[50],
+    gap: 6,
+  },
+  offlineWarningText: {
+    fontSize: FONT_SIZES.XS,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.ERROR[600],
   },
   actions: {
     flexDirection: 'row',

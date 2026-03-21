@@ -28,6 +28,9 @@ interface InvitationStoreState {
   // Currently visible invitation (for modal display)
   currentInvitationId: string | null;
 
+  // IDs declined while offline — prevents re-showing on reconnect
+  locallyDeclinedIds: Record<string, number>; // { invitationId: expiresAt timestamp }
+
   // Loading and error state
   isLoading: boolean;
   error: string | null;
@@ -70,6 +73,7 @@ const INVITATION_STORAGE_KEY = 'workout_invitations_v1';
 export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
   invitations: {},
   currentInvitationId: null,
+  locallyDeclinedIds: {},
   isLoading: false,
   error: null,
   isHydrated: false,
@@ -84,6 +88,14 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
         invitationId: invitation.invitation_id,
         expiresAt: new Date(expiresAtMs).toISOString(),
         now: new Date(now).toISOString()
+      });
+      return;
+    }
+
+    // Ignore invitations that were declined while offline
+    if (get().locallyDeclinedIds[invitation.invitation_id]) {
+      console.log('🚫 [INVITATION STORE] Ignoring locally-declined invitation', {
+        invitationId: invitation.invitation_id
       });
       return;
     }
@@ -248,9 +260,22 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
       // The server will auto-expire it anyway, and leaving it stuck causes
       // persistent modal issues (especially on slow/no internet)
       console.log('🧹 [INVITATION STORE] Removing invitation locally despite API failure', { invitationId });
+
+      // Track as locally declined so it won't re-appear on reconnect
+      set((state) => ({
+        locallyDeclinedIds: {
+          ...state.locallyDeclinedIds,
+          [invitationId]: invitation.expires_at,
+        },
+      }));
+
       get().removeInvitation(invitationId);
       setTimeout(() => get().showNextInvitation(), 100);
       set({ isLoading: false });
+
+      // Persist locally-declined IDs
+      setTimeout(() => get().persistToStorage(), 0);
+
       return { success: true }; // Treat as success locally - server will handle expiry
     }
   },
@@ -298,9 +323,22 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
         }
       });
 
-      if (expiredCount > 0) {
+      // Also clean up expired locally-declined IDs
+      const validDeclinedIds: Record<string, number> = {};
+      let declinedCleanedCount = 0;
+      Object.entries(state.locallyDeclinedIds).forEach(([id, expiresAt]) => {
+        const expiresAtMs = expiresAt * 1000;
+        if (expiresAtMs > now) {
+          validDeclinedIds[id] = expiresAt;
+        } else {
+          declinedCleanedCount++;
+        }
+      });
+
+      if (expiredCount > 0 || declinedCleanedCount > 0) {
         console.log('🧹 [INVITATION STORE] Cleaned up expired invitations', {
           expiredCount,
+          declinedCleanedCount,
           remainingCount: Object.keys(validInvitations).length
         });
 
@@ -314,7 +352,8 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
 
         return {
           invitations: validInvitations,
-          currentInvitationId: newCurrentId
+          currentInvitationId: newCurrentId,
+          locallyDeclinedIds: validDeclinedIds,
         };
       }
 
@@ -370,6 +409,7 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
     set({
       invitations: {},
       currentInvitationId: null,
+      locallyDeclinedIds: {},
       error: null
     });
 
@@ -410,6 +450,14 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
           }
         });
 
+        // Restore locally-declined IDs (filter out expired ones)
+        const validDeclinedIds: Record<string, number> = {};
+        Object.entries(parsed.locallyDeclinedIds || {}).forEach(([id, expiresAt]: [string, any]) => {
+          if ((expiresAt as number) * 1000 > now) {
+            validDeclinedIds[id] = expiresAt as number;
+          }
+        });
+
         // Only set state with VALID invitations
         const validCurrentId = validInvitations[parsed.currentInvitationId || '']
           ? parsed.currentInvitationId
@@ -418,6 +466,7 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
         set({
           invitations: validInvitations,
           currentInvitationId: validCurrentId,
+          locallyDeclinedIds: validDeclinedIds,
           isHydrated: true
         });
 
@@ -455,7 +504,8 @@ export const useInvitationStore = create<InvitationStoreState>((set, get) => ({
 
       const dataToStore = {
         invitations: state.invitations,
-        currentInvitationId: state.currentInvitationId
+        currentInvitationId: state.currentInvitationId,
+        locallyDeclinedIds: state.locallyDeclinedIds,
       };
 
       await AsyncStorage.setItem(INVITATION_STORAGE_KEY, JSON.stringify(dataToStore));

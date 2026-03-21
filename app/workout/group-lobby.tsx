@@ -212,6 +212,7 @@ export default function GroupLobbyScreen() {
   const [isNetworkDisconnected, setIsNetworkDisconnected] = useState(false); // True when network drops — shows OfflinePlaceholder after auto-leave
   const isNetworkConnectedRef = useRef(isNetworkConnected); // Fresh ref for async closures (cleanup)
   isNetworkConnectedRef.current = isNetworkConnected; // Sync ref on every render
+  const disconnectGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Grace timer before auto-leaving on network loss
   const memberDisconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map()); // Per-member timers for detecting true disconnects
   const onlineUsersRef = useRef<Set<string>>(new Set()); // Always-fresh ref for onlineUsers (used in timer callbacks)
   onlineUsersRef.current = onlineUsers; // Sync ref on every render
@@ -828,22 +829,36 @@ export default function GroupLobbyScreen() {
    */
   useEffect(() => {
     if (!isNetworkConnected && !isNetworkDisconnected && !isCleaningUpRef.current) {
-      console.log('🚫 [NETWORK] Network lost — auto-leaving lobby instantly');
-      setIsNetworkDisconnected(true);
+      // Network dropped — start 5s grace timer before auto-leaving
+      // Brief WiFi blips (1-3s) won't kick the user
+      console.log('⚠️ [NETWORK] Network lost — starting 5s grace timer before auto-leave');
 
-      // Leave lobby so other members aren't blocked
-      const leaveOnDisconnect = async () => {
-        if (sessionId) {
-          try {
-            await socialService.leaveLobbyV2(sessionId);
-            console.log('✅ [NETWORK] Leave API succeeded');
-          } catch (error) {
-            console.log('⚠️ [NETWORK] Leave API failed (expected when offline) — backend presence will detect disconnect');
-          }
-          await cleanup();
+      disconnectGraceTimerRef.current = setTimeout(() => {
+        disconnectGraceTimerRef.current = null;
+        // Still disconnected after 5s — this is a real disconnect
+        if (!isNetworkConnectedRef.current && !isCleaningUpRef.current) {
+          console.log('🚫 [NETWORK] Still offline after 5s — auto-leaving lobby');
+          setIsNetworkDisconnected(true);
+
+          const leaveOnDisconnect = async () => {
+            if (sessionId) {
+              try {
+                await socialService.leaveLobbyV2(sessionId);
+                console.log('✅ [NETWORK] Leave API succeeded');
+              } catch (error) {
+                console.log('⚠️ [NETWORK] Leave API failed (expected when offline) — backend heartbeat will detect disconnect');
+              }
+              await cleanup();
+            }
+          };
+          leaveOnDisconnect();
         }
-      };
-      leaveOnDisconnect();
+      }, 5000);
+    } else if (isNetworkConnected && disconnectGraceTimerRef.current) {
+      // Network restored within grace period — cancel auto-leave
+      console.log('✅ [NETWORK] Network restored within grace period — staying in lobby');
+      clearTimeout(disconnectGraceTimerRef.current);
+      disconnectGraceTimerRef.current = null;
     }
   }, [isNetworkConnected]);
 
@@ -2776,6 +2791,12 @@ export default function GroupLobbyScreen() {
         userChannelRef.current(); // Call the unsubscribe function
         userChannelRef.current = null;
         console.log('🧹 [CLEANUP] Removed user channel listener');
+      }
+
+      // Clear disconnect grace timer
+      if (disconnectGraceTimerRef.current) {
+        clearTimeout(disconnectGraceTimerRef.current);
+        disconnectGraceTimerRef.current = null;
       }
 
       // Clear all pending member disconnect timers

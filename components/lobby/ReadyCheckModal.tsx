@@ -218,9 +218,16 @@ export function ReadyCheckModal() {
           },
         });
       }
-    } catch (error) {
-      console.error('Failed to accept ready check:', error);
-      respondingRef.current = false; // Allow retry on error
+    } catch (error: any) {
+      const msg = error?.message || '';
+      if (msg.toLowerCase().includes('expired') || msg.toLowerCase().includes('not found')) {
+        // Ready check expired or was cancelled (e.g., member disconnected) — dismiss silently
+        console.log('⚠️ [READY CHECK] Ready check expired/cancelled, clearing modal');
+        clearReadyCheck();
+      } else {
+        console.error('Failed to accept ready check:', error);
+        respondingRef.current = false; // Allow retry on error
+      }
     } finally {
       setIsResponding(false);
     }
@@ -236,9 +243,15 @@ export function ReadyCheckModal() {
       await socialService.respondToReadyCheckV2(sessionId, 'declined');
       setHasResponded(true);
       setMyResponse('declined');
-    } catch (error) {
-      console.error('Failed to decline ready check:', error);
-      respondingRef.current = false; // Allow retry on error
+    } catch (error: any) {
+      const msg = error?.message || '';
+      if (msg.toLowerCase().includes('expired') || msg.toLowerCase().includes('not found')) {
+        console.log('⚠️ [READY CHECK] Ready check expired/cancelled, clearing modal');
+        clearReadyCheck();
+      } else {
+        console.error('Failed to decline ready check:', error);
+        respondingRef.current = false; // Allow retry on error
+      }
     } finally {
       setIsResponding(false);
     }
