@@ -39,12 +39,11 @@ export default function DiscoverGroupsScreen() {
   const [totalGroups, setTotalGroups] = useState(0);
   const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchVersionRef = useRef(0); // Tracks search version to discard stale responses
   const loadingMoreRef = useRef(false); // Guard against concurrent loadMore calls
-
-  const hasMore = groups.length < totalGroups;
 
   useEffect(() => {
     loadInitialData();
@@ -56,6 +55,7 @@ export default function DiscoverGroupsScreen() {
   const loadInitialData = async () => {
     setIsLoading(true);
     setError(false);
+    setHasMore(true);
     try {
       const [myGroupsData, userJoinRequests] = await Promise.all([
         socialService.getGroups({ user_id: parseInt(user?.id || '0'), per_page: 100 }),
@@ -125,6 +125,8 @@ export default function DiscoverGroupsScreen() {
 
       setCurrentPage(page);
       setTotalGroups(result.total);
+      // No more pages when backend returned fewer results than requested
+      setHasMore(result.groups.length >= PER_PAGE);
       setError(false);
     } catch (err) {
       console.error('[DISCOVER] Failed to load groups:', err);
@@ -474,8 +476,6 @@ export default function DiscoverGroupsScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
       />
     </SafeAreaView>
   );
