@@ -210,6 +210,8 @@ export default function GroupLobbyScreen() {
   // caused stale 'ready' statuses to fire exercise generation.
   const prevMemberCountRef = useRef(0);
   const [isNetworkDisconnected, setIsNetworkDisconnected] = useState(false); // True when network drops — shows OfflinePlaceholder after auto-leave
+  const isNetworkConnectedRef = useRef(isNetworkConnected); // Fresh ref for async closures (cleanup)
+  isNetworkConnectedRef.current = isNetworkConnected; // Sync ref on every render
   const memberDisconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map()); // Per-member timers for detecting true disconnects
   const onlineUsersRef = useRef<Set<string>>(new Set()); // Always-fresh ref for onlineUsers (used in timer callbacks)
   onlineUsersRef.current = onlineUsers; // Sync ref on every render
@@ -2795,9 +2797,14 @@ export default function GroupLobbyScreen() {
       console.log('🧹 [CLEANUP] Step 4: Cleared LobbyContext and AsyncStorage');
 
       // STEP 5: Refresh group subscriptions to receive new invitations
-      console.log('🧹 [CLEANUP] Step 5: Refreshing group subscriptions...');
-      await refreshGroupSubscriptions();
-      console.log('✅ [CLEANUP] Group subscriptions refreshed');
+      // Skip when offline — API call would fail and trigger error toast
+      if (isNetworkConnectedRef.current) {
+        console.log('🧹 [CLEANUP] Step 5: Refreshing group subscriptions...');
+        await refreshGroupSubscriptions();
+        console.log('✅ [CLEANUP] Group subscriptions refreshed');
+      } else {
+        console.log('🧹 [CLEANUP] Step 5: Skipped group subscription refresh (offline)');
+      }
 
       // STEP 6: Reset initialization refs
       hasJoinedRef.current = false;
