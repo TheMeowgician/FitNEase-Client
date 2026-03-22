@@ -73,6 +73,7 @@ export interface RegisterRequest {
   lastName?: string;
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other';
+  phoneNumber?: string;
   fitnessLevel?: 'beginner' | 'intermediate' | 'advanced';
   goals?: string[];
   role?: 'member' | 'mentor';
@@ -235,6 +236,7 @@ export class AuthService {
         activity_level: 'moderately_active', // Default activity level
         fitness_goals: userData.goals || [], // Map goals to fitness_goals array
         date_of_birth: userData.dateOfBirth, // Include dateOfBirth if provided
+        phone_number: userData.phoneNumber, // Map phoneNumber to snake_case
         role: userData.role || 'member', // Include role (default to member)
       };
 

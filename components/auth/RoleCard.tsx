@@ -60,9 +60,6 @@ export const RoleCard: React.FC<RoleCardProps> = ({
         style={styles.gradientHeader}
       >
         <View style={styles.headerContent}>
-          <View style={styles.iconWrapper}>
-            <Ionicons name={role.icon} size={26} color="#FFFFFF" />
-          </View>
           <View style={styles.titleContainer}>
             <Text style={styles.title}>{role.title}</Text>
             <Text style={styles.subtitle}>{role.subtitle}</Text>
@@ -130,15 +127,6 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  iconWrapper: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
   },
   titleContainer: {
     flex: 1,

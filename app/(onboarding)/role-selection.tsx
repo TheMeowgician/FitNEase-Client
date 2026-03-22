@@ -12,8 +12,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-
 import { RoleCard, RoleData } from '../../components/auth/RoleCard';
 import { Button } from '../../components/ui/Button';
 import { rolesData } from '../../constants/rolesData';
@@ -63,13 +61,7 @@ export default function RoleSelection() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
-
-      {/* Background Decoration */}
-      <View style={styles.backgroundDecoration}>
-        <View style={[styles.decorCircle, styles.decorCircle1]} />
-        <View style={[styles.decorCircle, styles.decorCircle2]} />
-      </View>
+      <StatusBar barStyle="dark-content" backgroundColor="white" />
 
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
@@ -169,33 +161,7 @@ export default function RoleSelection() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  backgroundDecoration: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  decorCircle: {
-    position: 'absolute',
-    borderRadius: 999,
-    opacity: 0.5,
-  },
-  decorCircle1: {
-    width: 300,
-    height: 300,
-    backgroundColor: COLORS.PRIMARY[100],
-    top: -100,
-    right: -100,
-  },
-  decorCircle2: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#D1FAE5',
-    bottom: 100,
-    left: -80,
+    backgroundColor: COLORS.NEUTRAL.WHITE,
   },
   safeArea: {
     flex: 1,

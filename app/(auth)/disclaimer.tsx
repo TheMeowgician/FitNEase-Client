@@ -484,7 +484,7 @@ export default function DisclaimerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.NEUTRAL[50],
+    backgroundColor: COLORS.NEUTRAL.WHITE,
   },
   scrollView: {
     flex: 1,
