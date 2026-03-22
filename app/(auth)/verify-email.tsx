@@ -35,7 +35,8 @@ export default function VerifyEmailScreen() {
   const [codeError, setCodeError] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
-  const { email } = useLocalSearchParams<{ email?: string }>();
+  const { email, fromSettings } = useLocalSearchParams<{ email?: string; fromSettings?: string }>();
+  const isFromSettings = fromSettings === 'true';
   const { user, verifyEmail, resendVerification, clearPendingVerification } = useAuth();
   const alert = useAlert();
   const verificationInputRef = useRef<VerificationCodeInputRef>(null);
@@ -70,11 +71,12 @@ export default function VerifyEmailScreen() {
     };
   }, []);
 
-  // Block Android hardware back button — user must verify email
+  // Block Android hardware back button — unless coming from settings
   useEffect(() => {
+    if (isFromSettings) return; // Allow back when from settings
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => backHandler.remove();
-  }, []);
+  }, [isFromSettings]);
 
   // Countdown timer for resend button
   useEffect(() => {
@@ -126,15 +128,25 @@ export default function VerifyEmailScreen() {
       setEnteredCode('');
 
       // Email verified successfully! Backend automatically logged in the user
-      // Show success message and redirect to onboarding
-      alert.success(
-        'Email Verified!',
-        'Welcome to FitNEase! Let\'s personalize your workout experience.',
-        () => {
-          // Redirect to onboarding welcome page
-          router.replace('/(onboarding)/welcome');
-        }
-      );
+      if (isFromSettings) {
+        // Coming from settings — go back to main app
+        alert.success(
+          'Email Verified!',
+          'Your email has been successfully verified.',
+          () => {
+            router.replace('/(tabs)');
+          }
+        );
+      } else {
+        // Fresh registration — go to onboarding
+        alert.success(
+          'Email Verified!',
+          'Welcome to FitNEase! Let\'s personalize your workout experience.',
+          () => {
+            router.replace('/(onboarding)/welcome');
+          }
+        );
+      }
 
     } catch (error: any) {
       const isNetworkError = !error.response && (
@@ -271,28 +283,34 @@ export default function VerifyEmailScreen() {
   };
 
   const handleSkipVerification = () => {
-    const isLoggedIn = !!user;
+    if (isFromSettings) {
+      // From settings — just go back
+      router.back();
+      return;
+    }
+
     alert.confirm(
-      isLoggedIn ? 'Skip Verification?' : 'Go to Login?',
-      isLoggedIn
-        ? 'You can verify your email later in settings. Some features may be limited.'
-        : 'You can verify your email after logging in.',
+      'Skip Verification?',
+      'You can verify your email later in Settings. Let\'s set up your workout profile first!',
       async () => {
         Keyboard.dismiss();
         await clearPendingVerification();
-        if (isLoggedIn) {
-          router.replace('/(tabs)');
-        } else {
-          router.replace('/(auth)/login');
-        }
+        // Go directly to onboarding — user is authenticated with token from registration
+        router.replace('/(onboarding)/welcome');
       },
       undefined,
-      isLoggedIn ? 'Skip' : 'Go to Login',
+      'Continue',
       'Cancel'
     );
   };
 
   const handleBackPress = () => {
+    if (isFromSettings) {
+      // From settings — just go back, no warning needed
+      router.back();
+      return;
+    }
+
     const isLoggedIn = !!user;
     alert.confirm(
       'Go Back?',

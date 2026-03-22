@@ -270,18 +270,57 @@ export class AuthService {
         throw new Error('Empty response data from auth service');
       }
 
-      // Laravel registration doesn't return tokens immediately
-      // Tokens are only returned after email verification via login
-
+      const rawData = response.data;
       console.log(`🔖 User registered with role: ${userData.role || 'member'}`);
 
-      // Transform Laravel response to match our interface
+      // Store token (same pattern as login — Sanctum single token)
+      let tokens: TokenPair | null = null;
+      if (rawData.token) {
+        tokens = {
+          accessToken: rawData.token,
+          refreshToken: rawData.token,
+        };
+        await tokenManager.updateTokensWithAutoMetadata(tokens);
+        console.log('✅ Registration token saved to storage');
+      }
+
+      // Transform user data from snake_case to camelCase (same as login)
+      let transformedUser: User | null = null;
+      if (rawData.user) {
+        transformedUser = {
+          id: rawData.user.user_id?.toString() || '',
+          email: rawData.user.email,
+          username: rawData.user.username,
+          firstName: rawData.user.first_name,
+          lastName: rawData.user.last_name,
+          isEmailVerified: !!rawData.user.email_verified_at,
+          onboardingCompleted: !!rawData.user.onboarding_completed,
+          profilePicture: rawData.user.profile_picture,
+          dateOfBirth: rawData.user.date_of_birth,
+          gender: rawData.user.gender,
+          height: rawData.user.height,
+          weight: rawData.user.weight,
+          fitnessLevel: rawData.user.fitness_level,
+          goals: rawData.user.fitness_goals || [],
+          role: rawData.user.role,
+          createdAt: rawData.user.created_at,
+          updatedAt: rawData.user.updated_at,
+          targetMuscleGroups: rawData.user.target_muscle_groups || [],
+          availableEquipment: rawData.user.available_equipment || [],
+          timeConstraints: rawData.user.time_constraints_minutes,
+          activityLevel: rawData.user.activity_level,
+          workoutExperience: rawData.user.workout_experience_years,
+          phoneNumber: rawData.user.phone_number,
+          workoutDays: rawData.user.preferred_workout_days || [],
+        };
+      }
+
       return {
-        user: response.data?.user || null,
-        tokens: response.data?.tokens || null,
-        message: response.data?.message || 'Registration completed',
-        user_id: response.data?.user_id,
-        requiresEmailVerification: true // Laravel always requires email verification
+        user: transformedUser,
+        tokens: tokens,
+        message: rawData?.message || 'Registration completed',
+        user_id: rawData?.user_id,
+        requiresEmailVerification: true
       };
     } catch (error) {
       console.error('Registration API error:', error);

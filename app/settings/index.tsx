@@ -11,11 +11,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAlert } from '../../contexts/AlertContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { COLORS, FONTS } from '../../constants/colors';
 
 export default function SettingsScreen() {
   const alert = useAlert();
+  const { user, isEmailVerified } = useAuth();
   const { goBack } = useSmartBack();
 
   const menuItems = [
@@ -142,6 +144,33 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        {/* Email Verification Banner */}
+        {!isEmailVerified && (
+          <View style={styles.menuContainer}>
+            <TouchableOpacity
+              style={styles.verifyBanner}
+              activeOpacity={0.7}
+              onPress={() => {
+                router.push({
+                  pathname: '/(auth)/verify-email',
+                  params: { email: user?.email, fromSettings: 'true' },
+                });
+              }}
+            >
+              <View style={styles.verifyBannerIcon}>
+                <Ionicons name="mail-unread" size={22} color="#F59E0B" />
+              </View>
+              <View style={styles.verifyBannerContent}>
+                <Text style={styles.verifyBannerTitle}>Verify Your Email</Text>
+                <Text style={styles.verifyBannerSubtitle}>
+                  Tap here to verify {user?.email || 'your email address'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#F59E0B" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Menu Sections */}
         <View style={styles.menuContainer}>
           {menuItems.map((section, sectionIndex) => (
@@ -212,6 +241,43 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 16,
     paddingBottom: 32,
+  },
+  verifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  verifyBannerIcon: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  verifyBannerContent: {
+    flex: 1,
+  },
+  verifyBannerTitle: {
+    fontSize: 14,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#92400E',
+  },
+  verifyBannerSubtitle: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: '#B45309',
+    marginTop: 2,
   },
   menuContainer: {
     paddingHorizontal: 24,

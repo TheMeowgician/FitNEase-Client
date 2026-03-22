@@ -5,13 +5,12 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function IndexPage() {
-  const { isAuthenticated, isLoading, isEmailVerified, onboardingCompleted, pendingVerificationEmail, user } = useAuth();
+  const { isAuthenticated, isLoading, onboardingCompleted, pendingVerificationEmail, user } = useAuth();
 
   useEffect(() => {
     if (!isLoading) {
       console.log('🚦 Routing decision:', {
         isAuthenticated,
-        isEmailVerified,
         onboardingCompleted,
         pendingVerificationEmail,
         isLoading,
@@ -27,9 +26,6 @@ export default function IndexPage() {
           console.log('➡️ Redirecting to splash (not authenticated)');
           router.push('/(auth)/splash');
         }
-      } else if (!isEmailVerified) {
-        console.log('➡️ Redirecting to verify-email (email not verified)');
-        router.push({ pathname: '/(auth)/verify-email', params: { email: user?.email } });
       } else if (!onboardingCompleted) {
         console.log('➡️ Redirecting to welcome (onboarding not completed)');
         router.push('/(onboarding)/welcome');
@@ -38,7 +34,7 @@ export default function IndexPage() {
         router.push('/(tabs)');
       }
     }
-  }, [isAuthenticated, isLoading, isEmailVerified, onboardingCompleted, pendingVerificationEmail]);
+  }, [isAuthenticated, isLoading, onboardingCompleted, pendingVerificationEmail]);
 
   if (isLoading) {
     return (
