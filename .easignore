@@ -1,10 +1,45 @@
+# Version control
 .git
-.expo
-dist
-web-build
+
+# Dependencies (EAS installs fresh)
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Generated native folders (EAS generates fresh via prebuild)
+/ios
+/android
+
+# Native artifacts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# Metro
 .metro-health-check*
+
+# Debug logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+
+# macOS
 .DS_Store
+
+# Local env files
+.env*.local
+
+# TypeScript
 *.tsbuildinfo
+
+# Example app
+app-example
