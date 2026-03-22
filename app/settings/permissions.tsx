@@ -63,23 +63,26 @@ export default function PermissionsSettingsScreen() {
 
   const checkAllPermissions = async () => {
     const [notifStatus, cameraStatus, audioStatus, mediaStatus] = await Promise.all([
-      Notifications.getPermissionsAsync().catch(() => ({ status: 'undetermined' })),
-      Camera.getCameraPermissionsAsync().catch(() => ({ status: 'undetermined' })),
-      Audio.getPermissionsAsync().catch(() => ({ status: 'undetermined' })),
-      ImagePicker.getMediaLibraryPermissionsAsync().catch(() => ({ status: 'undetermined' })),
+      Notifications.getPermissionsAsync().catch(() => ({ status: 'undetermined', canAskAgain: true })),
+      Camera.getCameraPermissionsAsync().catch(() => ({ status: 'undetermined', canAskAgain: true })),
+      Audio.getPermissionsAsync().catch(() => ({ status: 'undetermined', canAskAgain: true })),
+      ImagePicker.getMediaLibraryPermissionsAsync().catch(() => ({ status: 'undetermined', canAskAgain: true })),
     ]);
 
     setPermissions({
-      notifications: mapStatus(notifStatus.status),
-      camera: mapStatus(cameraStatus.status),
-      microphone: mapStatus(audioStatus.status),
-      photoLibrary: mapStatus(mediaStatus.status),
+      notifications: mapStatus(notifStatus.status, (notifStatus as any).canAskAgain),
+      camera: mapStatus(cameraStatus.status, (cameraStatus as any).canAskAgain),
+      microphone: mapStatus(audioStatus.status, (audioStatus as any).canAskAgain),
+      photoLibrary: mapStatus(mediaStatus.status, (mediaStatus as any).canAskAgain),
     });
   };
 
-  const mapStatus = (status: string): PermissionStatus => {
+  const mapStatus = (status: string, canAskAgain?: boolean): PermissionStatus => {
     if (status === 'granted') return 'granted';
-    if (status === 'denied') return 'denied';
+    // Only show 'denied' if user explicitly denied AND can't ask again
+    // On Android 13+, status can be 'denied' even when never asked (canAskAgain is true)
+    if (status === 'denied' && canAskAgain === false) return 'denied';
+    if (status === 'denied' && canAskAgain !== false) return 'undetermined';
     return 'undetermined';
   };
 
