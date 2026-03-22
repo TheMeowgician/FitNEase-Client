@@ -5,11 +5,11 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
-  Image,
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { getExerciseDemo } from '../../constants/exerciseDemos';
 
@@ -73,12 +73,15 @@ export default function ExerciseDemoModal({
                 <Text style={styles.loadingText}>Loading demo...</Text>
               </View>
             )}
-            <Image
+            <Video
               source={demoSource}
               style={styles.gifImage}
-              resizeMode="contain"
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isLooping
+              isMuted
               onLoadStart={() => setIsLoading(true)}
-              onLoadEnd={() => setIsLoading(false)}
+              onLoad={() => setIsLoading(false)}
             />
           </View>
 
