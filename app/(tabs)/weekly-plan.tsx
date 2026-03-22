@@ -21,6 +21,7 @@ import { COLORS, FONTS, FONT_SIZES } from '@/constants/colors';
 import { WeekCalendarStrip } from '@/components/calendar/WeekCalendarStrip';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { OfflinePlaceholder } from '@/components/ui/OfflinePlaceholder';
+import { WeeklyPlanSkeleton } from '@/components/ui/SkeletonLoader';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
@@ -286,10 +287,10 @@ export default function WeeklyPlanScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
-          <Text style={styles.loadingText}>Loading your weekly plan...</Text>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Weekly Plan</Text>
         </View>
+        <WeeklyPlanSkeleton />
       </SafeAreaView>
     );
   }

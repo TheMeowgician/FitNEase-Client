@@ -25,6 +25,7 @@ import { trackingService } from '../../services/microservices/trackingService';
 import { engagementService, Achievement, UserAchievement } from '../../services/microservices/engagementService';
 import { useEngagementService } from '../../hooks/api/useEngagementService';
 import { getAchievementIcon } from '../../constants/achievementIcons';
+import { ProgressSkeleton } from '../../components/ui/SkeletonLoader';
 
 interface AchievementPreview {
   icon: string;
@@ -249,10 +250,7 @@ export default function ProgressScreen() {
             </View>
           </View>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
-          <Text style={styles.loadingText}>Loading your progress...</Text>
-        </View>
+        <ProgressSkeleton />
       </SafeAreaView>
     );
   }

@@ -26,6 +26,7 @@ import { generateTabataSession } from '../../services/workoutSessionGenerator';
 import { useAchievementStore } from '../../stores/achievementStore';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import { DashboardSkeleton } from '../../components/ui/SkeletonLoader';
 import NetInfo from '@react-native-community/netinfo';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { capitalizeFirstLetter, formatFullName } from '../../utils/stringUtils';
@@ -644,7 +645,7 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <LoadingSpinner message="Loading your dashboard..." />
+        <DashboardSkeleton />
       </SafeAreaView>
     );
   }

@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 10,
-    fontFamily: FONTS.MEDIUM,
+    fontFamily: FONTS.REGULAR,
     marginTop: 2,
   },
   infoContainer: {

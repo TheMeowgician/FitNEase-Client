@@ -22,6 +22,7 @@ import { WorkoutSetModal } from '../../components/workout/WorkoutSetModal';
 import { COLORS, FONTS } from '../../constants/colors';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import { WorkoutsListSkeleton } from '../../components/ui/SkeletonLoader';
 
 // ====================================================================
 // 🧪 TESTING FLAG: Daily Workout Limit Control
@@ -329,10 +330,7 @@ export default function WorkoutsScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Workouts</Text>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
-          <Text style={styles.loadingText}>Loading your workout...</Text>
-        </View>
+        <WorkoutsListSkeleton />
       </SafeAreaView>
     );
   }

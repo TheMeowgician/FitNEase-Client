@@ -47,7 +47,7 @@ export default function PublicProfileScreen() {
       if (results[0].status === 'fulfilled' && results[0].value) {
         const p = results[0].value;
         setProfile(p);
-        setFitnessLevel(p.fitness_level || p.fitnessLevel || 'beginner');
+        setFitnessLevel(p.fitnessLevel || 'beginner');
       }
 
       // Stats — getMemberSessionStats returns camelCase keys
@@ -140,9 +140,8 @@ export default function PublicProfileScreen() {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <Avatar
-            name={displayName}
             size="xl"
-            profilePicture={profile?.profile_picture || profile?.profilePicture}
+            profilePicture={profile?.profilePicture}
           />
           <Text style={styles.profileName}>{displayName}</Text>
           <View style={[styles.fitnessLevelBadge, { backgroundColor: getFitnessLevelColor() + '20' }]}>

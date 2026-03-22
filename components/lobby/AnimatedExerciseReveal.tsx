@@ -302,6 +302,48 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
     </Animated.View>
   );
 
+  // ─── Skeleton card content — matches the real card layout ────────────────
+
+  const SkeletonCardInner = () => (
+    <>
+      {/* Top section: number badge + name + meta (matches exerciseRow) */}
+      <View style={styles.exerciseRow}>
+        <View style={styles.skeletonNumberBadge} />
+        <View style={styles.skeletonContent}>
+          {/* Exercise name — matches exerciseName (fontSize BASE, marginBottom: 8) */}
+          <View style={[styles.skeletonLine, { width: '72%', height: 16, marginBottom: 8 }]} />
+          {/* Meta row — matches exerciseMeta (row, gap: 12) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {/* Muscle group: icon circle + text */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={[styles.skeletonLine, { width: 14, height: 14, borderRadius: 7 }]} />
+              <View style={[styles.skeletonLine, { width: 65, height: 12 }]} />
+            </View>
+            {/* Difficulty badge */}
+            <View style={[styles.skeletonLine, { width: 80, height: 22, borderRadius: 10 }]} />
+          </View>
+        </View>
+      </View>
+      {/* Tabata info bar — matches tabataInfo (row, bg secondary[50], borderRadius: 10, marginTop: 12) */}
+      <View style={styles.skeletonTabataBar}>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={[styles.skeletonLine, { width: 28, height: 14, marginBottom: 4 }]} />
+          <View style={[styles.skeletonLine, { width: 32, height: 10 }]} />
+        </View>
+        <View style={styles.skeletonTabataDivider} />
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={[styles.skeletonLine, { width: 28, height: 14, marginBottom: 4 }]} />
+          <View style={[styles.skeletonLine, { width: 28, height: 10 }]} />
+        </View>
+        <View style={styles.skeletonTabataDivider} />
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={[styles.skeletonLine, { width: 16, height: 14, marginBottom: 4 }]} />
+          <View style={[styles.skeletonLine, { width: 42, height: 10 }]} />
+        </View>
+      </View>
+    </>
+  );
+
   // ─── Generating state: shimmer skeleton placeholders ─────────────────────
 
   if (isGenerating) {
@@ -332,13 +374,8 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
 
         {/* Shimmer skeleton placeholder cards */}
         {[0, 1, 2, 3, 4].map((_, i) => (
-          <View key={i} style={[styles.exerciseCard, styles.skeletonCardBase, { opacity: 1 - i * 0.12 }]}>
-            <View style={styles.skeletonNumberBadge} />
-            <View style={styles.skeletonContent}>
-              <View style={[styles.skeletonLine, { width: '68%', height: 16, marginBottom: 10 }]} />
-              <View style={[styles.skeletonLine, { width: '44%', height: 12, marginBottom: 14 }]} />
-              <View style={[styles.skeletonLine, { width: '90%', height: 32, borderRadius: 10 }]} />
-            </View>
+          <View key={i} style={[styles.exerciseCard, { opacity: 1 - i * 0.12 }]}>
+            <SkeletonCardInner />
             <ShimmerOverlay />
           </View>
         ))}
@@ -489,12 +526,7 @@ export const AnimatedExerciseReveal: React.FC<AnimatedExerciseRevealProps> = ({
               ]}
               pointerEvents="none"
             >
-              <View style={styles.skeletonNumberBadge} />
-              <View style={styles.skeletonContent}>
-                <View style={[styles.skeletonLine, { width: '68%', height: 16, marginBottom: 10 }]} />
-                <View style={[styles.skeletonLine, { width: '44%', height: 12, marginBottom: 14 }]} />
-                <View style={[styles.skeletonLine, { width: '90%', height: 32, borderRadius: 10 }]} />
-              </View>
+              <SkeletonCardInner />
               {/* Moving shimmer sweep */}
               <ShimmerOverlay />
             </Animated.View>
@@ -725,18 +757,10 @@ const styles = StyleSheet.create({
 
   // ── Skeleton styles ──────────────────────────────────────────────────────
 
-  // Base for generating placeholder cards (not overlay)
-  skeletonCardBase: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
   // Overlay that sits on top of the real card content
   skeletonOverlay: {
     backgroundColor: COLORS.NEUTRAL.WHITE,
     borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 16,
   },
 
@@ -751,12 +775,28 @@ const styles = StyleSheet.create({
 
   skeletonContent: {
     flex: 1,
-    justifyContent: 'center',
   },
 
   skeletonLine: {
     backgroundColor: COLORS.SECONDARY[200],
     borderRadius: 8,
+  },
+
+  // Tabata bar skeleton — matches tabataInfo
+  skeletonTabataBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.SECONDARY[50],
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  skeletonTabataDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: COLORS.SECONDARY[200],
+    marginHorizontal: 8,
   },
 });
 

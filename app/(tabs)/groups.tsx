@@ -26,6 +26,7 @@ import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 import { useReverb } from '../../contexts/ReverbProvider';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import { GroupsListSkeleton } from '../../components/ui/SkeletonLoader';
 import NetInfo from '@react-native-community/netinfo';
 import { mediaService } from '../../services/microservices/mediaService';
 
@@ -307,11 +308,11 @@ export default function GroupsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
-          <Text style={styles.loadingText}>Loading groups...</Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Groups</Text>
         </View>
+        <GroupsListSkeleton />
       </SafeAreaView>
     );
   }

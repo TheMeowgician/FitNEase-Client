@@ -69,13 +69,14 @@ export default function DurationSettingsScreen() {
 
   const loadCurrentSettings = () => {
     if (user?.timeConstraints) {
+      const tc = user.timeConstraints;
       const validValues = durations.map(d => d.value);
-      if (validValues.includes(user.timeConstraints)) {
-        setSelectedDuration(user.timeConstraints);
+      if (validValues.includes(tc)) {
+        setSelectedDuration(tc);
       } else {
         // Clamp to closest valid option for the user's current fitness level
         const closest = validValues.reduce((c, val) =>
-          Math.abs(val - user.timeConstraints) < Math.abs(c - user.timeConstraints) ? val : c
+          Math.abs(val - tc) < Math.abs(c - tc) ? val : c
         );
         setSelectedDuration(closest);
       }

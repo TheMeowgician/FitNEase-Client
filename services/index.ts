@@ -42,24 +42,12 @@ export {
 export {
   MLService,
   mlService,
-  type WorkoutRecommendation,
-  type RecommendedExercise,
-  type ExerciseModification,
-  type WorkoutAdaptation,
-  type PersonalizationFactors,
-  type WorkoutAnalysis,
-  type ProgressPrediction,
-  type NutritionRecommendation,
-  type InjuryRiskAssessment,
-  type RecoveryRecommendation,
-  type GetRecommendationsRequest,
-  type AnalyzeWorkoutRequest,
-  type PredictProgressRequest,
-  type AssessInjuryRiskRequest,
-  type GetNutritionRecommendationsRequest,
-  type CustomizeWorkoutRequest,
-  type OptimizeScheduleRequest,
-  type ScheduleOptimization
+  type MLRecommendation,
+  type UserBehaviorData,
+  type MLPrediction,
+  type ContentSimilarity,
+  type SimilarExercises,
+  type RecommendationResponse,
 } from './microservices/mlService';
 
 // Social Service

@@ -11,11 +11,12 @@ export const useMLService = () => {
     try {
       // Use the hybrid model (primary endpoint) for better recommendations
       console.log('🤖 [ML SERVICE] Attempting HYBRID MODEL first...');
-      const recommendations = await mlService.getRecommendations(userId, {
+      const response = await mlService.getRecommendations(userId, {
         num_recommendations: limit,
         content_weight: 0.7,
         collaborative_weight: 0.3,
       });
+      const recommendations = response.recommendations;
 
       // If hybrid returns no recommendations, fallback to content-based
       if (recommendations.length === 0) {

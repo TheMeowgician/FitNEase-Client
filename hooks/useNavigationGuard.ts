@@ -70,7 +70,7 @@ export const useInstructorGuard = () => {
   useEffect(() => {
     if (!isAuthenticated || !isEmailVerified || !onboardingCompleted) {
       router.replace('/');
-    } else if (user?.role !== 'instructor' && user?.role !== 'admin') {
+    } else if (user?.role !== 'mentor') {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isEmailVerified, onboardingCompleted, user]);
@@ -83,7 +83,7 @@ export const useRoutePermission = () => {
   const canAccessAuth = !isAuthenticated;
   const canAccessOnboarding = isAuthenticated && isEmailVerified && !onboardingCompleted;
   const canAccessMainApp = isAuthenticated && isEmailVerified && onboardingCompleted;
-  const canAccessInstructor = canAccessMainApp && (user?.role === 'instructor' || user?.role === 'admin');
+  const canAccessInstructor = canAccessMainApp && user?.role === 'mentor';
 
   return {
     canAccessAuth,
