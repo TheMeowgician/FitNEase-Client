@@ -12,6 +12,7 @@ import { authService } from '../../../services/microservices/authService';
 import { planningService } from '../../../services/microservices/planningService';
 import { workoutNotificationScheduler, NotificationSettings } from '../../../services/workoutNotificationScheduler';
 import { useSmartBack } from '../../../hooks/useSmartBack';
+import { hapticLight } from '../../../utils/haptics';
 
 const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
 
@@ -45,6 +46,7 @@ export default function WorkoutDaysSettingsScreen() {
   }, [user]);
 
   const handleDayToggle = (dayId: string) => {
+    hapticLight();
     const newDays = selectedDays.includes(dayId)
       ? selectedDays.filter((id) => id !== dayId)
       : [...selectedDays, dayId];
@@ -256,9 +258,6 @@ export default function WorkoutDaysSettingsScreen() {
                   <Text style={[styles.dayShort, { color: isSelected ? COLORS.NEUTRAL.WHITE : COLORS.SECONDARY[700] }]}>
                     {day.short}
                   </Text>
-                  <Text style={[styles.dayLabel, { color: isSelected ? COLORS.NEUTRAL.WHITE : COLORS.SECONDARY[600] }]}>
-                    {day.label}
-                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -321,26 +320,20 @@ const styles = StyleSheet.create({
   section: { marginBottom: 24 },
   daysContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   dayButton: {
-    width: 100,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
   },
   dayShort: {
-    fontSize: 16,
-    fontFamily: FONTS.BOLD,
-    marginBottom: 4,
-  },
-  dayLabel: {
     fontSize: 12,
-    fontFamily: FONTS.REGULAR,
+    fontFamily: FONTS.SEMIBOLD,
   },
   summaryContainer: {
     backgroundColor: COLORS.PRIMARY[50],

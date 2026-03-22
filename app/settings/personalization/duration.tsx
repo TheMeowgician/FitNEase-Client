@@ -9,6 +9,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useAlert } from '../../../contexts/AlertContext';
 import { authService } from '../../../services/microservices/authService';
 import { useSmartBack } from '../../../hooks/useSmartBack';
+import { hapticLight } from '../../../utils/haptics';
 
 interface DurationOption {
   value: number;
@@ -111,16 +112,20 @@ export default function DurationSettingsScreen() {
     return (
       <TouchableOpacity
         key={duration.value}
-        onPress={() => setSelectedDuration(duration.value)}
+        onPress={() => {
+          hapticLight();
+          setSelectedDuration(duration.value);
+        }}
         style={[
           styles.durationCard,
           {
             borderColor: isSelected ? duration.color : COLORS.NEUTRAL[200],
             borderWidth: isSelected ? 3 : 2,
+            backgroundColor: COLORS.NEUTRAL.WHITE,
             shadowColor: isSelected ? duration.color : '#000',
-            shadowOpacity: isSelected ? 0.15 : 0.05,
-            shadowRadius: isSelected ? 8 : 4,
-            elevation: isSelected ? 4 : 2,
+            shadowOpacity: isSelected ? 0.2 : 0.05,
+            shadowRadius: isSelected ? 12 : 4,
+            elevation: isSelected ? 6 : 2,
           }
         ]}
         activeOpacity={0.7}
@@ -128,27 +133,31 @@ export default function DurationSettingsScreen() {
         {isSelected && (
           <View style={styles.selectionIndicator}>
             <View style={[styles.checkmark, { backgroundColor: duration.color }]}>
-              <Ionicons name="checkmark" size={12} color="white" />
+              <Ionicons name="checkmark" size={16} color="white" />
             </View>
           </View>
         )}
 
-        <Text
-          style={[
-            styles.durationLabel,
-            { color: isSelected ? duration.color : COLORS.SECONDARY[900] }
-          ]}
-        >
-          {duration.label}
-        </Text>
-        <Text
-          style={[
-            styles.durationDescription,
-            { color: isSelected ? duration.color : COLORS.SECONDARY[600] }
-          ]}
-        >
-          {duration.description}
-        </Text>
+        <View style={styles.cardContent}>
+          <View style={styles.textContainer}>
+            <Text
+              style={[
+                styles.durationLabel,
+                { color: isSelected ? duration.color : COLORS.SECONDARY[900] }
+              ]}
+            >
+              {duration.label}
+            </Text>
+            <Text
+              style={[
+                styles.durationDescription,
+                { color: isSelected ? duration.color : COLORS.SECONDARY[600] }
+              ]}
+            >
+              {duration.description}
+            </Text>
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -265,51 +274,41 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   cardGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    // Vertical stack — no flexDirection row
   },
   durationCard: {
-    flexBasis: '47%',
-    padding: 16,
+    padding: 20,
     borderRadius: 16,
-    backgroundColor: COLORS.NEUTRAL.WHITE,
-    alignItems: 'center',
-    minHeight: 120,
+    marginBottom: 16,
     position: 'relative',
   },
   selectionIndicator: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 16,
+    right: 16,
   },
   checkmark: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardIconContainer: {
-    marginBottom: 12,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  cardContent: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  textContainer: {
+    flex: 1,
   },
   durationLabel: {
-    fontSize: 16,
+    fontSize: 22,
     fontFamily: FONTS.BOLD,
-    textAlign: 'center',
     marginBottom: 4,
   },
   durationDescription: {
-    fontSize: 12,
+    fontSize: 14,
     fontFamily: FONTS.REGULAR,
-    textAlign: 'center',
   },
   infoNote: {
     flexDirection: 'row',

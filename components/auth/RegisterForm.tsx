@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ViewStyle, TouchableOpacity } from 'react-native';
+import { View, Text, ViewStyle, TouchableOpacity, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -137,6 +137,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     if (isLoading) return; // Prevent double-submit
     if (!validateForm()) return;
 
+    Keyboard.dismiss();
     setIsLoading(true);
     try {
       // Prepare the registration data

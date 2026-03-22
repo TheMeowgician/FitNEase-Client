@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ViewStyle, TouchableOpacity } from 'react-native';
+import { View, Text, ViewStyle, TouchableOpacity, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Input } from '../ui/Input';
@@ -65,6 +65,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     if (submittingRef.current) return;
     if (!validateForm()) return;
 
+    Keyboard.dismiss();
     submittingRef.current = true;
     setIsLoading(true);
     try {

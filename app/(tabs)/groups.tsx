@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -218,6 +219,7 @@ export default function GroupsScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setIsJoining(true);
     try {
       // Call join with code endpoint (expects 8-character code)

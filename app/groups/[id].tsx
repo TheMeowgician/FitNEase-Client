@@ -954,7 +954,7 @@ export default function GroupDetailsScreen() {
                   </View>
                   <View style={styles.memberInfo}>
                     <View style={styles.memberNameRow}>
-                      <Text style={styles.memberName}>{member.username}</Text>
+                      <Text style={styles.memberName} numberOfLines={1}>{member.username}</Text>
                       {isOnline && (
                         <Text style={styles.onlineText}>Online</Text>
                       )}
@@ -1811,6 +1811,7 @@ const styles = StyleSheet.create({
   },
   memberInfo: {
     flex: 1,
+    minWidth: 0,
   },
   memberNameRow: {
     flexDirection: 'row',
@@ -1822,6 +1823,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
+    flexShrink: 1,
   },
   onlineText: {
     fontSize: 11,
@@ -1837,7 +1839,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexShrink: 1,
+    flexShrink: 0,
+    marginLeft: 8,
   },
   mentorBadge: {
     flexDirection: 'row',
@@ -1854,12 +1857,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   roleBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 10,
   },
   roleBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: FONTS.SEMIBOLD,
     textTransform: 'capitalize',
   },

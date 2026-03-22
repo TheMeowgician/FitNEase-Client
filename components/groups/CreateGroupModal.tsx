@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/colors';
@@ -108,6 +109,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       return;
     }
 
+    Keyboard.dismiss();
     setIsCreating(true);
     try {
       await socialService.createGroup(formData);
