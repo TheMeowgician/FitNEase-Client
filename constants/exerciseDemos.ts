@@ -286,7 +286,7 @@ export const getExerciseDemo = (
   }
 
   // STEP 3: Legacy partial match (for edge cases)
-  for (const key of Object.keys(exerciseDemoImages)) {
+  for (const key of Object.keys(exerciseDemoVideos)) {
     if (normalizedName.includes(key) || key.includes(normalizedName)) {
       return exerciseDemoVideos[key];
     }
