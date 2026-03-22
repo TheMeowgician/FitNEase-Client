@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CustomAlert, AlertType, AlertButton } from '../components/ui/CustomAlert';
+import { hapticSuccess, hapticError, hapticWarning, hapticLight } from '../utils/haptics';
 
 interface AlertOptions {
   type?: AlertType;
@@ -40,6 +41,13 @@ export const AlertProvider: React.FC<AlertProviderProps> = ({ children }) => {
   });
 
   const showAlert = useCallback((options: AlertOptions) => {
+    // Haptic feedback based on alert type
+    switch (options.type) {
+      case 'success': hapticSuccess(); break;
+      case 'error': hapticError(); break;
+      case 'warning': hapticWarning(); break;
+      default: hapticLight(); break;
+    }
     setAlertOptions(options);
     setVisible(true);
   }, []);

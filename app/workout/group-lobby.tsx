@@ -39,6 +39,7 @@ import { AnimatedExerciseReveal } from '../../components/lobby/AnimatedExerciseR
 import { ExerciseSwapModal } from '../../components/workout/ExerciseSwapModal';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
+import { hapticLight, hapticMedium } from '../../utils/haptics';
 
 /**
  * Group Lobby Screen
@@ -3264,7 +3265,7 @@ export default function GroupLobbyScreen() {
         {/* Ready Button - Everyone including creator */}
         <TouchableOpacity
           style={[styles.readyButton, isReady && styles.readyButtonActive]}
-          onPress={handleToggleReady}
+          onPress={() => { hapticMedium(); handleToggleReady(); }}
           disabled={isTogglingReady}
         >
           <Ionicons
@@ -3281,7 +3282,7 @@ export default function GroupLobbyScreen() {
         {!hasExercises && (
           <TouchableOpacity
             style={[styles.readyCheckButton, !canStartReadyCheck && styles.readyCheckButtonDisabled]}
-            onPress={handleStartReadyCheck}
+            onPress={() => { hapticLight(); handleStartReadyCheck(); }}
             disabled={!canStartReadyCheck || isStartingReadyCheck || isReadyCheckActive}
           >
             {isStartingReadyCheck ? (
@@ -3304,7 +3305,7 @@ export default function GroupLobbyScreen() {
         {isInitiator && hasExercises && (
           <TouchableOpacity
             style={[styles.startButton, !canStartWorkout && styles.startButtonDisabled]}
-            onPress={handleStartWorkout}
+            onPress={() => { hapticMedium(); handleStartWorkout(); }}
             disabled={!canStartWorkout || isStarting}
           >
             {isStarting ? (

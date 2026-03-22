@@ -1,6 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
+import { hapticLight } from '../../utils/haptics';
 
 interface ButtonProps {
   title: string;
@@ -107,7 +108,7 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <TouchableOpacity
       style={getButtonStyle()}
-      onPress={onPress}
+      onPress={() => { hapticLight(); onPress(); }}
       disabled={disabled || loading}
       activeOpacity={0.7}
     >

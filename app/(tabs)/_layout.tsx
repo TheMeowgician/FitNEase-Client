@@ -17,6 +17,7 @@ import { WorkoutActionModal } from '../../components/workout/WorkoutActionModal'
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { hapticLight, hapticMedium } from '../../utils/haptics';
 
 const TAB_BLUE = COLORS.PRIMARY[600];
 const HIDDEN_TABS = ['workouts', 'weekly-plan'];
@@ -111,6 +112,7 @@ function CustomTabBar({
         canPreventDefault: true,
       });
       if (!isFocused && !event.defaultPrevented) {
+        hapticLight();
         navigation.navigate(route.name, route.params);
       }
     };
@@ -181,7 +183,7 @@ function CustomTabBar({
       <View style={barStyles.centerButtonWrapper}>
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={onCenterPress}
+          onPress={() => { hapticMedium(); onCenterPress(); }}
           style={barStyles.centerButton}
         >
           <Ionicons name="play" size={24} color="#FFFFFF" style={{ marginLeft: 2 }} />

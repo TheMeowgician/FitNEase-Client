@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { COLORS, FONTS, FONT_SIZES } from '../../../constants/colors';
 import { TABATA_CONFIG } from '../../../constants/tabata';
+import { hapticMedium, hapticLight, hapticSuccess } from '../../../utils/haptics';
 
 type TimerState = typeof TABATA_CONFIG.TIMER_STATES[keyof typeof TABATA_CONFIG.TIMER_STATES];
 
@@ -63,22 +64,26 @@ export const TabataTimer: React.FC<TabataTimerProps> = ({
   const handlePhaseTransition = () => {
     switch (currentState) {
       case TABATA_CONFIG.TIMER_STATES.PREPARATION:
+        hapticMedium(); // Work phase starting
         setCurrentState(TABATA_CONFIG.TIMER_STATES.WORK);
         setIsWorkPhase(true);
         break;
 
       case TABATA_CONFIG.TIMER_STATES.WORK:
+        hapticLight(); // Rest phase starting
         setCurrentState(TABATA_CONFIG.TIMER_STATES.REST);
         setIsWorkPhase(false);
         break;
 
       case TABATA_CONFIG.TIMER_STATES.REST:
         if (currentRound < TABATA_CONFIG.ROUNDS) {
+          hapticMedium(); // Next work round
           setCurrentRound((prev) => prev + 1);
           setCurrentState(TABATA_CONFIG.TIMER_STATES.WORK);
           setIsWorkPhase(true);
           onRoundComplete(currentRound);
         } else {
+          hapticSuccess(); // Workout complete
           setCurrentState(TABATA_CONFIG.TIMER_STATES.COMPLETE);
           stopTimer();
           onWorkoutComplete();

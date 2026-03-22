@@ -20,6 +20,7 @@ import AchievementUnlockModal, { UnlockedAchievement } from '../../components/ac
 import { ratingService } from '../../services/microservices/ratingService';
 import { engagementService } from '../../services/microservices/engagementService';
 import { useProgressStore } from '../../stores/progressStore';
+import { hapticLight, hapticSuccess } from '../../utils/haptics';
 
 /**
  * Exercise Rating Screen
@@ -106,6 +107,7 @@ export default function ExerciseRatingScreen() {
   const parsedWorkoutData = workoutData ? JSON.parse(workoutData) : null;
 
   const handleStarRating = (stars: number) => {
+    hapticLight();
     if (!currentExercise) return;
 
     const updatedRatings = new Map(ratings);
@@ -120,6 +122,7 @@ export default function ExerciseRatingScreen() {
   const handleDifficultySelect = (
     difficulty: 'too_easy' | 'appropriate' | 'challenging' | 'too_hard'
   ) => {
+    hapticLight();
     if (!currentExercise) return;
 
     const updatedRatings = new Map(ratings);
@@ -138,10 +141,12 @@ export default function ExerciseRatingScreen() {
       return;
     }
 
+    hapticLight();
     if (currentIndex < exercises.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
       // All exercises rated, submit
+      hapticSuccess();
       submitRatings();
     }
   };

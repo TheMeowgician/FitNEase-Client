@@ -27,6 +27,7 @@ import { useLobby } from '../../contexts/LobbyContext';
 import { contentService, TabataWorkout } from '../../services/microservices/contentService';
 import { trackingService } from '../../services/microservices/trackingService';
 import { socialService } from '../../services/microservices/socialService';
+import { hapticMedium, hapticLight, hapticSuccess } from '../../utils/haptics';
 import { progressionService } from '../../services/microservices/progressionService';
 import { reverbService } from '../../services/reverbService';
 import { agoraService } from '../../services/agoraService';
@@ -2340,7 +2341,7 @@ export default function WorkoutSessionScreen() {
         {/* Controls */}
         <View style={styles.controlsContainer}>
           {sessionState.status === 'ready' && type !== 'group_tabata' && (
-            <TouchableOpacity style={styles.primaryButton} onPress={startSession}>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => { hapticMedium(); startSession(); }}>
               <Ionicons name="play" size={32} color={getPhaseColor()} />
               <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>START WORKOUT</Text>
             </TouchableOpacity>
@@ -2357,7 +2358,7 @@ export default function WorkoutSessionScreen() {
 
           {/* Only show pause button for initiator in group workouts, or always for solo workouts */}
           {sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator) && (
-            <TouchableOpacity style={styles.primaryButton} onPress={pauseSession}>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => { hapticLight(); pauseSession(); }}>
               <Ionicons name="pause" size={32} color={getPhaseColor()} />
               <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>PAUSE</Text>
             </TouchableOpacity>
@@ -2374,11 +2375,11 @@ export default function WorkoutSessionScreen() {
           {/* Only show resume/stop buttons for initiator in group workouts, or always for solo workouts */}
           {sessionState.status === 'paused' && (type !== 'group_tabata' || isInitiator) && (
             <View style={styles.pausedControls}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={resumeSession}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => { hapticLight(); resumeSession(); }}>
                 <Ionicons name="play" size={24} color="white" />
                 <Text style={styles.secondaryButtonText}>RESUME</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={type === 'group_tabata' ? stopGroupSession : exitSession}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => { hapticLight(); (type === 'group_tabata' ? stopGroupSession : exitSession)(); }}>
                 <Ionicons name="stop" size={24} color="white" />
                 <Text style={styles.secondaryButtonText}>{type === 'group_tabata' ? 'STOP FOR ALL' : 'END'}</Text>
               </TouchableOpacity>
@@ -2433,7 +2434,7 @@ export default function WorkoutSessionScreen() {
 
           {sessionState.status === 'completed' && (
             <Animated.View style={{ opacity: completionFade, width: '100%' }}>
-              <TouchableOpacity style={styles.primaryButton} onPress={completeSession}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => { hapticSuccess(); completeSession(); }}>
                 <Ionicons name="checkmark" size={32} color={getPhaseColor()} />
                 <Text style={[styles.primaryButtonText, { color: getPhaseColor() }]}>COMPLETE</Text>
               </TouchableOpacity>
