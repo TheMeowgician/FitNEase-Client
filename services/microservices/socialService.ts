@@ -538,6 +538,7 @@ export class SocialService {
           username: member.username || `User ${member.user_id}`,
           profilePicture: member.profile_picture,
           role: role,
+          userRole: member.user_role === 'mentor' ? 'mentor' : undefined,
           joinedAt: member.joined_at,
           lastActive: member.last_active || member.joined_at,
           contributions: {

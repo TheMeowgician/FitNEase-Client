@@ -196,8 +196,31 @@ export default function GroupDetailsScreen() {
           });
 
           // Update members list in real-time
+          // Normalize broadcast data to match the same format as HTTP API
           if (data.members && Array.isArray(data.members)) {
-            setMembers(data.members);
+            const normalizedMembers: GroupMember[] = data.members.map((m: any) => {
+              // Map backend 'admin' role to frontend 'owner'
+              let role: 'owner' | 'moderator' | 'member' = 'member';
+              if (m.role === 'admin' || m.role === 'owner') {
+                role = 'owner';
+              } else if (m.role === 'moderator') {
+                role = 'moderator';
+              }
+
+              return {
+                id: m.id?.toString(),
+                userId: m.userId?.toString(),
+                username: m.username || `User ${m.userId}`,
+                profilePicture: m.profilePicture,
+                role: role,
+                userRole: m.userRole === 'mentor' ? 'mentor' : undefined,
+                joinedAt: m.joinedAt,
+                lastActive: m.joinedAt,
+                contributions: { workoutsShared: 0, challengesCreated: 0, helpfulPosts: 0 },
+                status: 'active' as const,
+              };
+            });
+            setMembers(normalizedMembers);
           }
 
           // Update member count
@@ -1813,26 +1836,27 @@ const styles = StyleSheet.create({
   badgesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    flexShrink: 1,
   },
   mentorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.SUCCESS[600],
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 3,
   },
   mentorBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: FONTS.SEMIBOLD,
     color: '#FFFFFF',
   },
   roleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   roleBadgeText: {
     fontSize: 11,
