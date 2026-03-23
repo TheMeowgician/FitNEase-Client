@@ -91,7 +91,26 @@ export default function NotificationsScreen() {
       setIsLoading(true);
       const response = await commsService.getUserNotifications(Number(user.id));
       console.log('📬 [NOTIFICATIONS] Loaded notifications:', response);
-      setNotifications(response.data || []);
+      const loaded = response.data || [];
+      setNotifications(loaded);
+
+      // Auto-hide Accept/Decline buttons on already-read group invitations
+      const alreadyRead = new Set<number>();
+      loaded.forEach((n: Notification) => {
+        if (n.action_data?.type === 'group_invite' && n.is_read) {
+          alreadyRead.add(n.notification_id);
+        }
+        if (n.action_data?.type === 'group_join_request' && n.is_read) {
+          alreadyRead.add(n.notification_id);
+        }
+      });
+      if (alreadyRead.size > 0) {
+        setRespondedInvites(prev => {
+          const next = new Set(prev);
+          alreadyRead.forEach(id => next.add(id));
+          return next;
+        });
+      }
     } catch (error) {
       console.error('Error loading notifications:', error);
       alert.error('Error', 'Failed to load notifications');
@@ -148,7 +167,17 @@ export default function NotificationsScreen() {
         );
       }
 
-      setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
+      // Mark ALL invitation notifications for this group as responded
+      const groupId = notification.action_data.group_id;
+      setRespondedInvites(prev => {
+        const next = new Set(prev);
+        notifications.forEach(n => {
+          if (n.action_data?.type === 'group_invite' && n.action_data?.group_id === groupId) {
+            next.add(n.notification_id);
+          }
+        });
+        return next;
+      });
       alert.success('Success', `You've joined ${notification.action_data.group_name}!`, () => router.push(`/groups/${notification.action_data.group_id}`));
     } catch (error: any) {
       console.error('Error accepting invitation:', error);
@@ -180,7 +209,17 @@ export default function NotificationsScreen() {
             );
           }
 
-          setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
+          // Mark ALL invitation notifications for this group as responded
+          const groupId = notification.action_data?.group_id;
+          setRespondedInvites(prev => {
+            const next = new Set(prev);
+            notifications.forEach(n => {
+              if (n.action_data?.type === 'group_invite' && n.action_data?.group_id === groupId) {
+                next.add(n.notification_id);
+              }
+            });
+            return next;
+          });
           alert.info('Declined', 'Invitation declined');
         } catch (error) {
           console.error('Error declining invitation:', error);
