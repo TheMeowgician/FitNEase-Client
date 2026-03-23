@@ -36,6 +36,12 @@
         "POST_NOTIFICATIONS"
       ]
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e82fecda-c86d-4d66-a9af-7aba6056f28f"
+    },
     "web": {
       "output": "static",
       "favicon": "./assets/images/fitnease-og-logo.png"
