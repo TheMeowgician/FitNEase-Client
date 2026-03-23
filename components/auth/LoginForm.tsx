@@ -123,7 +123,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           Welcome back to <Text style={styles.titleAccent}>FitNEase</Text>
         </Text>
         <Text style={styles.subtitle}>
-          Ready to continue your Tabata fitness journey?
+          Ready to crush your Tabata workout?
         </Text>
       </View>
 
