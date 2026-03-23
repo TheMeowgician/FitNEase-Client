@@ -212,6 +212,7 @@ export default function NotificationsScreen() {
       if (!matchingRequest) {
         // Request might have been already processed or cancelled
         await handleMarkAsRead(notification.notification_id);
+        setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
         alert.info('Request Not Found', 'This join request has already been processed or was cancelled by the user.');
         return;
       }
@@ -222,6 +223,7 @@ export default function NotificationsScreen() {
       // Mark notification as read
       await handleMarkAsRead(notification.notification_id);
 
+      setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
       alert.success('Approved', `${requesterUsername} has been added to ${groupName}!`);
     } catch (error: any) {
       console.error('Error approving join request:', error);
@@ -272,6 +274,7 @@ export default function NotificationsScreen() {
           if (!matchingRequest) {
             // Request might have been already processed or cancelled
             await handleMarkAsRead(notification.notification_id);
+            setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
             alert.info('Request Not Found', 'This join request has already been processed or was cancelled by the user.');
             return;
           }
@@ -282,6 +285,7 @@ export default function NotificationsScreen() {
           // Mark notification as read
           await handleMarkAsRead(notification.notification_id);
 
+          setRespondedInvites(prev => new Set(prev).add(notification.notification_id));
           alert.info('Declined', `${requesterUsername}'s request has been declined.`);
         } catch (error: any) {
           console.error('Error rejecting join request:', error);
@@ -366,9 +370,9 @@ export default function NotificationsScreen() {
     const actionType = notification.action_data?.type;
     const notificationType = notification.notification_type;
 
-    // Group invites have action buttons - don't mark as read on tap
+    // Group invites and pending join requests have action buttons - don't mark as read on tap
     // They will be marked as read when the action is taken
-    if (actionType === 'group_invite') {
+    if (actionType === 'group_invite' || (actionType === 'group_join_request' && !respondedInvites.has(notification.notification_id))) {
       return;
     }
 
@@ -493,6 +497,32 @@ export default function NotificationsScreen() {
     return date.toLocaleDateString();
   };
 
+  const groupNotificationsByDate = (notifs: Notification[]) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const groups: { title: string; data: Notification[] }[] = [
+      { title: 'Today', data: [] },
+      { title: 'Yesterday', data: [] },
+      { title: 'This Week', data: [] },
+      { title: 'Earlier', data: [] },
+    ];
+
+    notifs.forEach((n) => {
+      const d = new Date(n.created_at);
+      if (d >= today) groups[0].data.push(n);
+      else if (d >= yesterday) groups[1].data.push(n);
+      else if (d >= weekAgo) groups[2].data.push(n);
+      else groups[3].data.push(n);
+    });
+
+    return groups.filter((g) => g.data.length > 0);
+  };
+
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>,
@@ -527,23 +557,27 @@ export default function NotificationsScreen() {
   const getNotificationIcon = (notification: Notification) => {
     // Check action_data.type first for more specific icons
     if (notification.action_data?.type === 'group_invite_declined') {
-      return { name: 'person-remove' as const, color: '#EF4444' };
+      return { name: 'person-remove' as const, color: COLORS.ERROR[500] };
     }
 
     if (notification.action_data?.type === 'group_invite_accepted') {
-      return { name: 'person-add' as const, color: '#10B981' };
+      return { name: 'person-add' as const, color: COLORS.SUCCESS[500] };
     }
 
     if (notification.action_data?.type === 'group_join_request') {
-      return { name: 'person-add' as const, color: '#F59E0B' }; // Amber/orange for pending request
+      return { name: 'person-add' as const, color: COLORS.WARNING[500] };
     }
 
     if (notification.action_data?.type === 'group_join_approved') {
-      return { name: 'checkmark-circle' as const, color: '#10B981' };
+      return { name: 'checkmark-circle' as const, color: COLORS.SUCCESS[500] };
     }
 
     if (notification.action_data?.type === 'group_join_rejected') {
-      return { name: 'close-circle' as const, color: '#EF4444' };
+      return { name: 'close-circle' as const, color: COLORS.ERROR[500] };
+    }
+
+    if (notification.action_data?.type === 'group_member_kicked') {
+      return { name: 'exit-outline' as const, color: COLORS.ERROR[500] };
     }
 
     // Fall back to notification_type
@@ -551,11 +585,11 @@ export default function NotificationsScreen() {
       case 'group_invite':
         return { name: 'people' as const, color: COLORS.PRIMARY[600] };
       case 'achievement':
-        return { name: 'trophy' as const, color: '#10B981' };
+        return { name: 'trophy' as const, color: COLORS.WARNING[500] };
       case 'friend_request':
-        return { name: 'person-add' as const, color: '#3B82F6' };
+        return { name: 'person-add' as const, color: COLORS.PRIMARY[500] };
       case 'workout_reminder':
-        return { name: 'fitness' as const, color: '#8B5CF6' };
+        return { name: 'fitness' as const, color: COLORS.TABATA.COMPLETE };
       case 'social':
         return { name: 'people-circle' as const, color: COLORS.PRIMARY[600] };
       default:
@@ -566,7 +600,8 @@ export default function NotificationsScreen() {
   const renderNotificationItem = (notification: Notification) => {
     const icon = getNotificationIcon(notification);
     const isGroupInvitation = notification.action_data?.type === 'group_invite';
-    const hasActionButtons = isGroupInvitation;
+    const isJoinRequest = notification.action_data?.type === 'group_join_request';
+    const hasActionButtons = (isGroupInvitation || isJoinRequest) && !respondedInvites.has(notification.notification_id);
     const isNavigable = isNotificationNavigable(notification);
 
     return (
@@ -614,7 +649,28 @@ export default function NotificationsScreen() {
                   style={[styles.actionButton, styles.declineButton]}
                   onPress={() => handleDeclineGroupInvitation(notification)}
                 >
-                  <Ionicons name="close" size={18} color="#EF4444" />
+                  <Ionicons name="close" size={18} color={COLORS.ERROR[500]} />
+                  <Text style={styles.declineButtonText}>Decline</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Join Request Action Buttons */}
+            {isJoinRequest && !respondedInvites.has(notification.notification_id) && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.acceptButton]}
+                  onPress={() => handleApproveJoinRequest(notification)}
+                >
+                  <Ionicons name="checkmark" size={18} color="white" />
+                  <Text style={styles.acceptButtonText}>Approve</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.declineButton]}
+                  onPress={() => handleRejectJoinRequest(notification)}
+                >
+                  <Ionicons name="close" size={18} color={COLORS.ERROR[500]} />
                   <Text style={styles.declineButtonText}>Decline</Text>
                 </TouchableOpacity>
               </View>
@@ -679,13 +735,22 @@ export default function NotificationsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {notifications.length > 0 ? (
-          notifications.map(renderNotificationItem)
+          groupNotificationsByDate(notifications).map((section) => (
+            <View key={section.title}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{section.title}</Text>
+              </View>
+              {section.data.map(renderNotificationItem)}
+            </View>
+          ))
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="notifications-off-outline" size={64} color={COLORS.SECONDARY[300]} />
-            <Text style={styles.emptyTitle}>No Notifications</Text>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="notifications-outline" size={40} color={COLORS.PRIMARY[400]} />
+            </View>
+            <Text style={styles.emptyTitle}>All Caught Up!</Text>
             <Text style={styles.emptyText}>
-              You're all caught up! New notifications will appear here.
+              No notifications yet. You'll see group invites, achievements, and updates here.
             </Text>
           </View>
         )}
@@ -702,19 +767,20 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: 'white',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.SECONDARY[100],
   },
   backButton: {
     padding: 8,
     marginRight: 12,
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: FONTS.SEMIBOLD,
+    fontSize: 22,
+    fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[900],
     flex: 1,
   },
@@ -733,19 +799,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingBottom: 24,
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[400],
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
   },
   notificationCard: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.SECONDARY[100],
   },
   notificationUnread: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: COLORS.PRIMARY[50],
     borderLeftWidth: 3,
-    borderLeftColor: COLORS.PRIMARY[600],
+    borderLeftColor: COLORS.PRIMARY[500],
   },
   notificationIconContainer: {
     width: 48,
@@ -764,28 +843,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   notificationTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: FONTS.SEMIBOLD,
-    color: COLORS.SECONDARY[900],
+    color: COLORS.SECONDARY[800],
     flex: 1,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.PRIMARY[600],
+    backgroundColor: COLORS.PRIMARY[500],
     marginLeft: 8,
   },
   notificationMessage: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[600],
-    lineHeight: 20,
-    marginBottom: 8,
+    color: COLORS.SECONDARY[500],
+    lineHeight: 19,
+    marginBottom: 6,
   },
   notificationTime: {
     fontSize: 12,
-    fontFamily: FONTS.REGULAR,
+    fontFamily: FONTS.MEDIUM,
     color: COLORS.SECONDARY[400],
   },
   actionButtons: {
@@ -799,7 +878,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
     gap: 6,
   },
   acceptButton: {
@@ -811,35 +890,46 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   declineButton: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.ERROR[50],
+    borderWidth: 1,
+    borderColor: COLORS.ERROR[200],
   },
   declineButtonText: {
     fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#EF4444',
+    color: COLORS.ERROR[500],
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
+  },
+  emptyIconContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: COLORS.PRIMARY[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   emptyTitle: {
     fontSize: 20,
     fontFamily: FONTS.BOLD,
     color: COLORS.SECONDARY[700],
-    marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
     fontFamily: FONTS.REGULAR,
-    color: COLORS.SECONDARY[500],
+    color: COLORS.SECONDARY[400],
     textAlign: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 40,
+    lineHeight: 20,
   },
   deleteButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: COLORS.ERROR[500],
     justifyContent: 'center',
     alignItems: 'flex-end',
     width: 100,
@@ -863,7 +953,7 @@ const styles = StyleSheet.create({
   clearAllButtonText: {
     fontSize: 14,
     fontFamily: FONTS.SEMIBOLD,
-    color: '#EF4444',
+    color: COLORS.ERROR[500],
   },
   clearAllButtonTextDisabled: {
     color: COLORS.SECONDARY[300],
