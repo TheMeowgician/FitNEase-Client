@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { getExerciseDemo } from '../../constants/exerciseDemos';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface ExerciseDemoModalProps {
   visible: boolean;
@@ -28,18 +28,51 @@ export default function ExerciseDemoModal({
   targetMuscleGroup,
   onClose,
 }: ExerciseDemoModalProps) {
-  const [isLoading, setIsLoading] = React.useState(true);
+  const videoRef = useRef<Video>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const demoSource = getExerciseDemo(exerciseName, targetMuscleGroup);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible) {
       setIsLoading(true);
+      setHasError(false);
+
+      // Timeout fallback — if video doesn't load in 8 seconds, show error
+      const timeout = setTimeout(() => {
+        setIsLoading((prev) => {
+          if (prev) {
+            console.warn('[ExerciseDemo] Video load timed out for:', exerciseName);
+            setHasError(true);
+          }
+          return false;
+        });
+      }, 8000);
+
+      return () => clearTimeout(timeout);
     }
   }, [visible, exerciseName]);
 
   if (!demoSource) {
     return null;
   }
+
+  const handleLoad = async (status: AVPlaybackStatus) => {
+    setIsLoading(false);
+    setHasError(false);
+    // Explicitly trigger play as fallback for shouldPlay
+    try {
+      await videoRef.current?.playAsync();
+    } catch (e) {
+      console.warn('[ExerciseDemo] playAsync failed:', e);
+    }
+  };
+
+  const handleError = (error: string) => {
+    console.error('[ExerciseDemo] Video error for', exerciseName, ':', error);
+    setIsLoading(false);
+    setHasError(true);
+  };
 
   return (
     <Modal
@@ -65,23 +98,34 @@ export default function ExerciseDemoModal({
           {/* Exercise Name */}
           <Text style={styles.exerciseName}>{exerciseName}</Text>
 
-          {/* GIF Container */}
+          {/* Video Container */}
           <View style={styles.gifContainer}>
-            {isLoading && (
+            {isLoading && !hasError && (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={COLORS.PRIMARY[500]} />
                 <Text style={styles.loadingText}>Loading demo...</Text>
               </View>
             )}
+            {hasError && (
+              <View style={styles.loadingContainer}>
+                <Ionicons name="alert-circle-outline" size={40} color={COLORS.SECONDARY[400]} />
+                <Text style={styles.loadingText}>Unable to load demo</Text>
+              </View>
+            )}
             <Video
+              ref={videoRef}
               source={demoSource}
               style={styles.gifImage}
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay
               isLooping
               isMuted
-              onLoadStart={() => setIsLoading(true)}
-              onLoad={() => setIsLoading(false)}
+              onLoad={handleLoad}
+              onError={handleError}
+              onReadyForDisplay={() => {
+                setIsLoading(false);
+                setHasError(false);
+              }}
             />
           </View>
 
