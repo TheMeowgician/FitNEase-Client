@@ -44,7 +44,6 @@ export default function GroupsScreen() {
   const [pendingRequestGroupIds, setPendingRequestGroupIds] = useState<Set<string>>(new Set());
   const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null); // Debounce: tracks which group button is in-flight
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
-  const [truncatedDescriptions, setTruncatedDescriptions] = useState<Set<string>>(new Set());
   const loadingRef = useRef(false); // Guard against concurrent loadGroups calls
   const hasLoadedOnce = useRef(false); // Track if initial data load is done
 
@@ -412,15 +411,10 @@ export default function GroupsScreen() {
                       <Text
                         style={styles.groupDescription}
                         numberOfLines={expandedDescriptions.has(group.id) ? undefined : 2}
-                        onTextLayout={(e) => {
-                          if (e.nativeEvent.lines.length > 2 && !truncatedDescriptions.has(group.id)) {
-                            setTruncatedDescriptions((prev) => new Set(prev).add(group.id));
-                          }
-                        }}
                       >
                         {group.description}
                       </Text>
-                      {truncatedDescriptions.has(group.id) && (
+                      {group.description.length > 80 && (
                         <TouchableOpacity
                           onPress={() => {
                             setExpandedDescriptions((prev) => {
@@ -499,15 +493,10 @@ export default function GroupsScreen() {
                       <Text
                         style={styles.groupDescription}
                         numberOfLines={expandedDescriptions.has(group.id) ? undefined : 2}
-                        onTextLayout={(e) => {
-                          if (e.nativeEvent.lines.length > 2 && !truncatedDescriptions.has(group.id)) {
-                            setTruncatedDescriptions((prev) => new Set(prev).add(group.id));
-                          }
-                        }}
                       >
                         {group.description}
                       </Text>
-                      {truncatedDescriptions.has(group.id) && (
+                      {group.description.length > 80 && (
                         <TouchableOpacity
                           onPress={() => {
                             setExpandedDescriptions((prev) => {

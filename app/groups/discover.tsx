@@ -41,7 +41,6 @@ export default function DiscoverGroupsScreen() {
   const [error, setError] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
-  const [truncatedDescriptions, setTruncatedDescriptions] = useState<Set<string>>(new Set());
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchVersionRef = useRef(0); // Tracks search version to discard stale responses
@@ -265,15 +264,10 @@ export default function DiscoverGroupsScreen() {
             <Text
               style={styles.groupDescription}
               numberOfLines={expandedDescriptions.has(group.id) ? undefined : 2}
-              onTextLayout={(e) => {
-                if (e.nativeEvent.lines.length > 2 && !truncatedDescriptions.has(group.id)) {
-                  setTruncatedDescriptions((prev) => new Set(prev).add(group.id));
-                }
-              }}
             >
               {group.description}
             </Text>
-            {truncatedDescriptions.has(group.id) && (
+            {group.description.length > 80 && (
               <TouchableOpacity
                 onPress={() => {
                   setExpandedDescriptions((prev) => {
@@ -337,7 +331,7 @@ export default function DiscoverGroupsScreen() {
         </View>
       </View>
     ),
-    [pendingRequestGroupIds, loadingGroupId, expandedDescriptions, truncatedDescriptions]
+    [pendingRequestGroupIds, loadingGroupId, expandedDescriptions]
   );
 
   const renderFooter = () => {
