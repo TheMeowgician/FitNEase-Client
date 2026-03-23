@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "320423977241",
+    "project_id": "fitnease-9b098",
+    "storage_bucket": "fitnease-9b098.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:320423977241:android:b23db7b2bbe1cf4f696588",
+        "android_client_info": {
+          "package_name": "com.fitnease.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbpRHZZLa9n3bDiZmifrVTuhUxWuh_auw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
