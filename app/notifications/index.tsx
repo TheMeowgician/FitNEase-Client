@@ -163,6 +163,11 @@ export default function NotificationsScreen() {
       `Are you sure you want to decline the invitation to ${notification.action_data?.group_name}?`,
       async () => {
         try {
+          // Update invitation record to rejected in backend
+          if (notification.action_data?.group_id) {
+            await socialService.declineGroupInvitation(String(notification.action_data.group_id));
+          }
+
           // Mark as read
           await handleMarkAsRead(notification.notification_id);
 

@@ -594,6 +594,15 @@ export class SocialService {
     }
   }
 
+  public async declineGroupInvitation(groupId: string): Promise<{ message: string }> {
+    try {
+      const response = await apiClient.post<{ message: string }>('social', `/api/groups/${groupId}/decline-invitation`);
+      return response.data;
+    } catch (error) {
+      throw new Error((error as any).message || 'Failed to decline group invitation');
+    }
+  }
+
   // Friend Management
   public async sendFriendRequest(request: SendFriendRequestRequest): Promise<{ message: string }> {
     try {
