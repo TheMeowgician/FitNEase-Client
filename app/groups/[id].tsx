@@ -1433,6 +1433,7 @@ export default function GroupDetailsScreen() {
                       <TouchableOpacity
                         style={styles.removeMemberButton}
                         onPress={() => {
+                          shouldReopenSettings.current = false;
                           setShowRemoveMembersModal(false);
                           handleKickMember(member);
                         }}
