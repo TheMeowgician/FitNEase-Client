@@ -514,7 +514,6 @@ export default function GroupDetailsScreen() {
         try {
           await socialService.updateGroup(group.id, { is_private: newType === 'private' });
           alert.success('Success', `Group is now ${newType}`);
-          setShowSettingsModal(false);
           loadGroupDetails(); // Refresh group data
         } catch (error: any) {
           alert.error('Error', error.message || 'Failed to update privacy');
@@ -1170,10 +1169,7 @@ export default function GroupDetailsScreen() {
                 <Text style={[styles.settingsSectionTitle, { color: COLORS.ERROR[500] }]}>Danger Zone</Text>
 
                 {userRole === 'owner' && (
-                <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  handleDeleteGroup();
-                }}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleDeleteGroup}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="trash-outline" size={22} color={COLORS.ERROR[500]} />
                     <Text style={[styles.settingsOptionText, { color: COLORS.ERROR[500] }]}>Delete Group</Text>
@@ -1183,10 +1179,7 @@ export default function GroupDetailsScreen() {
                 )}
 
                 {userRole && userRole !== 'owner' && (
-                <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  handleLeaveGroup();
-                }}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleLeaveGroup}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="exit-outline" size={22} color={COLORS.ERROR[500]} />
                     <Text style={[styles.settingsOptionText, { color: COLORS.ERROR[500] }]}>Leave Group</Text>
