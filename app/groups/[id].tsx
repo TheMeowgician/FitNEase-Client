@@ -747,13 +747,18 @@ export default function GroupDetailsScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.SECONDARY[700]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Group Details</Text>
-        {(userRole === 'owner' || userRole === 'moderator') && (
+        {userRole ? (
           <TouchableOpacity onPress={handleManageGroup} style={styles.settingsButton}>
             <Ionicons name="settings-outline" size={24} color={COLORS.SECONDARY[700]} />
+            {(userRole === 'owner' || userRole === 'moderator') && pendingRequestsCount > 0 && (
+              <View style={styles.settingsGearBadge}>
+                <Text style={styles.settingsGearBadgeText}>{pendingRequestsCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
+        ) : (
+          <View style={styles.placeholder} />
         )}
-        {!userRole && <View style={styles.placeholder} />}
-        {userRole === 'member' && <View style={styles.placeholder} />}
       </View>
 
       <ScrollView
@@ -849,76 +854,6 @@ export default function GroupDetailsScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtonsRow}>
-            <TouchableOpacity style={styles.actionButton} onPress={handleShareCode}>
-              <Ionicons name="share-social" size={20} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.actionButtonText}>Share Code</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionButton} onPress={() => setShowInviteModal(true)}>
-              <Ionicons name="person-add" size={20} color={COLORS.PRIMARY[600]} />
-              <Text style={styles.actionButtonText}>Invite User</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Pending Requests Button - Only for owner/moderator */}
-          {(userRole === 'owner' || userRole === 'moderator') && (
-            <TouchableOpacity
-              style={[styles.actionButtonsRow, { marginTop: 12 }]}
-              onPress={() => setShowJoinRequestsModal(true)}
-            >
-              <View style={[styles.actionButton, styles.pendingRequestsButton]}>
-                <Ionicons name="people" size={20} color={COLORS.PRIMARY[600]} />
-                <Text style={styles.actionButtonText}>Pending Requests</Text>
-                {pendingRequestsCount > 0 && (
-                  <View style={styles.pendingBadge}>
-                    <Text style={styles.pendingBadgeText}>{pendingRequestsCount}</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Second Row for Destructive Actions */}
-          {(userRole === 'owner' || userRole === 'member') && (
-            <View style={[styles.actionButtonsRow, { marginTop: 12 }]}>
-            {userRole === 'owner' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonDanger]}
-                onPress={handleDeleteGroup}
-              >
-                <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                <Text style={[styles.actionButtonText, { color: '#EF4444' }]}>Delete Group</Text>
-              </TouchableOpacity>
-            )}
-
-            {userRole && userRole !== 'owner' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonDanger]}
-                onPress={handleLeaveGroup}
-              >
-                <Ionicons name="exit-outline" size={20} color="#EF4444" />
-                <Text style={[styles.actionButtonText, { color: '#EF4444' }]}>Leave Group</Text>
-              </TouchableOpacity>
-            )}
-            </View>
-          )}
-        </View>
-
-        {/* Group Code Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Group Code</Text>
-          <TouchableOpacity style={styles.codeCard} onPress={handleCopyCode} activeOpacity={0.7}>
-            <View style={styles.codeIconContainer}>
-              <Ionicons name="key" size={24} color={COLORS.PRIMARY[600]} />
-            </View>
-            <View style={styles.codeContent}>
-              <Text style={styles.codeLabel}>Tap to copy code</Text>
-              <Text style={styles.codeText}>{group.groupCode || 'N/A'}</Text>
-            </View>
-            <Ionicons name="copy-outline" size={24} color={COLORS.PRIMARY[600]} />
-          </TouchableOpacity>
         </View>
 
         {/* Members Section */}
@@ -1117,7 +1052,38 @@ export default function GroupDetailsScreen() {
             </View>
 
             <ScrollView style={styles.settingsModalBody} showsVerticalScrollIndicator={false}>
-              {/* Group Info Section */}
+              {/* Share & Code Section — visible to all members */}
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>Share</Text>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  handleShareCode();
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="share-social-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <Text style={styles.settingsOptionText}>Share Group Code</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  handleCopyCode();
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="key-outline" size={22} color={COLORS.PRIMARY[600]} />
+                    <View>
+                      <Text style={styles.settingsOptionText}>Copy Group Code</Text>
+                      <Text style={styles.settingsOptionSubtext}>{group?.groupCode || 'N/A'}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="copy-outline" size={20} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Group Info Section — owner/moderator only */}
+              {(userRole === 'owner' || userRole === 'moderator') && (
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Group Information</Text>
 
@@ -1156,8 +1122,10 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="swap-horizontal" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
               </View>
+              )}
 
-              {/* Member Management Section */}
+              {/* Member Management Section — owner/moderator only */}
+              {(userRole === 'owner' || userRole === 'moderator') && (
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Member Management</Text>
 
@@ -1195,48 +1163,43 @@ export default function GroupDetailsScreen() {
                   setShowRemoveMembersModal(true);
                 }}>
                   <View style={styles.settingsOptionLeft}>
-                    <Ionicons name="remove-circle-outline" size={22} color="#EF4444" />
-                    <Text style={[styles.settingsOptionText, { color: '#EF4444' }]}>Remove Members</Text>
+                    <Ionicons name="remove-circle-outline" size={22} color={COLORS.ERROR[500]} />
+                    <Text style={[styles.settingsOptionText, { color: COLORS.ERROR[500] }]}>Remove Members</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
               </View>
+              )}
 
-              {/* Group Content Section */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Group Content</Text>
-
-                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Group announcements coming soon')}>
-                  <View style={styles.settingsOptionLeft}>
-                    <Ionicons name="megaphone-outline" size={22} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.settingsOptionText}>Post Announcement</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.settingsOption} onPress={() => alert.info('Coming Soon', 'Group rules feature coming soon')}>
-                  <View style={styles.settingsOptionLeft}>
-                    <Ionicons name="list-outline" size={22} color={COLORS.PRIMARY[600]} />
-                    <Text style={styles.settingsOptionText}>Set Group Rules</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Danger Zone */}
+              {/* Danger Zone — role-based */}
               <View style={[styles.settingsSection, styles.dangerSection]}>
-                <Text style={[styles.settingsSectionTitle, { color: '#EF4444' }]}>Danger Zone</Text>
+                <Text style={[styles.settingsSectionTitle, { color: COLORS.ERROR[500] }]}>Danger Zone</Text>
 
+                {userRole === 'owner' && (
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
                   handleDeleteGroup();
                 }}>
                   <View style={styles.settingsOptionLeft}>
-                    <Ionicons name="trash-outline" size={22} color="#EF4444" />
-                    <Text style={[styles.settingsOptionText, { color: '#EF4444' }]}>Delete Group</Text>
+                    <Ionicons name="trash-outline" size={22} color={COLORS.ERROR[500]} />
+                    <Text style={[styles.settingsOptionText, { color: COLORS.ERROR[500] }]}>Delete Group</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#EF4444" />
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.ERROR[500]} />
                 </TouchableOpacity>
+                )}
+
+                {userRole && userRole !== 'owner' && (
+                <TouchableOpacity style={styles.settingsOption} onPress={() => {
+                  setShowSettingsModal(false);
+                  handleLeaveGroup();
+                }}>
+                  <View style={styles.settingsOptionLeft}>
+                    <Ionicons name="exit-outline" size={22} color={COLORS.ERROR[500]} />
+                    <Text style={[styles.settingsOptionText, { color: COLORS.ERROR[500] }]}>Leave Group</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.ERROR[500]} />
+                </TouchableOpacity>
+                )}
               </View>
             </ScrollView>
           </Animated.View>
@@ -1551,6 +1514,24 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     padding: 8,
+    position: 'relative',
+  },
+  settingsGearBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: COLORS.ERROR[500],
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  settingsGearBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.BOLD,
+    color: 'white',
   },
   placeholder: {
     width: 40,
@@ -2026,6 +2007,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BASE,
     fontFamily: FONTS.SEMIBOLD,
     color: COLORS.SECONDARY[900],
+  },
+  settingsOptionSubtext: {
+    fontSize: FONT_SIZES.SM,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    marginTop: 2,
   },
   settingsOptionWithBadge: {
     flexDirection: 'row',
