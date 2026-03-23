@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
+import { Asset } from 'expo-asset';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { getExerciseDemo } from '../../constants/exerciseDemos';
 
@@ -31,25 +32,48 @@ export default function ExerciseDemoModal({
   const videoRef = useRef<Video>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
   const demoSource = getExerciseDemo(exerciseName, targetMuscleGroup);
 
   useEffect(() => {
-    if (visible) {
+    if (visible && demoSource) {
       setIsLoading(true);
       setHasError(false);
+      setVideoUri(null);
 
-      // Timeout fallback — if video doesn't load in 8 seconds, show error
+      // Pre-load asset to local file system for reliable Android playback
+      const loadAsset = async () => {
+        try {
+          const asset = Asset.fromModule(demoSource as number);
+          await asset.downloadAsync();
+          if (asset.localUri) {
+            setVideoUri(asset.localUri);
+          } else {
+            console.warn('[ExerciseDemo] Asset downloaded but no localUri for:', exerciseName);
+            setHasError(true);
+            setIsLoading(false);
+          }
+        } catch (e) {
+          console.error('[ExerciseDemo] Failed to load asset for:', exerciseName, e);
+          setHasError(true);
+          setIsLoading(false);
+        }
+      };
+      loadAsset();
+
+      // Timeout fallback
       const timeout = setTimeout(() => {
         setIsLoading((prev) => {
           if (prev) {
-            console.warn('[ExerciseDemo] Video load timed out for:', exerciseName);
             setHasError(true);
           }
           return false;
         });
-      }, 8000);
+      }, 10000);
 
       return () => clearTimeout(timeout);
+    } else if (!visible) {
+      setVideoUri(null);
     }
   }, [visible, exerciseName]);
 
@@ -57,19 +81,18 @@ export default function ExerciseDemoModal({
     return null;
   }
 
-  const handleLoad = async (status: AVPlaybackStatus) => {
+  const handleLoad = async () => {
     setIsLoading(false);
     setHasError(false);
-    // Explicitly trigger play as fallback for shouldPlay
     try {
       await videoRef.current?.playAsync();
     } catch (e) {
-      console.warn('[ExerciseDemo] playAsync failed:', e);
+      // shouldPlay should handle it, this is just a fallback
     }
   };
 
   const handleError = (error: string) => {
-    console.error('[ExerciseDemo] Video error for', exerciseName, ':', error);
+    console.error('[ExerciseDemo] Video playback error:', exerciseName, error);
     setIsLoading(false);
     setHasError(true);
   };
@@ -112,21 +135,23 @@ export default function ExerciseDemoModal({
                 <Text style={styles.loadingText}>Unable to load demo</Text>
               </View>
             )}
-            <Video
-              ref={videoRef}
-              source={demoSource}
-              style={styles.gifImage}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              isLooping
-              isMuted
-              onLoad={handleLoad}
-              onError={handleError}
-              onReadyForDisplay={() => {
-                setIsLoading(false);
-                setHasError(false);
-              }}
-            />
+            {videoUri && (
+              <Video
+                ref={videoRef}
+                source={{ uri: videoUri }}
+                style={styles.gifImage}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                isLooping
+                isMuted
+                onLoad={handleLoad}
+                onError={handleError}
+                onReadyForDisplay={() => {
+                  setIsLoading(false);
+                  setHasError(false);
+                }}
+              />
+            )}
           </View>
 
           {/* Tip */}
