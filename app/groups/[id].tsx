@@ -479,8 +479,8 @@ export default function GroupDetailsScreen() {
   const handleEditGroupName = () => {
     setEditNameValue(group?.name || '');
     setShowEditNameModal(true);
-    setShowSettingsModal(false);
     shouldReopenSettings.current = true;
+    setTimeout(() => setShowSettingsModal(false), 50);
   };
 
   const handleSaveGroupName = async () => {
@@ -502,8 +502,8 @@ export default function GroupDetailsScreen() {
   const handleEditDescription = () => {
     setEditDescValue(group?.description || '');
     setShowEditDescModal(true);
-    setShowSettingsModal(false);
     shouldReopenSettings.current = true;
+    setTimeout(() => setShowSettingsModal(false), 50);
   };
 
   const handleSaveDescription = async () => {
@@ -1002,7 +1002,7 @@ export default function GroupDetailsScreen() {
       {/* Invite by Username Modal */}
       <Modal
         visible={showInviteModal}
-        animationType="fade"
+        animationType="none"
         transparent={true}
         onRequestClose={() => setShowInviteModal(false)}
       >
@@ -1058,7 +1058,7 @@ export default function GroupDetailsScreen() {
       {/* Group Settings Modal */}
       <Modal
         visible={showSettingsModal}
-        animationType="fade"
+        animationType="none"
         transparent={true}
         onRequestClose={() => setShowSettingsModal(false)}
       >
@@ -1102,11 +1102,9 @@ export default function GroupDetailsScreen() {
                 <Text style={styles.settingsSectionTitle}>Group Information</Text>
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  setTimeout(() => {
-                    shouldReopenSettings.current = true;
-                    setShowImagePickerModal(true);
-                  }, 300);
+                  shouldReopenSettings.current = true;
+                  setShowImagePickerModal(true);
+                  setTimeout(() => setShowSettingsModal(false), 50);
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="camera-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1147,9 +1145,9 @@ export default function GroupDetailsScreen() {
                 <Text style={styles.settingsSectionTitle}>Member Management</Text>
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  setShowInviteModal(true);
                   shouldReopenSettings.current = true;
+                  setShowInviteModal(true);
+                  setTimeout(() => setShowSettingsModal(false), 50);
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1159,9 +1157,9 @@ export default function GroupDetailsScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  setShowJoinRequestsModal(true);
                   shouldReopenSettings.current = true;
+                  setShowJoinRequestsModal(true);
+                  setTimeout(() => setShowSettingsModal(false), 50);
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="people-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1178,9 +1176,9 @@ export default function GroupDetailsScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  setShowRemoveMembersModal(true);
                   shouldReopenSettings.current = true;
+                  setShowRemoveMembersModal(true);
+                  setTimeout(() => setShowSettingsModal(false), 50);
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="remove-circle-outline" size={22} color={COLORS.ERROR[500]} />
@@ -1223,7 +1221,7 @@ export default function GroupDetailsScreen() {
       {/* Image Picker Modal */}
       <Modal
         visible={showImagePickerModal}
-        animationType="fade"
+        animationType="none"
         transparent={true}
         onRequestClose={() => setShowImagePickerModal(false)}
       >
@@ -1279,7 +1277,7 @@ export default function GroupDetailsScreen() {
       {/* Edit Group Name Modal */}
       <Modal
         visible={showEditNameModal}
-        animationType="fade"
+        animationType="none"
         transparent={true}
         onRequestClose={() => setShowEditNameModal(false)}
       >
@@ -1327,7 +1325,7 @@ export default function GroupDetailsScreen() {
       {/* Edit Description Modal */}
       <Modal
         visible={showEditDescModal}
-        animationType="fade"
+        animationType="none"
         transparent={true}
         onRequestClose={() => setShowEditDescModal(false)}
       >
