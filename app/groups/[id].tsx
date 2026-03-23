@@ -98,6 +98,9 @@ export default function GroupDetailsScreen() {
   // Image picker modal state
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
 
+  // Track if settings modal should reopen after a sub-modal closes
+  const shouldReopenSettings = useRef(false);
+
   // Animation values for smooth modal fade in/out
   const inviteModalFade = useRef(new Animated.Value(0)).current;
   const inviteModalScale = useRef(new Animated.Value(0.9)).current;
@@ -162,6 +165,22 @@ export default function GroupDetailsScreen() {
       });
     }
   }, [showRemoveMembersModal]);
+
+  // Auto-reopen settings modal after a sub-modal closes
+  useEffect(() => {
+    if (
+      shouldReopenSettings.current &&
+      !showImagePickerModal &&
+      !showEditNameModal &&
+      !showEditDescModal &&
+      !showInviteModal &&
+      !showJoinRequestsModal &&
+      !showRemoveMembersModal
+    ) {
+      shouldReopenSettings.current = false;
+      setShowSettingsModal(true);
+    }
+  }, [showImagePickerModal, showEditNameModal, showEditDescModal, showInviteModal, showJoinRequestsModal, showRemoveMembersModal]);
 
   useEffect(() => {
     loadGroupDetails();
@@ -461,6 +480,7 @@ export default function GroupDetailsScreen() {
     setEditNameValue(group?.name || '');
     setShowEditNameModal(true);
     setShowSettingsModal(false);
+    shouldReopenSettings.current = true;
   };
 
   const handleSaveGroupName = async () => {
@@ -483,6 +503,7 @@ export default function GroupDetailsScreen() {
     setEditDescValue(group?.description || '');
     setShowEditDescModal(true);
     setShowSettingsModal(false);
+    shouldReopenSettings.current = true;
   };
 
   const handleSaveDescription = async () => {
@@ -1082,7 +1103,10 @@ export default function GroupDetailsScreen() {
 
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
-                  setTimeout(() => setShowImagePickerModal(true), 300);
+                  setTimeout(() => {
+                    shouldReopenSettings.current = true;
+                    setShowImagePickerModal(true);
+                  }, 300);
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="camera-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1125,6 +1149,7 @@ export default function GroupDetailsScreen() {
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
                   setShowInviteModal(true);
+                  shouldReopenSettings.current = true;
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="person-add-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1136,6 +1161,7 @@ export default function GroupDetailsScreen() {
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
                   setShowJoinRequestsModal(true);
+                  shouldReopenSettings.current = true;
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="people-outline" size={22} color={COLORS.PRIMARY[600]} />
@@ -1154,6 +1180,7 @@ export default function GroupDetailsScreen() {
                 <TouchableOpacity style={styles.settingsOption} onPress={() => {
                   setShowSettingsModal(false);
                   setShowRemoveMembersModal(true);
+                  shouldReopenSettings.current = true;
                 }}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="remove-circle-outline" size={22} color={COLORS.ERROR[500]} />
