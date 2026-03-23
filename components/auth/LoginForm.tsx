@@ -75,13 +75,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
         // Small delay to ensure state updates propagate
         setTimeout(async () => {
-          // Get fresh user data to check role
+          // Get fresh user data to check role and onboarding status
           const currentUser = await authService.getCurrentUser();
           console.log('🔑 User logged in with role:', currentUser?.role);
 
-          // Both mentors and members go to home (tabs) - mentors can access their dashboard from there
-          console.log('🏠 Routing to home (with tab navigation)');
-          router.replace('/');
+          // Route directly to avoid redundant loading screen
+          if (!currentUser?.onboardingCompleted) {
+            router.replace('/(onboarding)/welcome');
+          } else {
+            router.replace('/(tabs)');
+          }
         }, 200);
       }
     } catch (error: any) {

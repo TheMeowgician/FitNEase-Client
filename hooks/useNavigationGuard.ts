@@ -54,8 +54,10 @@ export const useWorkoutGuard = () => {
   const { isAuthenticated, onboardingCompleted } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || !onboardingCompleted) {
-      router.replace('/');
+    if (!isAuthenticated) {
+      router.replace('/(auth)/login');
+    } else if (!onboardingCompleted) {
+      router.replace('/(onboarding)/welcome');
     }
   }, [isAuthenticated, onboardingCompleted]);
 };
@@ -64,8 +66,10 @@ export const useInstructorGuard = () => {
   const { isAuthenticated, onboardingCompleted, user } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || !onboardingCompleted) {
-      router.replace('/');
+    if (!isAuthenticated) {
+      router.replace('/(auth)/login');
+    } else if (!onboardingCompleted) {
+      router.replace('/(onboarding)/welcome');
     } else if (user?.role !== 'mentor') {
       router.replace('/(tabs)');
     }
