@@ -592,7 +592,14 @@ export default function GroupDetailsScreen() {
       });
     } catch (error: any) {
       console.error('Error inviting user:', error);
-      alert.error('Error', error.message || 'Failed to invite user. Please try again.');
+      const msg = error.message || 'Failed to invite user. Please try again.';
+      // Strip service prefix like [SOCIAL] for user-facing messages
+      const cleanMsg = msg.replace(/^\[.*?\]\s*/, '');
+      if (cleanMsg.toLowerCase().includes('already been invited') || cleanMsg.toLowerCase().includes('already a member')) {
+        alert.warning('Already Invited', cleanMsg);
+      } else {
+        alert.error('Error', cleanMsg);
+      }
     } finally {
       setIsInviting(false);
     }
