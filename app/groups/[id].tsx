@@ -1056,10 +1056,7 @@ export default function GroupDetailsScreen() {
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>Share</Text>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  handleShareCode();
-                }}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleShareCode}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="share-social-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <Text style={styles.settingsOptionText}>Share Group Code</Text>
@@ -1067,10 +1064,7 @@ export default function GroupDetailsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.SECONDARY[400]} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingsOption} onPress={() => {
-                  setShowSettingsModal(false);
-                  handleCopyCode();
-                }}>
+                <TouchableOpacity style={styles.settingsOption} onPress={handleCopyCode}>
                   <View style={styles.settingsOptionLeft}>
                     <Ionicons name="key-outline" size={22} color={COLORS.PRIMARY[600]} />
                     <View>

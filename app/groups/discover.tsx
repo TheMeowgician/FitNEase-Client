@@ -40,6 +40,8 @@ export default function DiscoverGroupsScreen() {
   const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
+  const [truncatedDescriptions, setTruncatedDescriptions] = useState<Set<string>>(new Set());
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchVersionRef = useRef(0); // Tracks search version to discard stale responses
@@ -259,9 +261,39 @@ export default function DiscoverGroupsScreen() {
         </TouchableOpacity>
 
         {group.description ? (
-          <Text style={styles.groupDescription} numberOfLines={2}>
-            {group.description}
-          </Text>
+          <View style={styles.descriptionContainer}>
+            <Text
+              style={styles.groupDescription}
+              numberOfLines={expandedDescriptions.has(group.id) ? undefined : 2}
+              onTextLayout={(e) => {
+                if (e.nativeEvent.lines.length > 2 && !truncatedDescriptions.has(group.id)) {
+                  setTruncatedDescriptions((prev) => new Set(prev).add(group.id));
+                }
+              }}
+            >
+              {group.description}
+            </Text>
+            {truncatedDescriptions.has(group.id) && (
+              <TouchableOpacity
+                onPress={() => {
+                  setExpandedDescriptions((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(group.id)) {
+                      next.delete(group.id);
+                    } else {
+                      next.add(group.id);
+                    }
+                    return next;
+                  });
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.readMoreText}>
+                  {expandedDescriptions.has(group.id) ? 'Show less' : 'Read more'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ) : null}
 
         <View style={styles.groupFooter}>
@@ -305,7 +337,7 @@ export default function DiscoverGroupsScreen() {
         </View>
       </View>
     ),
-    [pendingRequestGroupIds, loadingGroupId]
+    [pendingRequestGroupIds, loadingGroupId, expandedDescriptions, truncatedDescriptions]
   );
 
   const renderFooter = () => {
@@ -625,12 +657,20 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
   },
+  descriptionContainer: {
+    marginBottom: 12,
+  },
   groupDescription: {
     fontSize: 14,
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[600],
     lineHeight: 20,
-    marginBottom: 12,
+  },
+  readMoreText: {
+    fontSize: 13,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY[600],
+    marginTop: 4,
   },
   groupFooter: {
     flexDirection: 'row',
