@@ -391,6 +391,66 @@ export const ProgressSkeleton: React.FC = () => (
 );
 
 /* =====================================================================
+   NOTIFICATIONS SKELETON — matches app/notifications/index.tsx
+   ===================================================================== */
+export const NotificationsSkeleton: React.FC = () => {
+  const renderSkeletonCard = (key: number, hasButtons: boolean = false) => (
+    <View key={key} style={ns.card}>
+      {/* Icon circle — 48x48, borderRadius 24 */}
+      <SkeletonBox width={48} height={48} borderRadius={24} style={{ marginRight: 12 }} />
+      <View style={{ flex: 1 }}>
+        {/* Title — fontSize 15 */}
+        <SkeletonBox width={140} height={15} borderRadius={4} style={{ marginBottom: 6 }} />
+        {/* Message — fontSize 13, up to 2 lines */}
+        <SkeletonBox width="90%" height={13} borderRadius={4} style={{ marginBottom: 4 }} />
+        <SkeletonBox width="60%" height={13} borderRadius={4} style={{ marginBottom: 8 }} />
+        {/* Time — fontSize 12 */}
+        <SkeletonBox width={50} height={12} borderRadius={4} />
+        {/* Action buttons (Accept/Decline) for some cards */}
+        {hasButtons && (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+            <SkeletonBox width={100} height={36} borderRadius={8} />
+            <SkeletonBox width={100} height={36} borderRadius={8} />
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Section header — "TODAY" */}
+      <View style={ns.sectionHeader}>
+        <SkeletonBox width={60} height={13} borderRadius={4} />
+      </View>
+      {/* Notification cards — mix of with and without action buttons */}
+      {renderSkeletonCard(1, true)}
+      {renderSkeletonCard(2, false)}
+      {renderSkeletonCard(3, false)}
+      {renderSkeletonCard(4, true)}
+      {renderSkeletonCard(5, false)}
+      {renderSkeletonCard(6, false)}
+    </View>
+  );
+};
+
+const ns = StyleSheet.create({
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  card: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[100],
+  },
+});
+
+/* =====================================================================
    Shared styles
    ===================================================================== */
 const s = StyleSheet.create({

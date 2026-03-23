@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +20,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { commsService } from '../../services/microservices/commsService';
 import { socialService } from '../../services/microservices/socialService';
 import { reverbService } from '../../services/reverbService';
+import { NotificationsSkeleton } from '../../components/ui/SkeletonLoader';
 
 interface Notification {
   notification_id: number;
@@ -743,10 +743,7 @@ export default function NotificationsScreen() {
           <Text style={styles.headerTitle}>Notifications</Text>
           <View style={{ width: 80 }} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY[600]} />
-          <Text style={styles.loadingText}>Loading notifications...</Text>
-        </View>
+        <NotificationsSkeleton />
       </SafeAreaView>
     );
   }
