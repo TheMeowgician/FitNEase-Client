@@ -82,6 +82,7 @@
         }
       ],
       "./plugins/withAbiFilters",
+      "./plugins/withRemoveMediaProjection",
       [
         "expo-notifications",
         {
