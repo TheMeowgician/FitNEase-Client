@@ -1133,7 +1133,7 @@ export default function HomeScreen() {
                           {isGroup ? 'Group Tabata Workout' : 'Tabata Workout'}
                         </Text>
                         <Text style={styles.activityTime}>
-                          {formatTimeAgo(workout.createdAt)} · {workout.exercises?.length || 0} exercises
+                          {formatTimeAgo(workout.createdAt)} · {workout.exercises?.length || 0} exercises · User #{workout.userId}
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>

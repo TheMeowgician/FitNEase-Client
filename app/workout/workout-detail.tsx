@@ -1,22 +1,48 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { Avatar } from '../../components/ui/Avatar';
+import { socialService } from '../../services/microservices/socialService';
 
 export default function WorkoutDetailScreen() {
   const { goBack } = useSmartBack();
+  const router = useRouter();
   const params = useLocalSearchParams<{ sessionData: string }>();
 
   const workout = params.sessionData ? JSON.parse(params.sessionData) : null;
+
+  // Fetch group members if this is a group workout
+  const [participants, setParticipants] = useState<any[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+
+  useEffect(() => {
+    if (workout?.sessionType === 'group' && workout?.groupId) {
+      loadParticipants(workout.groupId);
+    }
+  }, []);
+
+  const loadParticipants = async (groupId: string) => {
+    try {
+      setLoadingParticipants(true);
+      const result = await socialService.getGroupMembers(groupId);
+      setParticipants(result.members);
+    } catch (error) {
+      console.warn('Failed to load group participants:', error);
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
 
   if (!workout) {
     return (
@@ -110,6 +136,57 @@ export default function WorkoutDetailScreen() {
             <Text style={styles.statLabel}>completed</Text>
           </View>
         </View>
+
+        {/* Debug: User ID */}
+        <View style={styles.debugRow}>
+          <Ionicons name="person-circle-outline" size={16} color={COLORS.SECONDARY[400]} />
+          <Text style={styles.debugText}>User ID: {workout.userId || 'Unknown'}</Text>
+          {workout.groupId && (
+            <>
+              <Text style={styles.debugDot}>·</Text>
+              <Ionicons name="people-outline" size={16} color={COLORS.SECONDARY[400]} />
+              <Text style={styles.debugText}>Group ID: {workout.groupId}</Text>
+            </>
+          )}
+        </View>
+
+        {/* Group Participants */}
+        {isGroup && (
+          <View style={styles.participantsSection}>
+            <Text style={styles.sectionTitle}>
+              Participants {participants.length > 0 ? `(${participants.length})` : ''}
+            </Text>
+            {loadingParticipants ? (
+              <ActivityIndicator size="small" color={COLORS.PRIMARY[600]} style={{ paddingVertical: 16 }} />
+            ) : participants.length > 0 ? (
+              participants.map((member) => (
+                <TouchableOpacity
+                  key={member.id || member.userId}
+                  style={styles.participantCard}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/profile/[id]', params: { id: member.userId } })}
+                >
+                  <Avatar profilePicture={member.profilePicture} size="sm" />
+                  <View style={styles.participantInfo}>
+                    <Text style={styles.participantName} numberOfLines={1}>{member.username}</Text>
+                    <Text style={styles.participantRole}>{member.role}</Text>
+                  </View>
+                  {member.userRole === 'mentor' && (
+                    <View style={styles.mentorBadge}>
+                      <Ionicons name="school" size={12} color="#FFFFFF" />
+                      <Text style={styles.mentorBadgeText}>Mentor</Text>
+                    </View>
+                  )}
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.SECONDARY[400]} />
+                </TouchableOpacity>
+              ))
+            ) : workout.groupId ? (
+              <Text style={styles.noParticipantsText}>Could not load participants</Text>
+            ) : (
+              <Text style={styles.noParticipantsText}>No group ID available</Text>
+            )}
+          </View>
+        )}
 
         {/* Exercises Section */}
         <View style={styles.exercisesSection}>
@@ -256,6 +333,79 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.REGULAR,
     color: COLORS.SECONDARY[500],
     marginTop: 2,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+  },
+  debugDot: {
+    fontSize: 12,
+    color: COLORS.SECONDARY[300],
+    marginHorizontal: 4,
+  },
+  participantsSection: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  participantCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.SECONDARY[100],
+  },
+  participantInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  participantName: {
+    fontSize: 15,
+    fontFamily: FONTS.SEMIBOLD,
+    color: COLORS.SECONDARY[900],
+  },
+  participantRole: {
+    fontSize: 12,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[500],
+    marginTop: 1,
+    textTransform: 'capitalize',
+  },
+  mentorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.PRIMARY[600],
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+    marginRight: 8,
+  },
+  mentorBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.SEMIBOLD,
+    color: '#FFFFFF',
+  },
+  noParticipantsText: {
+    fontSize: 13,
+    fontFamily: FONTS.REGULAR,
+    color: COLORS.SECONDARY[400],
+    textAlign: 'center',
+    paddingVertical: 16,
   },
   exercisesSection: {
     backgroundColor: 'white',

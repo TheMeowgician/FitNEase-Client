@@ -586,6 +586,7 @@ export class TrackingService {
           workoutName: 'Tabata Workout',
           userId: session.user_id?.toString(),
           sessionType: session.session_type as 'individual' | 'group' | undefined,
+          groupId: session.group_id ? session.group_id.toString() : null,
           startTime: session.start_time,
           endTime: session.end_time,
           duration: session.actual_duration_minutes,
