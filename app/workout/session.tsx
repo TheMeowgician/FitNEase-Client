@@ -2395,8 +2395,8 @@ export default function WorkoutSessionScreen() {
             </View>
           )}
 
-          {/* Auto Finish Button - DEV ONLY for testing - Only for group initiator or solo workouts */}
-          {__DEV__ && sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator) && (
+          {/* Auto Finish Button - TEMP: enabled for all builds for testing */}
+          {sessionState.status === 'running' && (type !== 'group_tabata' || isInitiator) && (
             <TouchableOpacity
               style={[styles.secondaryButton, {
                 backgroundColor: 'rgba(251, 146, 60, 0.25)',

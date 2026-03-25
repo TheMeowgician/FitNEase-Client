@@ -151,7 +151,7 @@ export default function WeeklyPlanScreen() {
       });
 
       const individualSessions = (sessions?.sessions || []).filter(
-        (s: any) => s.sessionType !== 'group'
+        (s: any) => s.sessionType !== 'group' && s.status === 'completed'
       );
 
       // Cumulative session count for progressive overload tier detection
