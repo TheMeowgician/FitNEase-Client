@@ -19,6 +19,7 @@ import { useNetwork } from '../../contexts/NetworkContext';
 import { OfflinePlaceholder } from '../../components/ui/OfflinePlaceholder';
 import NetInfo from '@react-native-community/netinfo';
 import { useProgressStore } from '../../stores/progressStore';
+import { authService } from '../../services/microservices/authService';
 import ProgressionCard from '../../components/ProgressionCard';
 import { progressionService } from '../../services/microservices/progressionService';
 import { trackingService } from '../../services/microservices/trackingService';
@@ -79,6 +80,7 @@ export default function ProgressScreen() {
   } = useProgressStore();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [fitnessLevel, setFitnessLevel] = useState(user?.fitnessLevel || 'beginner');
   const [engagementStreak, setEngagementStreak] = useState(0);
   const [achievementPreviews, setAchievementPreviews] = useState<AchievementPreview[]>([]);
   const [earnedCount, setEarnedCount] = useState(0);
@@ -102,6 +104,18 @@ export default function ProgressScreen() {
       if (user) {
         console.log('🔄 [PROGRESS] Screen focused - refreshing stats');
         loadProgressData();
+
+        // Refresh fitness level from assessment (admin may have changed it)
+        authService.getFitnessAssessment(user.id).then((assessments: any) => {
+          if (assessments && assessments.length > 0) {
+            const onboarding = assessments.find(
+              (a: any) => a.assessment_type === 'initial_onboarding' && a.assessment_data?.fitness_level
+            );
+            if (onboarding) {
+              setFitnessLevel(onboarding.assessment_data.fitness_level);
+            }
+          }
+        }).catch(() => {});
       }
       setDailyQuote(FITNESS_QUOTES[Math.floor(Math.random() * FITNESS_QUOTES.length)]);
     }, [user])
@@ -183,7 +197,7 @@ export default function ProgressScreen() {
   };
 
   const getFitnessLevelInfo = () => {
-    const level = user?.fitnessLevel || 'beginner';
+    const level = fitnessLevel || user?.fitnessLevel || 'beginner';
     switch (level) {
       case 'beginner':
         return {
@@ -309,7 +323,7 @@ export default function ProgressScreen() {
         </View>
 
         {/* Progression Card */}
-        <ProgressionCard />
+        <ProgressionCard overrideLevel={fitnessLevel} />
 
         {/* Quick Stats Grid */}
         <View style={styles.section}>

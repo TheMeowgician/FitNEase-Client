@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useProgressStore } from '../stores/progressStore';
 import { COLORS, FONTS, FONT_SIZES } from '../constants/colors';
 
-export default function ProgressionCard() {
+export default function ProgressionCard({ overrideLevel }: { overrideLevel?: string } = {}) {
   const { user } = useAuth();
 
   // Use centralized progress store
@@ -68,7 +68,7 @@ export default function ProgressionCard() {
 
   const progressPercentage = progress.progress_percentage || 0;
   const nextLevel = progressionService.getFitnessLevelName(progress.next_level);
-  const currentLevel = user?.fitnessLevel || 'beginner';
+  const currentLevel = overrideLevel || user?.fitnessLevel || 'beginner';
   const scoreProgress = progress.score_progress || 0;
   const timeProgress = progress.time_progress || 0;
 

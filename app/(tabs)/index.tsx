@@ -869,7 +869,7 @@ export default function HomeScreen() {
 
         {/* Progression Card */}
         <View style={styles.progressionSection}>
-          <ProgressionCard />
+          <ProgressionCard overrideLevel={fitnessLevel} />
         </View>
 
         {/* Today's Recommended Workout Set - Only show on workout days */}
