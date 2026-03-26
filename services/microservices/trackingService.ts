@@ -618,6 +618,44 @@ export class TrackingService {
   }
 
   /**
+   * Get participants of a specific group workout session by groupId + date
+   */
+  public async getGroupSessionParticipants(groupId: string, date?: string): Promise<{
+    participants: Array<{
+      userId: number;
+      isCompleted: boolean;
+      durationMinutes: number;
+      caloriesBurned: number;
+      completionPercentage: number;
+      sessionDate: string;
+    }>;
+    count: number;
+  }> {
+    try {
+      const queryParams = date ? `?date=${date}` : '';
+      const response = await apiClient.get<{
+        success: boolean;
+        data: any[];
+        count: number;
+      }>('tracking', `/api/group-session-participants/${groupId}${queryParams}`);
+
+      const participants = (response.data.data || []).map((p: any) => ({
+        userId: p.user_id,
+        isCompleted: p.is_completed,
+        durationMinutes: p.duration_minutes,
+        caloriesBurned: p.calories_burned,
+        completionPercentage: p.completion_percentage,
+        sessionDate: p.session_date,
+      }));
+
+      return { participants, count: response.data.count || participants.length };
+    } catch (error) {
+      console.warn('Failed to get group session participants:', error);
+      return { participants: [], count: 0 };
+    }
+  }
+
+  /**
    * Get workout history for profile page
    * Returns all completed workouts with simplified data structure
    */

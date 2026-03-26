@@ -514,6 +514,40 @@ export class AuthService {
     }
   }
 
+  /**
+   * Batch fetch user profiles by user IDs (for resolving participant info)
+   */
+  public async batchUserProfiles(userIds: number[]): Promise<Array<{
+    id: number;
+    userId: number;
+    username: string;
+    firstName: string | null;
+    lastName: string | null;
+    profilePicture: string | null;
+    userRole: string;
+  }>> {
+    try {
+      const response = await apiClient.post<{
+        status: string;
+        data: any[];
+        count: number;
+      }>('auth', '/api/batch-user-profiles', { user_ids: userIds });
+
+      return (response.data.data || []).map((u: any) => ({
+        id: u.id || u.user_id,
+        userId: u.user_id,
+        username: u.username,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        profilePicture: u.profile_picture,
+        userRole: u.user_role || 'member',
+      }));
+    } catch (error) {
+      console.warn('Failed to batch fetch user profiles:', error);
+      return [];
+    }
+  }
+
   public async refreshToken(): Promise<RefreshTokenResponse> {
     try {
       const refreshToken = await tokenManager.getRefreshToken();

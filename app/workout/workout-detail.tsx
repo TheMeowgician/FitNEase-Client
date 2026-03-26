@@ -13,7 +13,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { COLORS, FONTS, FONT_SIZES } from '../../constants/colors';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { Avatar } from '../../components/ui/Avatar';
-import { socialService } from '../../services/microservices/socialService';
+import { trackingService } from '../../services/microservices/trackingService';
+import { authService } from '../../services/microservices/authService';
 
 export default function WorkoutDetailScreen() {
   const { goBack } = useSmartBack();
@@ -28,15 +29,44 @@ export default function WorkoutDetailScreen() {
 
   useEffect(() => {
     if (workout?.sessionType === 'group' && workout?.groupId) {
-      loadParticipants(workout.groupId);
+      loadParticipants(workout.groupId, workout.createdAt || workout.startTime);
     }
   }, []);
 
-  const loadParticipants = async (groupId: string) => {
+  const loadParticipants = async (groupId: string, sessionDate?: string) => {
     try {
       setLoadingParticipants(true);
-      const result = await socialService.getGroupMembers(groupId);
-      setParticipants(result.members);
+
+      // Extract date (YYYY-MM-DD) from session timestamp to find same-day participants
+      const date = sessionDate ? sessionDate.split('T')[0] : undefined;
+
+      // Step 1: Get participant user_ids from tracking service (actual session data)
+      const { participants: sessionParticipants } = await trackingService.getGroupSessionParticipants(groupId, date);
+
+      if (sessionParticipants.length === 0) {
+        setParticipants([]);
+        return;
+      }
+
+      // Step 2: Get user profiles from auth service
+      const userIds = sessionParticipants.map(p => p.userId);
+      const profiles = await authService.batchUserProfiles(userIds);
+
+      // Step 3: Merge session data with profile data
+      const merged = sessionParticipants.map(sp => {
+        const profile = profiles.find(p => p.userId === sp.userId);
+        return {
+          userId: sp.userId.toString(),
+          username: profile?.username || `User #${sp.userId}`,
+          profilePicture: profile?.profilePicture || null,
+          userRole: profile?.userRole || 'member',
+          isCompleted: sp.isCompleted,
+          durationMinutes: sp.durationMinutes,
+          completionPercentage: sp.completionPercentage,
+        };
+      });
+
+      setParticipants(merged);
     } catch (error) {
       console.warn('Failed to load group participants:', error);
     } finally {
@@ -161,7 +191,7 @@ export default function WorkoutDetailScreen() {
             ) : participants.length > 0 ? (
               participants.map((member) => (
                 <TouchableOpacity
-                  key={member.id || member.userId}
+                  key={member.userId}
                   style={styles.participantCard}
                   activeOpacity={0.7}
                   onPress={() => router.push({ pathname: '/profile/[id]', params: { id: member.userId } })}
@@ -169,7 +199,9 @@ export default function WorkoutDetailScreen() {
                   <Avatar profilePicture={member.profilePicture} size="sm" />
                   <View style={styles.participantInfo}>
                     <Text style={styles.participantName} numberOfLines={1}>{member.username}</Text>
-                    <Text style={styles.participantRole}>{member.role}</Text>
+                    <Text style={styles.participantRole}>
+                      {member.isCompleted ? `Completed · ${member.durationMinutes}min` : 'Did not finish'}
+                    </Text>
                   </View>
                   {member.userRole === 'mentor' && (
                     <View style={styles.mentorBadge}>
