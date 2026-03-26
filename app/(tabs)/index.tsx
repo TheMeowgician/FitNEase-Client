@@ -113,6 +113,18 @@ export default function HomeScreen() {
           checkTodayWorkoutCompletion();
           checkWeeklyAssessmentStatus();
           checkCompletedDays();
+
+          // Refresh fitness level from assessment (admin may have changed it)
+          authService.getFitnessAssessment(user.id).then((assessments: any) => {
+            if (assessments && assessments.length > 0) {
+              const onboarding = assessments.find(
+                (a: any) => a.assessment_type === 'initial_onboarding' && a.assessment_data?.fitness_level
+              );
+              if (onboarding) {
+                setFitnessLevel(onboarding.assessment_data.fitness_level);
+              }
+            }
+          }).catch(() => {});
         });
       }
     }, [user, fetchAllProgressData])
