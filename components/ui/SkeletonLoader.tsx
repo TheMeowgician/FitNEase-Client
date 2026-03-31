@@ -451,6 +451,142 @@ const ns = StyleSheet.create({
 });
 
 /* =====================================================================
+   MENTOR DASHBOARD SKELETON — matches app/mentor/dashboard.tsx
+   ===================================================================== */
+export const MentorDashboardSkeleton: React.FC = () => (
+  <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
+    {/* Header — row: back button, title, add button */}
+    <View style={ms.header}>
+      <SkeletonBox width={40} height={40} borderRadius={8} />
+      <SkeletonBox width={160} height={20} borderRadius={6} />
+      <SkeletonBox width={40} height={40} borderRadius={8} />
+    </View>
+
+    {/* Welcome Section — centered icon, title, subtitle */}
+    <View style={ms.welcomeSection}>
+      <SkeletonBox width={72} height={72} borderRadius={36} style={{ marginBottom: 16 }} />
+      <SkeletonBox width={200} height={22} borderRadius={6} style={{ marginBottom: 4 }} />
+      <SkeletonBox width={260} height={14} borderRadius={4} />
+    </View>
+
+    {/* Stats Row — 3 equal cards */}
+    <View style={ms.statsRow}>
+      {[1, 2, 3].map((i) => (
+        <View key={i} style={ms.statCard}>
+          <SkeletonBox width={24} height={24} borderRadius={12} />
+          <SkeletonBox width={28} height={22} borderRadius={4} style={{ marginTop: 8 }} />
+          <SkeletonBox width={50} height={12} borderRadius={4} style={{ marginTop: 4 }} />
+        </View>
+      ))}
+    </View>
+
+    {/* Training Groups Section */}
+    <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
+      {/* Section header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <SkeletonBox width={160} height={16} borderRadius={6} />
+        <SkeletonBox width={20} height={16} borderRadius={4} />
+      </View>
+
+      {/* Group cards */}
+      <View style={{ gap: 12 }}>
+        {[1, 2].map((i) => (
+          <View key={i} style={ms.groupCard}>
+            {/* Group header — icon + name/meta + chevron */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
+              <SkeletonBox width={48} height={48} borderRadius={24} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <SkeletonBox width={120} height={16} borderRadius={4} style={{ marginBottom: 2 }} />
+                <SkeletonBox width={160} height={13} borderRadius={4} />
+              </View>
+              <SkeletonBox width={24} height={24} borderRadius={6} />
+            </View>
+            {/* Action buttons row */}
+            <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 16, gap: 12 }}>
+              <SkeletonBox width="48%" height={40} borderRadius={8} />
+              <SkeletonBox width="48%" height={40} borderRadius={8} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+
+    {/* Quick Actions — 3 cards */}
+    <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
+      <SkeletonBox width={100} height={16} borderRadius={6} style={{ marginBottom: 12 }} />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={ms.quickActionCard}>
+            <SkeletonBox width={48} height={48} borderRadius={24} style={{ marginBottom: 8 }} />
+            <SkeletonBox width={60} height={12} borderRadius={4} />
+          </View>
+        ))}
+      </View>
+    </View>
+  </View>
+);
+
+const ms = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  welcomeSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    backgroundColor: 'white',
+    marginBottom: 16,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  groupCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  quickActionCard: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+});
+
+/* =====================================================================
    Shared styles
    ===================================================================== */
 const s = StyleSheet.create({

@@ -18,7 +18,7 @@ import { useAlert } from '../../contexts/AlertContext';
 import { useReverb } from '../../contexts/ReverbProvider';
 import { socialService, Group, GroupMember } from '../../services/microservices/socialService';
 import { trackingService } from '../../services/microservices/trackingService';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { MentorDashboardSkeleton } from '../../components/ui/SkeletonLoader';
 import { Avatar } from '../../components/ui/Avatar';
 import { CreateGroupModal } from '../../components/groups/CreateGroupModal';
 import { mediaService } from '../../services/microservices/mediaService';
@@ -295,7 +295,7 @@ export default function MentorDashboardScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <LoadingSpinner message="Loading your training groups..." />
+        <MentorDashboardSkeleton />
       </SafeAreaView>
     );
   }

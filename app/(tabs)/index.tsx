@@ -860,7 +860,6 @@ export default function HomeScreen() {
         {/* Mentor tip - remind mentors they can do workouts too */}
         {user?.role === 'mentor' && (
           <View style={styles.mentorTipCard}>
-            <Ionicons name="fitness" size={20} color={COLORS.PRIMARY[600]} />
             <Text style={styles.mentorTipText}>
               As a mentor, you can also do Tabata workouts below!
             </Text>
@@ -1133,13 +1132,6 @@ export default function HomeScreen() {
                       activeOpacity={0.7}
                       onPress={() => router.push({ pathname: '/workout/workout-detail', params: { sessionData: JSON.stringify(workout) } })}
                     >
-                      <View style={[styles.activityIcon, { backgroundColor: isGroup ? COLORS.PRIMARY[50] : '#ECFDF5' }]}>
-                        <Ionicons
-                          name={isGroup ? 'people' : 'fitness'}
-                          size={18}
-                          color={isGroup ? COLORS.PRIMARY[600] : '#10B981'}
-                        />
-                      </View>
                       <View style={styles.activityContent}>
                         <Text style={styles.activityTitle}>
                           {isGroup ? 'Group Tabata Workout' : 'Tabata Workout'}
