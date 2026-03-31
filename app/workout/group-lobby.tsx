@@ -12,6 +12,8 @@ import {
   Animated,
   Dimensions,
   BackHandler,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -215,6 +217,7 @@ export default function GroupLobbyScreen() {
   const memberDisconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map()); // Per-member timers for detecting true disconnects
   const onlineUsersRef = useRef<Set<string>>(new Set()); // Always-fresh ref for onlineUsers (used in timer callbacks)
   onlineUsersRef.current = onlineUsers; // Sync ref on every render
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState); // Track app foreground/background state
 
   // Block Android hardware back button — route through handleLeaveLobby confirmation
   useEffect(() => {
@@ -741,6 +744,43 @@ export default function GroupLobbyScreen() {
     return () => clearInterval(syncInterval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, lobbyMembers.length > 0]);
+
+  /**
+   * AppState foreground sync — immediate lobby refresh when user returns from
+   * another app (e.g. Discord). The 10-second periodic sync above might not fire
+   * for up to 10 s after foregrounding; this catches it instantly.
+   */
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App just came back to foreground
+        if (isCleaningUpRef.current || !isMountedRef.current) return;
+
+        console.log('🔄 [LOBBY] App foregrounded — syncing lobby state from server');
+        socialService.getLobbyStateV2(sessionId).then((response) => {
+          if (!isMountedRef.current || isCleaningUpRef.current) return;
+
+          const serverState = response?.data?.lobby_state;
+          if (serverState?.members) {
+            setLobbyState(serverState);
+            console.log('✅ [LOBBY] Foreground sync complete — members:', serverState.members.length);
+          }
+        }).catch(() => {
+          // Non-critical — the 10 s periodic sync will retry
+        });
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   /**
    * Initialize lobby on mount
@@ -1842,8 +1882,10 @@ export default function GroupLobbyScreen() {
             // Don't auto-kick yourself
             if (member.user_id === parseInt(currentUser?.id || '0')) return;
 
-            // Start 5-second timer to check if member truly disconnected (vs. just minimized)
-            // After 5s: if they're also gone from global onlineUsers → truly disconnected → initiator kicks
+            // Start 15-second timer to check if member truly disconnected (vs. just switching apps)
+            // After 15s: if they're also gone from global onlineUsers → truly disconnected → initiator kicks
+            // (Was 5s but that's too aggressive — switching apps on a slow phone can briefly drop both
+            //  lobby presence and global presence, causing false auto-kicks)
             const timer = setTimeout(async () => {
               memberDisconnectTimersRef.current.delete(member.user_id);
               if (isCleaningUpRef.current || !isMountedRef.current) return;
@@ -1872,7 +1914,7 @@ export default function GroupLobbyScreen() {
               } catch (error) {
                 console.log('⚠️ [PRESENCE] Auto-kick failed:', (error as any)?.message);
               }
-            }, 5000);
+            }, 15000);
 
             memberDisconnectTimersRef.current.set(member.user_id, timer);
           }
